@@ -120,6 +120,13 @@ namespace NoBorders
         public override string ToString() => ID;
     }
 
+    /// <summary>
+    /// One blocklist-filtered open window — shared shape between
+    /// <c>BtnAddRunning_Click</c>'s dialog and the Matching tab's (screen 5a)
+    /// live-test list, both built from <c>MainForm.GetOpenWindowEntries()</c>.
+    /// </summary>
+    public readonly record struct OpenWindowEntry(string WindowTitle, string Exe, int Pid);
+
     // ══════════════════════════════════════════════════════════════════════════════
     // LOGGER
     // ══════════════════════════════════════════════════════════════════════════════
@@ -714,7 +721,7 @@ namespace NoBorders
             // _settings/_selectedGame on every access rather than capturing a
             // snapshot, so this is correct regardless of exact timing.
             services.AddSingleton(_ => new AppStateService(
-                () => _settings, () => _selectedGame, QueueSave, SaveConfig));
+                () => _settings, () => _selectedGame, GetOpenWindowEntries, QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
 
@@ -2566,11 +2573,17 @@ namespace NoBorders
         // ADD GAME
         // ════════════════════════════════════════════════════════════════════════
 
-        private void BtnAddRunning_Click(object? sender, EventArgs e)
+        /// <summary>
+        /// Collects processes that have a visible window title, respecting
+        /// <see cref="_systemProcessBlocklist"/> plus anything whose exe lives in
+        /// a Windows system directory, deduped by exe name — shared by
+        /// `BtnAddRunning_Click`'s dialog and (Phase 3.4) the Matching tab's
+        /// live-test list. Extracted unchanged from `BtnAddRunning_Click`'s
+        /// previous inline body — same filtering, same ordering, same dedup —
+        /// so this refactor doesn't alter that handler's existing behavior.
+        /// </summary>
+        private List<OpenWindowEntry> GetOpenWindowEntries()
         {
-            // Collect processes that have a visible window title, deduped by exe name.
-            // Build the list of system directories whose processes should be excluded.
-            // This catches system processes not on the named blocklist.
             var systemDirs = new[]
             {
                 Environment.GetFolderPath(Environment.SpecialFolder.System),
@@ -2579,7 +2592,7 @@ namespace NoBorders
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "SystemApps")
             };
 
-            var entries = Process.GetProcesses()
+            return Process.GetProcesses()
                 .Where(p =>
                 {
                     if (string.IsNullOrWhiteSpace(p.MainWindowTitle)) return false;
@@ -2598,14 +2611,15 @@ namespace NoBorders
                     return true;
                 })
                 .OrderBy(p => p.MainWindowTitle)
-                .Select(p => new {
-                    Display     = $"{p.MainWindowTitle}  ({p.ProcessName}.exe)",
-                    Exe         = p.ProcessName + ".exe",
-                    WindowTitle = p.MainWindowTitle   // passed as display name
-                })
+                .Select(p => new OpenWindowEntry(p.MainWindowTitle, p.ProcessName + ".exe", p.Id))
                 .GroupBy(x => x.Exe, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
                 .ToList();
+        }
+
+        private void BtnAddRunning_Click(object? sender, EventArgs e)
+        {
+            var entries = GetOpenWindowEntries();
 
             using var dlg  = new Form
             {
@@ -2618,7 +2632,7 @@ namespace NoBorders
             };
             var lst = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
             var btn = new Button  { Text = "Add Selected", Dock = DockStyle.Bottom, Height = 32, DialogResult = DialogResult.OK };
-            lst.Items.AddRange(entries.Select(x => x.Display).ToArray());
+            lst.Items.AddRange(entries.Select(x => $"{x.WindowTitle}  ({x.Exe})").ToArray());
             dlg.Controls.Add(lst);
             dlg.Controls.Add(btn);
             dlg.AcceptButton = btn;

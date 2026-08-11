@@ -63,6 +63,12 @@
   margin-bottom: 9px;
 }
 
+/* design-handoff/README.md §5a: "Invalid pattern -> #ff6b74 dot and the
+   regex parse error in that line, with the field border going #3a2028." */
+.nb-matching-pane__pattern-field--invalid {
+  border-color: #3a2028;
+}
+
 .nb-matching-pane__validity {
   display: flex;
   align-items: center;
@@ -79,6 +85,10 @@
   background: var(--nb-success);
   display: block;
   flex: none;
+}
+
+.nb-matching-pane__validity-dot--invalid {
+  background: #ff6b74;
 }
 
 .nb-matching-pane__chips {

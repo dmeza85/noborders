@@ -1,31 +1,53 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@using System.Text.RegularExpressions
+@inject AppStateService State
 @* Screen 5a's right-pane content (Matching tab), design-handoff/README.md
-   §"5a — Main window, Matching tab". Static/hardcoded sample data — Phase 2
-   is visual parity only, no bindings, nothing here is interactive yet
-   (regex validation, live rescan, mode-chip switching all come later). *@
+   §"5a — Main window, Matching tab".
+
+   Phase 3.4: live-test list, regex validity line, and mode chips are wired
+   to the real selected game's GameConfig.CompiledPattern and a real
+   enumeration of open windows (AppStateService.GetOpenWindows(), backed by
+   the same blocklist-respecting MainForm.GetOpenWindowEntries() that
+   BtnAddRunning_Click's dialog uses) — matching README's explicit
+   requirement: "the match test uses the same compiled regex path as
+   GameConfig.CompiledPattern... so the preview cannot disagree with
+   runtime behaviour." Display Name/Match Pattern/Executable are wired too,
+   since showing a live validity line for a *different*, still-hardcoded
+   pattern would be incoherent.
+
+   Mode chips: GameConfig has no match-target field today — the app has
+   always matched by process/exe name only (every CompiledPattern.IsMatch
+   call site in program.cs tests it against "<processname>.exe", never a
+   window title). "Process Name" is shown as the real active mode; "Window
+   Title" stays present (the mock's intent) but inactive, since it isn't
+   real functionality yet, not invented here.
+
+   Still static: Save Changes/Undo/Remove Game (Phase 4), the fetch-name
+   button, Rescan, and "Use Title Of Selected" (all write actions/Phase 4). *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
         <div class="nb-text-label nb-matching-pane__label">DISPLAY NAME</div>
         <div class="nb-matching-pane__name-row">
-            <div class="nb-matching-pane__name-field">@DisplayName</div>
+            <div class="nb-matching-pane__name-field">@(DisplayedGame?.GameName ?? "")</div>
             <button type="button" class="nb-matching-pane__fetch-btn" title="Fetch name from the running window">↺</button>
         </div>
 
         <div class="nb-text-label nb-matching-pane__label">MATCH PATTERN</div>
-        <div class="nb-matching-pane__pattern-field nb-mono">@MatchPattern</div>
+        <div class="nb-matching-pane__pattern-field nb-mono @(IsPatternValid ? "" : "nb-matching-pane__pattern-field--invalid")">@(DisplayedGame?.RegexPattern ?? "")</div>
         <div class="nb-matching-pane__validity">
-            <span class="nb-matching-pane__validity-dot"></span>
-            <span>@ValidityText</span>
+            <span class="nb-matching-pane__validity-dot @(IsPatternValid ? "" : "nb-matching-pane__validity-dot--invalid")"></span>
+            <span>@ValidityText()</span>
         </div>
 
         <div class="nb-matching-pane__chips">
-            <div class="nb-matching-pane__chip nb-matching-pane__chip--active">Window Title</div>
-            <div class="nb-matching-pane__chip">Process Name</div>
+            <div class="nb-matching-pane__chip">Window Title</div>
+            <div class="nb-matching-pane__chip nb-matching-pane__chip--active">Process Name</div>
         </div>
 
         <div class="nb-text-label nb-matching-pane__label">EXECUTABLE</div>
-        <div class="nb-matching-pane__exe nb-mono">@ExecutablePath</div>
+        <div class="nb-matching-pane__exe nb-mono">@(string.IsNullOrEmpty(DisplayedGame?.ExePath) ? "(not recorded)" : DisplayedGame.ExePath)</div>
         <div class="nb-matching-pane__exe-caption">Used for the icon and to re-find the game after a restart.</div>
     </div>
 
@@ -39,13 +61,14 @@
         <div class="nb-matching-pane__test-list">
             @foreach (var w in OpenWindows)
             {
-                <div class="nb-match-row @(w.IsMatch ? "nb-match-row--match" : "")">
+                var isMatch = DisplayedGame != null && DisplayedGame.CompiledPattern.IsMatch(w.Exe);
+                <div class="nb-match-row @(isMatch ? "nb-match-row--match" : "")">
                     <div class="nb-match-row__thumb"></div>
                     <div class="nb-match-row__info">
-                        <div class="nb-match-row__title">@w.Title</div>
+                        <div class="nb-match-row__title">@w.WindowTitle</div>
                         <div class="nb-match-row__meta nb-mono">@w.Exe · PID @w.Pid</div>
                     </div>
-                    @if (w.IsMatch)
+                    @if (isMatch)
                     {
                         <div class="nb-match-row__verdict nb-match-row__verdict--match nb-mono">MATCH</div>
                     }
@@ -58,7 +81,7 @@
         </div>
 
         <div class="nb-matching-pane__summary">
-            <div class="nb-matching-pane__summary-text nb-mono">@SummaryText</div>
+            <div class="nb-matching-pane__summary-text nb-mono">@SummaryText()</div>
             <div class="nb-matching-pane__summary-link nb-mono">Use Title Of Selected</div>
         </div>
 
@@ -71,19 +94,52 @@
 </div>
 
 @code {
-    private sealed record OpenWindow(string Title, string Exe, int Pid, bool IsMatch);
+    private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
-    private readonly string DisplayName = "Helldivers 2";
-    private readonly string MatchPattern = "^HELLDIVERS.?2";
-    private readonly string ValidityText = "Valid regex · case-insensitive · 1 window matched";
-    private readonly string ExecutablePath = @"D:\Steam\steamapps\common\Helldivers 2\bin\helldivers2.exe";
-    private readonly string SummaryText = "matches exactly 1 of 14 open windows";
+    // Re-enumerated on every render, same as MainShell's rail does implicitly
+    // via State.Games — the process list can change between renders and
+    // there's no live-update push in Phase 3 (that's Phase 4/6's job), so
+    // this is a point-in-time snapshot each time Blazor re-renders.
+    private List<OpenWindowEntry> OpenWindows => State.GetOpenWindows();
 
-    private static readonly List<OpenWindow> OpenWindows = new()
+    // "Invalid" (red dot, red field border, per the mock) means a non-empty
+    // pattern that fails to compile — distinct from "nothing to validate yet"
+    // (no game, or a game with no pattern saved), which shouldn't render as an
+    // error just because it's empty.
+    private bool HasPattern => !string.IsNullOrEmpty(DisplayedGame?.RegexPattern);
+
+    private string? RegexErrorMessage
     {
-        new("HELLDIVERS™ 2",          "helldivers2.exe",  8842,  IsMatch: true),
-        new("Helldivers 2 Launcher",  "hd2_launcher.exe", 8790,  IsMatch: false),
-        new("ELDEN RING™",            "eldenring.exe",    14822, IsMatch: false),
-        new("Discord",                "Discord.exe",      5210,  IsMatch: false),
-    };
+        get
+        {
+            if (!HasPattern) return null;
+            try { _ = new Regex(DisplayedGame!.RegexPattern, RegexOptions.IgnoreCase); return null; }
+            catch (ArgumentException ex) { return ex.Message; }
+        }
+    }
+
+    private bool IsPatternValid => !HasPattern || RegexErrorMessage == null;
+
+    private int MatchCount(List<OpenWindowEntry> windows)
+    {
+        var g = DisplayedGame;
+        return g == null ? 0 : windows.Count(w => g.CompiledPattern.IsMatch(w.Exe));
+    }
+
+    private string ValidityText()
+    {
+        if (DisplayedGame == null) return "no game selected";
+        if (!HasPattern) return "no pattern set";
+        if (!IsPatternValid) return RegexErrorMessage ?? "invalid regex";
+        var windows = OpenWindows;
+        int count = MatchCount(windows);
+        return $"Valid regex · case-insensitive · {count} window{(count == 1 ? "" : "s")} matched";
+    }
+
+    private string SummaryText()
+    {
+        var windows = OpenWindows;
+        int count = DisplayedGame == null ? 0 : MatchCount(windows);
+        return $"matches exactly {count} of {windows.Count} open windows";
+    }
 }

@@ -27,17 +27,20 @@ namespace NoBorders.Services
     {
         private readonly Func<AppSettings> _getSettings;
         private readonly Func<GameConfig?> _getSelectedGame;
+        private readonly Func<List<OpenWindowEntry>> _getOpenWindows;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
         public AppStateService(
             Func<AppSettings> getSettings,
             Func<GameConfig?> getSelectedGame,
+            Func<List<OpenWindowEntry>> getOpenWindows,
             Action queueSave,
             Action saveNow)
         {
             _getSettings     = getSettings;
             _getSelectedGame = getSelectedGame;
+            _getOpenWindows  = getOpenWindows;
             _queueSave       = queueSave;
             _saveNow         = saveNow;
         }
@@ -63,6 +66,15 @@ namespace NoBorders.Services
         /// picking one — selection state should read exactly as it is.
         /// </summary>
         public GameConfig? SelectedGame => _getSelectedGame();
+
+        /// <summary>
+        /// Re-enumerates currently open, blocklist-filtered windows — same
+        /// `MainForm.GetOpenWindowEntries()` used by `BtnAddRunning_Click`'s
+        /// dialog (Phase 3.4). A method, not a cached property: each call walks
+        /// every running process, so callers should call it once per render
+        /// rather than in a loop.
+        /// </summary>
+        public List<OpenWindowEntry> GetOpenWindows() => _getOpenWindows();
 
         /// <summary>Debounced save, same as MainForm's QueueSave() (600ms via _saveDebounce).</summary>
         public void QueueSave() => _queueSave();
