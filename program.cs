@@ -744,6 +744,8 @@ namespace NoBorders
                 ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
                 () => _txtGameName.Text, FetchNameForSelectedGame,
                 SaveGameChanges, RemoveSelectedGame, AddGameFromRunningWindow, BrowseForExe,
+                () => _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty, SelectMonitorDefaultScope,
+                SaveMonitorDefault, DeleteMonitorDefault,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -782,15 +784,18 @@ namespace NoBorders
             // subscriptions above — those handlers are completely untouched;
             // these just also notify Blazor once each has finished, regardless
             // of whether the change originated from the WinForms control or
-            // from the corresponding AppStateService method (Phase 4.1-4.9).
-            _lstGames.SelectedIndexChanged   += (s, e) => _appState.RaiseChanged();
-            _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
-            _chkActive.CheckedChanged        += (s, e) => _appState.RaiseChanged();
-            _btnLoadDefaults.Click           += (s, e) => _appState.RaiseChanged();
-            _btnFetchName.Click              += (s, e) => _appState.RaiseChanged();
-            _btnSaveGame.Click               += (s, e) => _appState.RaiseChanged();
-            _btnDeleteGame.Click             += (s, e) => _appState.RaiseChanged();
-            _btnAddBrowse.Click              += (s, e) => _appState.RaiseChanged();
+            // from the corresponding AppStateService method (Phase 4.1-4.10).
+            _lstGames.SelectedIndexChanged    += (s, e) => _appState.RaiseChanged();
+            _cmbMonitor.SelectedIndexChanged  += (s, e) => _appState.RaiseChanged();
+            _chkActive.CheckedChanged         += (s, e) => _appState.RaiseChanged();
+            _btnLoadDefaults.Click            += (s, e) => _appState.RaiseChanged();
+            _btnFetchName.Click               += (s, e) => _appState.RaiseChanged();
+            _btnSaveGame.Click                += (s, e) => _appState.RaiseChanged();
+            _btnDeleteGame.Click              += (s, e) => _appState.RaiseChanged();
+            _btnAddBrowse.Click               += (s, e) => _appState.RaiseChanged();
+            _cmbSetMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
+            _btnSaveDefault.Click             += (s, e) => _appState.RaiseChanged();
+            _btnDeleteMonitor.Click           += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2914,6 +2919,38 @@ namespace NoBorders
         // SETTINGS TAB HANDLERS
         // ════════════════════════════════════════════════════════════════════════
 
+        /// <summary>
+        /// Controls on a non-active WinForms `TabPage` are implicitly
+        /// `Visible = false` (the `TabControl` manages this), which makes
+        /// `Button.PerformClick()` silently no-op — its `IButtonControl`
+        /// implementation gates on `CanSelect`, which requires `Visible`.
+        /// Discovered live while wiring Phase 4.10: `_btnDeleteMonitor`'s
+        /// `PerformClick()` returned normally but never actually raised `Click`,
+        /// because the real (Blazor-covered) `_tabs.SelectedIndex` was still 0
+        /// (Games) — nothing had ever told the WinForms tab control that Blazor
+        /// was showing Settings, since that navigation isn't wired yet. Every
+        /// Settings-tab bridge method (this phase and 4.11/4.12) must call this
+        /// first. A plain property assignment (like `_cmbSetMonitor.SelectedItem`
+        /// itself, or anything set directly rather than via `PerformClick()`)
+        /// isn't affected — only the `PerformClick()` gate is.
+        /// </summary>
+        private void EnsureSettingsTabActive()
+        {
+            if (_tabs.SelectedIndex != 1) _tabs.SelectedIndex = 1;
+        }
+
+        /// <summary>
+        /// Blazor Settings > Monitors card click's entry point (MIGRATION_PLAN.md
+        /// Phase 4.10) — selects a scope exactly as picking it in the WinForms
+        /// combo would, firing the real, unchanged `CmbSetMonitor_SelectedIndexChanged`
+        /// below.
+        /// </summary>
+        private void SelectMonitorDefaultScope(string scope)
+        {
+            EnsureSettingsTabActive();
+            if (_cmbSetMonitor.Items.Contains(scope)) _cmbSetMonitor.SelectedItem = scope;
+        }
+
         private void CmbSetMonitor_SelectedIndexChanged(object? sender, EventArgs e)
         {
             string sel = _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty;
@@ -3006,6 +3043,20 @@ namespace NoBorders
             ShowStatus($"Deleted monitor \"{sel}\" and its saved settings.");
         }
 
+        /// <summary>
+        /// Blazor Settings > Monitors "✕" entry point (MIGRATION_PLAN.md Phase
+        /// 4.10) — selects the given scope first (same as a card click would),
+        /// then calls `PerformClick()`, so the real, unchanged
+        /// `BtnDeleteMonitor_Click` runs against it, native confirmation
+        /// `MessageBox`es and all — those aren't replaced with Blazor UI, same
+        /// reasoning as 4.9's native file picker.
+        /// </summary>
+        private void DeleteMonitorDefault(string scope)
+        {
+            SelectMonitorDefaultScope(scope); // also calls EnsureSettingsTabActive()
+            _btnDeleteMonitor.PerformClick();
+        }
+
         private void BtnSaveDefault_Click(object? sender, EventArgs e)
         {
             string sel = _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty;
@@ -3027,6 +3078,17 @@ namespace NoBorders
             var t = new System.Windows.Forms.Timer { Interval = 1400 };
             t.Tick += (ts, te) => { _btnSaveDefault.Text = "Save Monitor Default"; t.Stop(); t.Dispose(); };
             t.Start();
+        }
+
+        /// <summary>
+        /// Blazor "Save Monitor Default" button's entry point (MIGRATION_PLAN.md
+        /// Phase 4.10) — calls `PerformClick()`, so the real, unchanged
+        /// `BtnSaveDefault_Click` above runs.
+        /// </summary>
+        private void SaveMonitorDefault()
+        {
+            EnsureSettingsTabActive();
+            _btnSaveDefault.PerformClick();
         }
 
         /// <summary>

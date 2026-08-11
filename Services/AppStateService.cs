@@ -57,6 +57,10 @@ namespace NoBorders.Services
         private readonly Action _removeSelectedGame;
         private readonly Action<OpenWindowEntry> _addGameFromRunningWindow;
         private readonly Action _browseForExe;
+        private readonly Func<string> _getActiveMonitorDefaultScope;
+        private readonly Action<string> _selectMonitorDefaultScope;
+        private readonly Action _saveMonitorDefault;
+        private readonly Action<string> _deleteMonitorDefault;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -79,6 +83,10 @@ namespace NoBorders.Services
             Action removeSelectedGame,
             Action<OpenWindowEntry> addGameFromRunningWindow,
             Action browseForExe,
+            Func<string> getActiveMonitorDefaultScope,
+            Action<string> selectMonitorDefaultScope,
+            Action saveMonitorDefault,
+            Action<string> deleteMonitorDefault,
             Action queueSave,
             Action saveNow)
         {
@@ -98,6 +106,10 @@ namespace NoBorders.Services
             _removeSelectedGame       = removeSelectedGame;
             _addGameFromRunningWindow = addGameFromRunningWindow;
             _browseForExe             = browseForExe;
+            _getActiveMonitorDefaultScope = getActiveMonitorDefaultScope;
+            _selectMonitorDefaultScope    = selectMonitorDefaultScope;
+            _saveMonitorDefault           = saveMonitorDefault;
+            _deleteMonitorDefault         = deleteMonitorDefault;
             _selectMonitorScope       = selectMonitorScope;
             _toggleGameActive         = toggleGameActive;
             _queueSave                = queueSave;
@@ -259,6 +271,42 @@ namespace NoBorders.Services
         /// blocking until dismissed — not something the design mock replaces).
         /// </summary>
         public void BrowseForExe() => _browseForExe();
+
+        /// <summary>
+        /// MainForm's `_cmbSetMonitor.SelectedItem` — which monitor's baseline
+        /// default is currently being edited on Settings > Monitors (Phase 4.10).
+        /// Empty until a card has been clicked at least once (from either UI, in
+        /// principle — the WinForms combo isn't otherwise pre-populated). Same
+        /// display-only-fallback rationale as <see cref="ActiveMonitorScope"/>
+        /// for components that need something to show before then.
+        /// </summary>
+        public string ActiveMonitorDefaultScope => _getActiveMonitorDefaultScope();
+
+        /// <summary>
+        /// Selects a monitor as the Settings > Monitors baseline-default target
+        /// exactly as picking it in the WinForms combo would (Phase 4.10) —
+        /// forwards to MainForm's `SelectMonitorDefaultScope`, firing the real,
+        /// unchanged `CmbSetMonitor_SelectedIndexChanged`.
+        /// </summary>
+        public void SelectMonitorDefaultScope(string scope) => _selectMonitorDefaultScope(scope);
+
+        /// <summary>
+        /// Saves the active monitor default scope's current fields, exactly as
+        /// clicking "Save Monitor Default" would (Phase 4.10) — forwards to
+        /// MainForm's `PerformClick()` on `_btnSaveDefault`, so the real,
+        /// unchanged `BtnSaveDefault_Click` runs.
+        /// </summary>
+        public void SaveMonitorDefault() => _saveMonitorDefault();
+
+        /// <summary>
+        /// Deletes a monitor's saved default profile exactly as selecting it and
+        /// clicking the WinForms "✕" would (Phase 4.10) — forwards to MainForm's
+        /// `DeleteMonitorDefault`, which selects the scope then calls
+        /// `PerformClick()` on `_btnDeleteMonitor`, so the real, unchanged
+        /// `BtnDeleteMonitor_Click` runs — including its native confirmation
+        /// `MessageBox`es (refuses connected monitors, confirms before deleting).
+        /// </summary>
+        public void DeleteMonitorDefault(string scope) => _deleteMonitorDefault(scope);
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

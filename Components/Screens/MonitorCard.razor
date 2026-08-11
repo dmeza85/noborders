@@ -1,16 +1,20 @@
 @namespace NoBorders.Components.Screens
 @* Monitor card, screen 1e — three visual variants (selected-connected,
-   connected, saved-but-disconnected/removable). Static only — the ✕
-   remove affordance on Saved cards doesn't do anything yet. *@
+   connected, saved-but-disconnected/removable).
 
-<div class="nb-monitor-card @VariantClass">
+   Phase 4.10: the card body is clickable (selects this monitor as the
+   Settings > Monitors baseline-default target); Saved cards' "✕" removes
+   it — @onclick:stopPropagation keeps that click from also selecting the
+   card it sits on. *@
+
+<div class="nb-monitor-card @VariantClass" @onclick="OnCardClick">
     <div class="nb-monitor-card__body">
         <div class="nb-monitor-card__name">@Name</div>
         <div class="nb-monitor-card__detail nb-mono">@Detail</div>
     </div>
     @if (Saved)
     {
-        <div class="nb-monitor-card__remove">✕</div>
+        <div class="nb-monitor-card__remove" @onclick="OnRemoveClick" @onclick:stopPropagation="true">✕</div>
     }
 </div>
 
@@ -19,8 +23,13 @@
     [Parameter] public string Detail { get; set; } = "";
     [Parameter] public bool Selected { get; set; }
     [Parameter] public bool Saved { get; set; }
+    [Parameter] public EventCallback OnSelect { get; set; }
+    [Parameter] public EventCallback OnRemove { get; set; }
 
     private string VariantClass =>
         Saved ? "nb-monitor-card--saved" :
         Selected ? "nb-monitor-card--selected" : "";
+
+    private Task OnCardClick() => OnSelect.InvokeAsync();
+    private Task OnRemoveClick() => OnRemove.InvokeAsync();
 }

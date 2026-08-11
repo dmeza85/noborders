@@ -1,6 +1,7 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
+@implements IDisposable
 @* Screen 1e — Settings: Monitors & defaults. design-handoff/README.md
    explicitly notes the RESULT PREVIEW block here is "the same component
    as 2a", so this reuses ResultPreview.razor rather than re-implementing
@@ -14,13 +15,26 @@
    saved-disconnected card's subline shows its saved default profile size
    (MonitorDefaults[name]) labeled "default" rather than implying it's the
    monitor's native resolution — those are two different numbers that can
-   legitimately disagree. The baseline-default fields/ResultPreview below
-   use the same display-only-fallback pattern as MainShell's DisplayedGame:
-   no click-to-select exists yet (Phase 4), so they show the primary (or
-   first) connected monitor's saved default, honestly falling back to
-   GameDisplayProfile's own schema defaults when nothing's been saved for
-   it yet — exactly what MainForm.GetEffectiveProfile()/BtnLoadDefaults_Click
-   would resolve to. *@
+   legitimately disagree.
+
+   Phase 4.10: monitor cards are clickable — @onclick calls
+   State.SelectMonitorDefaultScope, which forwards to MainForm's
+   SelectMonitorDefaultScope(), which sets `_cmbSetMonitor.SelectedItem` so
+   the real, unchanged `CmbSetMonitor_SelectedIndexChanged` handler runs.
+   DisplayedMonitorName now prefers the real State.ActiveMonitorDefaultScope
+   once it's been set, falling back to the same display-only pick (primary
+   connected, else first connected, else first saved name) only before any
+   card has ever been clicked. Saved cards' "✕" calls
+   State.DeleteMonitorDefault, which selects that scope then triggers the
+   real, unchanged BtnDeleteMonitor_Click — native confirmation MessageBoxes
+   and all (not replaced with Blazor UI, same as 4.9's native file picker).
+   "Save Monitor Default" calls State.SaveMonitorDefault
+   (BtnSaveDefault_Click) — same "re-persists the currently-displayed value"
+   scope note as 4.6/Phase 4.4: no editable stepper fields exist yet, so
+   this is a real, working commit of whatever's already shown, not yet a
+   way to change the numbers from Blazor. "Detect Displays"/"Remove All"
+   have no backing handler anywhere in program.cs (grepped for both — no
+   match), so they stay static rather than inventing new functionality. *@
 
 <div class="nb-monitors-page">
     <div class="nb-monitors-page__title">Monitor baseline defaults</div>
@@ -33,7 +47,8 @@
     <div class="nb-monitors-page__grid">
         @foreach (var m in State.Monitors)
         {
-            <MonitorCard Name="@m.ID" Detail="@ConnectedDetail(m)" Selected="@(m.ID == DisplayedMonitorName)" />
+            <MonitorCard Name="@m.ID" Detail="@ConnectedDetail(m)" Selected="@(m.ID == DisplayedMonitorName)"
+                         OnSelect="() => State.SelectMonitorDefaultScope(m.ID)" />
         }
     </div>
 
@@ -45,7 +60,9 @@
     <div class="nb-monitors-page__grid">
         @foreach (var name in SavedDisconnected)
         {
-            <MonitorCard Name="@name" Detail="@SavedDetail(name)" Saved="true" />
+            <MonitorCard Name="@name" Detail="@SavedDetail(name)" Saved="true" Selected="@(name == DisplayedMonitorName)"
+                         OnSelect="() => State.SelectMonitorDefaultScope(name)"
+                         OnRemove="() => State.DeleteMonitorDefault(name)" />
         }
     </div>
     <div class="nb-monitors-page__caption">Saved monitors keep their defaults so profiles come back if the display is reconnected.</div>
@@ -82,21 +99,33 @@
                    Caption="@PreviewCaption" />
 
     <div class="nb-monitors-page__actions">
-        <button type="button" class="nb-btn nb-btn--primary">Save Monitor Default</button>
+        <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveMonitorDefault">Save Monitor Default</button>
         <button type="button" class="nb-btn nb-btn--outline">Detect Displays</button>
     </div>
 </div>
 
 @code {
-    // Display-only fallback (same rationale as MainShell.DisplayedGame): no
-    // monitor-card click-to-select is wired yet (Phase 4), so this picks the
-    // primary connected monitor — falling back to the first connected, then
-    // the first saved-disconnected name — purely to have something honest to
-    // show below rather than the service silently deciding a "selection".
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+    public void Dispose() => State.Changed -= OnStateChanged;
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    // Display-only fallback (same rationale as MainShell.DisplayedGame):
+    // prefers the real State.ActiveMonitorDefaultScope once a card has been
+    // clicked (Phase 4.10); before that, picks the primary connected
+    // monitor, then the first connected, then the first saved-disconnected
+    // name — purely to have something honest to show.
     private string DisplayedMonitorName =>
+        !string.IsNullOrEmpty(State.ActiveMonitorDefaultScope) ? State.ActiveMonitorDefaultScope :
         (State.Monitors.FirstOrDefault(m => m.Primary) ?? State.Monitors.FirstOrDefault())?.ID
         ?? SavedDisconnected.FirstOrDefault()
         ?? string.Empty;
+
+    private void OnSaveMonitorDefault()
+    {
+        if (string.IsNullOrEmpty(State.ActiveMonitorDefaultScope) && !string.IsNullOrEmpty(DisplayedMonitorName))
+            State.SelectMonitorDefaultScope(DisplayedMonitorName);
+        State.SaveMonitorDefault();
+    }
 
     private MonitorItem? DisplayedConnectedMonitor =>
         State.Monitors.FirstOrDefault(m => m.ID == DisplayedMonitorName);
