@@ -19,11 +19,20 @@
    resolved profile, using the exact same fallback chain as
    MainForm.GetEffectiveProfile()/BtnLoadDefaults_Click — the game's own
    saved Profiles[monitor] if any, else that monitor's MonitorDefaults
-   entry, else GameDisplayProfile's own 1920×1080 schema default. No
-   monitor-scope dropdown is wired yet (Phase 4.2), so — same display-only-
-   fallback pattern as MainShell.DisplayedGame — TargetMonitorName picks
-   the game's first saved profile's monitor, else the primary connected
-   monitor, else the first known monitor name.
+   entry, else GameDisplayProfile's own 1920×1080 schema default.
+
+   Phase 4.2: TARGET MONITOR is a real, functional dropdown (a native
+   <select>, restyled — the mock's exact custom popup list isn't
+   reproduced pixel-for-pixel, which is a real fidelity gap left for a
+   Phase 6 polish pass if wanted, same tradeoff class as Phase 6.2/6.4's
+   deferred items). Selecting an option calls
+   AppStateService.SelectMonitorScope, which forwards to MainForm's
+   SelectMonitorScope -> the real, unchanged CmbMonitor_SelectedIndexChanged.
+   TargetMonitorName now prefers the real AppStateService.ActiveMonitorScope
+   (MainForm's _activeScope) once it's been set by a selection — from either
+   UI — falling back to the same display-only pick as before (first saved
+   profile's monitor, else primary connected, else first known name) only
+   for the window before any selection has ever happened.
 
    3a's coverage %/fits-on-screen summary line (`w*h / mw*mh`, per the
    README's implementation note) didn't exist as static UI from Phase 2 —
@@ -40,7 +49,21 @@
     <div class="nb-display-pane__left">
         <div class="nb-text-label nb-display-pane__label">TARGET MONITOR</div>
         <div class="nb-display-pane__select">
-            <span>@(string.IsNullOrEmpty(TargetMonitorName) ? "No monitor" : TargetMonitorName)</span>
+            @if (State.MonitorOptions.Count == 0)
+            {
+                <select class="nb-display-pane__select-native" disabled>
+                    <option>No monitor</option>
+                </select>
+            }
+            else
+            {
+                <select class="nb-display-pane__select-native" @onchange="OnMonitorChanged">
+                    @foreach (var m in State.MonitorOptions)
+                    {
+                        <option value="@m" selected="@(m == TargetMonitorName)">@m</option>
+                    }
+                </select>
+            }
             <span class="nb-display-pane__select-caret">▾</span>
         </div>
 
@@ -101,10 +124,17 @@
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
     private string TargetMonitorName =>
+        !string.IsNullOrEmpty(State.ActiveMonitorScope) ? State.ActiveMonitorScope :
         DisplayedGame?.Profiles.Keys.FirstOrDefault()
         ?? (State.Monitors.FirstOrDefault(m => m.Primary) ?? State.Monitors.FirstOrDefault())?.ID
         ?? State.KnownMonitors.FirstOrDefault()
         ?? string.Empty;
+
+    private void OnMonitorChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(value)) State.SelectMonitorScope(value);
+    }
 
     // Same fallback chain as MainForm.GetEffectiveProfile(): the game's own
     // saved profile for this monitor, else that monitor's saved default,

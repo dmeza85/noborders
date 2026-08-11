@@ -24,10 +24,43 @@
   margin-bottom: 18px;
   font: 500 13px/1 var(--nb-font-ui);
   color: var(--nb-text-bright);
+  position: relative;
+}
+
+/* Phase 4.2: a real <select> layered over the styled box above — its own
+   native popup list isn't reskinned to match the mock (browser-drawn), a
+   deliberate fidelity tradeoff left for a possible Phase 6 pass. */
+.nb-display-pane__select-native {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  padding: 0 30px 0 12px;
+  cursor: pointer;
+}
+
+.nb-display-pane__select-native:disabled {
+  cursor: default;
+  color: var(--nb-text-muted);
+}
+
+.nb-display-pane__select-native option {
+  background: var(--nb-field-alt);
+  color: var(--nb-text-bright);
 }
 
 .nb-display-pane__select-caret {
+  position: relative;
+  z-index: 2;
   color: var(--nb-text-muted);
+  pointer-events: none;
 }
 
 .nb-display-pane__row {

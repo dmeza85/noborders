@@ -46,6 +46,9 @@ namespace NoBorders.Services
         private readonly Func<string> _getHotkeyAddStatus;
         private readonly Func<string> _getHotkeyRefreshStatus;
         private readonly Action<GameConfig> _selectGame;
+        private readonly Func<List<string>> _getMonitorOptions;
+        private readonly Func<string> _getActiveScope;
+        private readonly Action<string> _selectMonitorScope;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -57,6 +60,9 @@ namespace NoBorders.Services
             Func<string> getHotkeyAddStatus,
             Func<string> getHotkeyRefreshStatus,
             Action<GameConfig> selectGame,
+            Func<List<string>> getMonitorOptions,
+            Func<string> getActiveScope,
+            Action<string> selectMonitorScope,
             Action queueSave,
             Action saveNow)
         {
@@ -67,6 +73,9 @@ namespace NoBorders.Services
             _getHotkeyAddStatus     = getHotkeyAddStatus;
             _getHotkeyRefreshStatus = getHotkeyRefreshStatus;
             _selectGame             = selectGame;
+            _getMonitorOptions      = getMonitorOptions;
+            _getActiveScope         = getActiveScope;
+            _selectMonitorScope     = selectMonitorScope;
             _queueSave              = queueSave;
             _saveNow                = saveNow;
         }
@@ -113,6 +122,34 @@ namespace NoBorders.Services
         /// anymore — MainForm remains the single source of truth for selection.
         /// </summary>
         public void SelectGame(GameConfig game) => _selectGame(game);
+
+        /// <summary>
+        /// Options for the target-monitor dropdown — same list `_cmbMonitor.Items`
+        /// holds (MIGRATION_PLAN.md Phase 4.2): connected monitors plus any saved
+        /// `KnownMonitors` not currently connected, per `SyncMonitorComboBoxes()`.
+        /// Read directly off the WinForms control rather than recomputed here, so
+        /// there's exactly one place that decides this list's contents/order.
+        /// </summary>
+        public List<string> MonitorOptions => _getMonitorOptions();
+
+        /// <summary>
+        /// MainForm's `_activeScope` — which monitor's profile is currently being
+        /// edited for the selected game. Empty until a game has been selected at
+        /// least once (Phase 4.1's `SelectGame`/`LstGames_SelectedIndexChanged`
+        /// populates it). Components that need a monitor to show before this is
+        /// set fall back to their own display-only pick (see DisplayDetailPane's
+        /// `TargetMonitorName`), same rationale as `SelectedGame`.
+        /// </summary>
+        public string ActiveMonitorScope => _getActiveScope();
+
+        /// <summary>
+        /// Selects a monitor scope exactly as picking it in the WinForms combo
+        /// would (Phase 4.2) — forwards to MainForm's own `SelectMonitorScope`,
+        /// so the real, unchanged `CmbMonitor_SelectedIndexChanged` handler runs
+        /// (which also persists the previous scope's edited fields via
+        /// `SaveUIToProfile` before switching).
+        /// </summary>
+        public void SelectMonitorScope(string scope) => _selectMonitorScope(scope);
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

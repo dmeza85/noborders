@@ -739,7 +739,9 @@ namespace NoBorders
             services.AddSingleton(_ => new AppStateService(
                 () => _settings, () => _selectedGame, GetOpenWindowEntries,
                 () => _monitors, () => _lblHotkeyAddStatus.Text, () => _lblHotkeyRefreshStatus.Text,
-                SelectGame, QueueSave, SaveConfig));
+                SelectGame,
+                () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
+                QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
 
@@ -773,12 +775,13 @@ namespace NoBorders
             _blazorServices = CreateBlazorServices();
             _appState       = _blazorServices.GetRequiredService<AppStateService>();
 
-            // Additional subscriber on top of BuildUI()'s own
-            // `+= LstGames_SelectedIndexChanged` above — that handler is
-            // completely untouched; this just also notifies Blazor once it's
-            // done, regardless of whether the selection change originated from
-            // the WinForms list or from AppStateService.SelectGame (Phase 4.1).
-            _lstGames.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
+            // Additional subscribers on top of BuildUI()'s own handler
+            // subscriptions above — those handlers are completely untouched;
+            // these just also notify Blazor once each has finished, regardless
+            // of whether the change originated from the WinForms control or
+            // from the corresponding AppStateService method (Phase 4.1, 4.2).
+            _lstGames.SelectedIndexChanged  += (s, e) => _appState.RaiseChanged();
+            _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2482,6 +2485,17 @@ namespace NoBorders
             SaveUIToProfile(_activeScope);
             _activeScope = _cmbMonitor.SelectedItem?.ToString() ?? string.Empty;
             LoadProfileToUI(_selectedGame, _activeScope);
+        }
+
+        /// <summary>
+        /// Blazor target-monitor dropdown's entry point (MIGRATION_PLAN.md Phase
+        /// 4.2) — selects a scope exactly as picking it in the WinForms combo
+        /// would, by setting `SelectedItem`, which fires the real, unchanged
+        /// `CmbMonitor_SelectedIndexChanged` above.
+        /// </summary>
+        private void SelectMonitorScope(string scope)
+        {
+            if (_cmbMonitor.Items.Contains(scope)) _cmbMonitor.SelectedItem = scope;
         }
 
         private void ChkActive_CheckedChanged(object? sender, EventArgs e)
