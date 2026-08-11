@@ -748,6 +748,7 @@ namespace NoBorders
                 SaveMonitorDefault, DeleteMonitorDefault,
                 () => _capturingHotkeyId == HOTKEY_ID_ADD, () => _capturingHotkeyId == HOTKEY_ID_REFRESH,
                 ToggleHotkeyAddCapture, ToggleHotkeyRefreshCapture,
+                ToggleMinimizeToTray, ToggleStartWithWindows, ToggleStartMinimized,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -798,6 +799,9 @@ namespace NoBorders
             _cmbSetMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
             _btnSaveDefault.Click             += (s, e) => _appState.RaiseChanged();
             _btnDeleteMonitor.Click           += (s, e) => _appState.RaiseChanged();
+            _chkMinToTray.CheckedChanged      += (s, e) => _appState.RaiseChanged();
+            _chkStartWindows.CheckedChanged   += (s, e) => _appState.RaiseChanged();
+            _chkStartMin.CheckedChanged       += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -3119,6 +3123,32 @@ namespace NoBorders
         {
             EnsureSettingsTabActive();
             _btnSetHotkeyRefresh.PerformClick();
+        }
+
+        /// <summary>
+        /// Blazor Behaviour toggle entry points (MIGRATION_PLAN.md Phase 4.12) —
+        /// flip the real checkbox's `Checked` property, firing each one's
+        /// existing, unchanged `CheckedChanged` lambda. Plain property
+        /// assignments, not `PerformClick()` — unaffected by 4.10's
+        /// inactive-`TabPage`/`CanSelect` finding (that gate is specific to
+        /// `IButtonControl.PerformClick()`), so no `EnsureSettingsTabActive()`
+        /// call is needed here.
+        /// </summary>
+        private void ToggleMinimizeToTray() => _chkMinToTray.Checked = !_chkMinToTray.Checked;
+
+        private void ToggleStartWithWindows() => _chkStartWindows.Checked = !_chkStartWindows.Checked;
+
+        /// <summary>
+        /// Mirrors the real checkbox's `Enabled` gating: `_chkStartMin` is
+        /// disabled (and un-toggleable by a real click) whenever "Start with
+        /// Windows" is off, but a plain `.Checked =` assignment in code doesn't
+        /// respect `Enabled` on its own — this guard reproduces what a real
+        /// click against the disabled control would do (nothing).
+        /// </summary>
+        private void ToggleStartMinimized()
+        {
+            if (!_chkStartWindows.Checked) return;
+            _chkStartMin.Checked = !_chkStartMin.Checked;
         }
 
         private void BeginHotkeyCapture(int hotkeyId, HotkeyConfig config, TextBox display, Button button, string label)

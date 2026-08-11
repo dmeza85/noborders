@@ -65,6 +65,9 @@ namespace NoBorders.Services
         private readonly Func<bool> _getIsCapturingHotkeyRefresh;
         private readonly Action _toggleHotkeyAddCapture;
         private readonly Action _toggleHotkeyRefreshCapture;
+        private readonly Action _toggleMinimizeToTray;
+        private readonly Action _toggleStartWithWindows;
+        private readonly Action _toggleStartMinimized;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -95,6 +98,9 @@ namespace NoBorders.Services
             Func<bool> getIsCapturingHotkeyRefresh,
             Action toggleHotkeyAddCapture,
             Action toggleHotkeyRefreshCapture,
+            Action toggleMinimizeToTray,
+            Action toggleStartWithWindows,
+            Action toggleStartMinimized,
             Action queueSave,
             Action saveNow)
         {
@@ -122,6 +128,9 @@ namespace NoBorders.Services
             _getIsCapturingHotkeyRefresh  = getIsCapturingHotkeyRefresh;
             _toggleHotkeyAddCapture       = toggleHotkeyAddCapture;
             _toggleHotkeyRefreshCapture   = toggleHotkeyRefreshCapture;
+            _toggleMinimizeToTray         = toggleMinimizeToTray;
+            _toggleStartWithWindows       = toggleStartWithWindows;
+            _toggleStartMinimized         = toggleStartMinimized;
             _selectMonitorScope       = selectMonitorScope;
             _toggleGameActive         = toggleGameActive;
             _queueSave                = queueSave;
@@ -345,6 +354,32 @@ namespace NoBorders.Services
 
         /// <summary>Same as <see cref="ToggleHotkeyAddCapture"/>, for "Re-apply / refresh displays".</summary>
         public void ToggleHotkeyRefreshCapture() => _toggleHotkeyRefreshCapture();
+
+        /// <summary>
+        /// Flips "Minimize to system tray" exactly as clicking its WinForms
+        /// checkbox would (Phase 4.12) — forwards to MainForm's
+        /// `ToggleMinimizeToTray`, which flips `_chkMinToTray.Checked`, firing
+        /// the real, unchanged `CheckedChanged` lambda (saves via `QueueSave`).
+        /// </summary>
+        public void ToggleMinimizeToTray() => _toggleMinimizeToTray();
+
+        /// <summary>
+        /// Flips "Start with Windows" exactly as clicking its WinForms checkbox
+        /// would (Phase 4.12) — forwards to MainForm's `ToggleStartWithWindows`,
+        /// firing the real, unchanged `CheckedChanged` lambda (also updates the
+        /// registry startup entry and cascades `StartMinimized` off if this is
+        /// being turned off, same as the WinForms UI always has).
+        /// </summary>
+        public void ToggleStartWithWindows() => _toggleStartWithWindows();
+
+        /// <summary>
+        /// Flips "Start minimized to tray" exactly as clicking its WinForms
+        /// checkbox would (Phase 4.12) — forwards to MainForm's
+        /// `ToggleStartMinimized`, which no-ops if `StartWithWindows` is off
+        /// (mirroring the real checkbox's `Enabled` gating) or otherwise fires
+        /// the real, unchanged `CheckedChanged` lambda.
+        /// </summary>
+        public void ToggleStartMinimized() => _toggleStartMinimized();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

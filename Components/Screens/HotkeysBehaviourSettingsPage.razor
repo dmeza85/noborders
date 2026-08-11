@@ -33,7 +33,17 @@
    silently overridden by the WebView2 Chromium widget re-asserting its own
    OS focus right after the click, confirmed live via `GetGUIThreadInfo`;
    deferring it through `BeginInvoke` fixed it). Esc-to-cancel and
-   Backspace/Delete-to-clear both come free from that same handler. *@
+   Backspace/Delete-to-clear both come free from that same handler.
+
+   Phase 4.12: the three Behaviour toggles are real — each ToggleSwitch's
+   OnToggle calls AppStateService.ToggleMinimizeToTray/ToggleStartWithWindows/
+   ToggleStartMinimized, which flip the corresponding real WinForms
+   checkbox's Checked property, firing each one's existing, unchanged
+   CheckedChanged lambda (persists via QueueSave; Start with Windows also
+   updates the registry startup entry and cascades Start-minimized off,
+   exactly as the WinForms UI always has). Plain property flips, not
+   PerformClick() — unaffected by 4.10's inactive-TabPage finding, since
+   that only gates IButtonControl.PerformClick(). *@
 
 <div class="nb-hotkeys-page__title">Global hotkeys</div>
 <div class="nb-hotkeys-page__subline">Work while a game has focus. Click a binding, then press your combo.</div>
@@ -118,19 +128,19 @@
         <div class="nb-hotkeys-page__toggle-name">Minimize to system tray</div>
         <div class="nb-hotkeys-page__toggle-sub">Keeps enforcing while hidden</div>
     </div>
-    <ToggleSwitch On="@State.MinimizeToTray" />
+    <ToggleSwitch On="@State.MinimizeToTray" OnToggle="() => State.ToggleMinimizeToTray()" />
 </div>
 <div class="nb-hotkeys-page__toggle-row nb-hotkeys-page__toggle-row--divided">
     <div class="nb-hotkeys-page__toggle-info">
         <div class="nb-hotkeys-page__toggle-name">Start with Windows</div>
     </div>
-    <ToggleSwitch On="@State.StartWithWindows" />
+    <ToggleSwitch On="@State.StartWithWindows" OnToggle="() => State.ToggleStartWithWindows()" />
 </div>
 <div class="nb-hotkeys-page__toggle-row nb-hotkeys-page__toggle-row--divided nb-hotkeys-page__toggle-row--indented">
     <div class="nb-hotkeys-page__toggle-info">
         <div class="nb-hotkeys-page__toggle-name nb-hotkeys-page__toggle-name--muted">Start minimized to tray</div>
     </div>
-    <ToggleSwitch On="@State.StartMinimized" />
+    <ToggleSwitch On="@State.StartMinimized" OnToggle="() => State.ToggleStartMinimized()" />
 </div>
 
 @code {

@@ -1,14 +1,22 @@
 @namespace NoBorders.Components.Screens
 @* 42×24 pill toggle — reused across Hotkeys/Behaviour (1f, 3×) and
    Diagnostics (4b, 1×). "Small" is the 24×14 variant used for the
-   Activity Log window's Auto-Scroll toggle (4a). Visual only, not wired
-   to state yet. *@
+   Activity Log window's Auto-Scroll toggle (4a).
 
-<div class="nb-toggle @(On ? "nb-toggle--on" : "") @(Small ? "nb-toggle--small" : "")">
+   Phase 4.12: OnToggle is optional — callers that don't pass it (4b's
+   Verbose logging, 4a's Auto-Scroll; neither has a real backing setting,
+   see those pages' own doc comments) keep the original inert behavior,
+   since HasDelegate is false and the click no-ops. Only the three
+   Behaviour toggles (1f) pass it. *@
+
+<div class="nb-toggle @(On ? "nb-toggle--on" : "") @(Small ? "nb-toggle--small" : "")" @onclick="HandleClick">
     <div class="nb-toggle__knob"></div>
 </div>
 
 @code {
     [Parameter] public bool On { get; set; }
     [Parameter] public bool Small { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+
+    private Task HandleClick() => OnToggle.HasDelegate ? OnToggle.InvokeAsync() : Task.CompletedTask;
 }
