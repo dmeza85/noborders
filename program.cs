@@ -3605,7 +3605,7 @@ namespace NoBorders
                     var match = _settings.Games.First(g => g.CompiledPattern.IsMatch(exeName));
                     _trackedWindows[hwnd] = match;
                     ApplyBorderless(hwnd, match);
-                    ShowToast($"Borderless applied\n{match.GameName}", success: true);
+                    ShowToast($"Borderless applied\n{match.GameName}", success: true, match.IconImagePath);
                     AppLogger.Log($"Borderless applied to '{match.GameName}'.", LogLevel.Ok);
                 }
             }
@@ -3643,7 +3643,7 @@ namespace NoBorders
                 // re-apply using the now-current monitor layout.
                 _trackedWindows[hwnd] = match;
                 ApplyBorderless(hwnd, match);
-                ShowToast($"Borderless re-applied\n{match.GameName}", success: true);
+                ShowToast($"Borderless re-applied\n{match.GameName}", success: true, match.IconImagePath);
                 AppLogger.Log($"Borderless re-applied to '{match.GameName}'.", LogLevel.Ok);
             }
             catch (Exception ex) { AppLogger.Log(ex, "HotkeyRefresh"); }
@@ -3917,7 +3917,7 @@ namespace NoBorders
                 ShowToast(
                     $"Couldn't fully apply borderless to {g.GameName}.\n"
                     + "Try Settings → Restart as Administrator.",
-                    success: false);
+                    success: false, g.IconImagePath);
             }
         }
 
@@ -3992,14 +3992,14 @@ namespace NoBorders
         /// (an optional `\n`-separated "Title\nDetail", as every existing call site
         /// already passes) so none of the seven call sites needed to change.
         /// </summary>
-        private void ShowToast(string message, bool success = true)
+        private void ShowToast(string message, bool success = true, string iconPath = "")
         {
             if (!this.IsHandleCreated) return;
 
             // Marshal to UI thread if called from a hotkey/background context.
             if (this.InvokeRequired)
             {
-                this.BeginInvoke(new MethodInvoker(() => ShowToast(message, success)));
+                this.BeginInvoke(new MethodInvoker(() => ShowToast(message, success, iconPath)));
                 return;
             }
 
@@ -4022,7 +4022,8 @@ namespace NoBorders
             {
                 [nameof(Components.Screens.Toast.Title)]   = title,
                 [nameof(Components.Screens.Toast.Detail)]  = detail,
-                [nameof(Components.Screens.Toast.Success)] = success
+                [nameof(Components.Screens.Toast.Success)] = success,
+                [nameof(Components.Screens.Toast.IconUrl)] = iconPath
             };
             toastView.RootComponents.Add<Components.Screens.Toast>("#app", parameters);
 

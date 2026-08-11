@@ -65,9 +65,12 @@
         </button>
     </header>
 
-    <section class="nb-shell__hero">
+    <section class="nb-shell__hero" style="@HeroStyle">
         <div class="nb-shell__hero-scrim"></div>
-        <div class="nb-shell__hero-caption nb-mono">hero art 16:5</div>
+        @if (string.IsNullOrEmpty(DisplayedGame?.HeroImagePath))
+        {
+            <div class="nb-shell__hero-caption nb-mono">hero art 16:5</div>
+        }
         <div class="nb-shell__hero-content">
             <div class="nb-shell__hero-status-block">
                 <div class="nb-shell__hero-status">
@@ -100,7 +103,7 @@
                 var selected = g == DisplayedGame;
                 var tier = RowTier(g, selected);
                 <div class="nb-shell__rail-row @(selected ? "nb-shell__rail-row--selected" : "")" @onclick="() => State.SelectGame(g)">
-                    <div class="nb-shell__rail-thumb @(selected ? "nb-shell__rail-thumb--selected" : "")"></div>
+                    <div class="nb-shell__rail-thumb @(selected ? "nb-shell__rail-thumb--selected" : "")" style="@ThumbStyle(g)"></div>
                     <div class="nb-shell__rail-info">
                         <div class="nb-shell__rail-name nb-shell__rail-name--@tier">@g.GameName</div>
                         <div class="nb-shell__rail-res nb-shell__rail-res--@tier nb-mono">@RailResolution(g)</div>
@@ -157,6 +160,19 @@
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
     private bool IsDisplayedActive => DisplayedGame?.IsActive == true;
+
+    // Phase 8.3: real cached art (Services/ArtworkService.cs) in place of the
+    // CSS placeholder stripes, when a fetch has actually succeeded for this
+    // game — empty HeroImagePath/IconImagePath (the default for every game
+    // until someone clicks Fetch Artwork) means "no override," leaving the
+    // existing placeholder background-image rule in the stylesheet showing
+    // through untouched. Inline style rather than a class swap since the URL
+    // itself is per-game data, not a fixed token.
+    private string HeroStyle =>
+        string.IsNullOrEmpty(DisplayedGame?.HeroImagePath) ? "" : $"background-image:url('{DisplayedGame.HeroImagePath}');background-size:cover;background-position:center;";
+
+    private static string ThumbStyle(GameConfig g) =>
+        string.IsNullOrEmpty(g.IconImagePath) ? "" : $"background-image:url('{g.IconImagePath}');background-size:cover;background-position:center;";
 
     // Phase 4.3: ChkActive_CheckedChanged (via State.ToggleActive) only acts
     // on MainForm's real _selectedGame, which is still null before the first

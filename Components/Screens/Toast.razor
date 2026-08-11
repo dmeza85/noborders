@@ -28,7 +28,7 @@
 
 <div class="nb-toast @(Success ? "" : "nb-toast--danger")">
     <div class="nb-toast__row">
-        <div class="nb-toast__thumb"></div>
+        <div class="nb-toast__thumb" style="@ThumbStyle"></div>
         <div class="nb-toast__body">
             <div class="nb-toast__status">
                 <span class="nb-toast__dot"></span>
@@ -51,4 +51,12 @@
     [Parameter] public string Detail { get; set; } = "Helldivers 2 → 2560×1440 on LG 27GP850";
     [Parameter] public bool Success { get; set; } = true;
     [Parameter] public bool ShowUndo { get; set; } = false;
+
+    // Phase 8.3: the toast's own game, if any (hotkey-conflict/elevation
+    // toasts have none) — empty means "no cached icon yet," leaving the
+    // existing placeholder background-image rule showing through.
+    [Parameter] public string IconUrl { get; set; } = "";
+
+    private string ThumbStyle =>
+        string.IsNullOrEmpty(IconUrl) ? "" : $"background-image:url('{IconUrl}');background-size:cover;background-position:center;";
 }
