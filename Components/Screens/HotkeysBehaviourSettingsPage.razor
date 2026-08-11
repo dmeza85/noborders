@@ -1,0 +1,63 @@
+@namespace NoBorders.Components.Screens
+@* Screen 1f — Settings: Hotkeys & Behaviour. The mock shows both sections
+   on one page with "Hotkeys" active in the nav; "Behaviour" is a separate
+   nav item but no distinct mock exists for it, so SettingsView.razor
+   routes both nav states to this same page (see its doc comment).
+   Static/hardcoded — the capture-state card, toggles, and Rebind button
+   don't do anything yet. *@
+
+<div class="nb-hotkeys-page__title">Global hotkeys</div>
+<div class="nb-hotkeys-page__subline">Work while a game has focus. Click a binding, then press your combo.</div>
+
+<div class="nb-hotkeys-page__binding nb-hotkeys-page__binding--capturing">
+    <div class="nb-hotkeys-page__binding-info">
+        <div class="nb-hotkeys-page__binding-name">Add focused app</div>
+        <div class="nb-hotkeys-page__binding-sub">Listening… press a key combination. Esc to cancel.</div>
+    </div>
+    <div class="nb-hotkeys-page__combo">
+        <KeyCap Active="true">Ctrl</KeyCap>
+        <span class="nb-hotkeys-page__plus">+</span>
+        <KeyCap Active="true">Shift</KeyCap>
+        <span class="nb-hotkeys-page__plus">+</span>
+        <div class="nb-hotkeys-page__capture-slot"></div>
+    </div>
+</div>
+
+<div class="nb-hotkeys-page__binding">
+    <div class="nb-hotkeys-page__binding-info">
+        <div class="nb-hotkeys-page__binding-name nb-hotkeys-page__binding-name--resting">Re-apply / refresh displays</div>
+        <div class="nb-hotkeys-page__status">
+            <span class="nb-hotkeys-page__status-dot"></span>
+            <span class="nb-mono">registered</span>
+        </div>
+    </div>
+    <div class="nb-hotkeys-page__combo">
+        <KeyCap>Alt</KeyCap>
+        <span class="nb-hotkeys-page__plus">+</span>
+        <KeyCap>F11</KeyCap>
+    </div>
+    <button type="button" class="nb-hotkeys-page__rebind">Rebind</button>
+</div>
+
+<div class="nb-hotkeys-page__divider"></div>
+<div class="nb-hotkeys-page__section-title">Behaviour</div>
+
+<div class="nb-hotkeys-page__toggle-row">
+    <div class="nb-hotkeys-page__toggle-info">
+        <div class="nb-hotkeys-page__toggle-name">Minimize to system tray</div>
+        <div class="nb-hotkeys-page__toggle-sub">Keeps enforcing while hidden</div>
+    </div>
+    <ToggleSwitch On="true" />
+</div>
+<div class="nb-hotkeys-page__toggle-row nb-hotkeys-page__toggle-row--divided">
+    <div class="nb-hotkeys-page__toggle-info">
+        <div class="nb-hotkeys-page__toggle-name">Start with Windows</div>
+    </div>
+    <ToggleSwitch On="true" />
+</div>
+<div class="nb-hotkeys-page__toggle-row nb-hotkeys-page__toggle-row--divided nb-hotkeys-page__toggle-row--indented">
+    <div class="nb-hotkeys-page__toggle-info">
+        <div class="nb-hotkeys-page__toggle-name nb-hotkeys-page__toggle-name--muted">Start minimized to tray</div>
+    </div>
+    <ToggleSwitch On="false" />
+</div>

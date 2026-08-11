@@ -1,0 +1,11 @@
+@namespace NoBorders.Components.Screens
+@* Hotkey key-cap chip, screen 1f. "Active" is the brighter styling used
+   inside a binding that's currently in capture state; otherwise it's the
+   resting/registered styling. *@
+
+<div class="nb-keycap @(Active ? "nb-keycap--active" : "")">@ChildContent</div>
+
+@code {
+    [Parameter] public bool Active { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

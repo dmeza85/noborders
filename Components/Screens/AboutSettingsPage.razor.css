@@ -1,0 +1,17 @@
+.nb-about-page__title {
+  font: var(--nb-text-screen-title-weight) var(--nb-text-screen-title-size)/1.2 var(--nb-font-ui);
+  color: var(--nb-text-primary);
+}
+
+.nb-about-page__version {
+  font-size: 11px;
+  color: var(--nb-text-faint);
+  margin-top: 6px;
+}
+
+.nb-about-page__description {
+  font: 400 12.5px/1.45 var(--nb-font-ui);
+  color: var(--nb-text-secondary);
+  margin-top: 14px;
+  max-width: 420px;
+}

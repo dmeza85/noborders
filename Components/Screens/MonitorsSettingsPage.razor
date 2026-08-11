@@ -1,0 +1,93 @@
+@namespace NoBorders.Components.Screens
+@* Screen 1e — Settings: Monitors & defaults. design-handoff/README.md
+   explicitly notes the RESULT PREVIEW block here is "the same component
+   as 2a", so this reuses ResultPreview.razor rather than re-implementing
+   it. Static/hardcoded sample data — Phase 2 is visual parity only. *@
+
+<div class="nb-monitors-page">
+    <div class="nb-monitors-page__title">Monitor baseline defaults</div>
+    <div class="nb-monitors-page__subline">New games added on a monitor inherit these values. Existing games keep their own.</div>
+
+    <div class="nb-monitors-page__group-header">
+        <div class="nb-text-label" style="color:var(--nb-success)">CONNECTED · @Connected.Count</div>
+        <div class="nb-monitors-page__hairline"></div>
+    </div>
+    <div class="nb-monitors-page__grid">
+        @foreach (var m in Connected)
+        {
+            <MonitorCard Name="@m.Name" Detail="@m.Detail" Selected="@m.Selected" />
+        }
+    </div>
+
+    <div class="nb-monitors-page__group-header nb-monitors-page__group-header--saved">
+        <div class="nb-text-label">SAVED · NOT CONNECTED · @Saved.Count</div>
+        <div class="nb-monitors-page__hairline"></div>
+        <div class="nb-monitors-page__remove-all">Remove All</div>
+    </div>
+    <div class="nb-monitors-page__grid">
+        @foreach (var m in Saved)
+        {
+            <MonitorCard Name="@m.Name" Detail="@m.Detail" Saved="true" />
+        }
+    </div>
+    <div class="nb-monitors-page__caption">Saved monitors keep their defaults so profiles come back if the display is reconnected.</div>
+
+    <div class="nb-monitors-page__fields">
+        <div class="nb-monitors-page__field">
+            <div class="nb-text-label nb-monitors-page__field-label">WIDTH</div>
+            <div class="nb-monitors-page__field-value nb-mono">@Width</div>
+        </div>
+        <div class="nb-monitors-page__field">
+            <div class="nb-text-label nb-monitors-page__field-label">HEIGHT</div>
+            <div class="nb-monitors-page__field-value nb-mono">@Height</div>
+        </div>
+        <div class="nb-monitors-page__field">
+            <div class="nb-text-label nb-monitors-page__field-label">OFFSET X</div>
+            <div class="nb-monitors-page__field-value nb-mono">@OffsetX</div>
+        </div>
+        <div class="nb-monitors-page__field">
+            <div class="nb-text-label nb-monitors-page__field-label">OFFSET Y</div>
+            <div class="nb-monitors-page__field-value nb-mono">@OffsetY</div>
+        </div>
+    </div>
+
+    <label class="nb-monitors-page__check">
+        <span class="nb-monitors-page__check-box"></span>
+        <span>Lock cursor to window bounds by default</span>
+    </label>
+
+    <div class="nb-monitors-page__divider"></div>
+
+    <ResultPreview MonitorWidth="Width" MonitorHeight="Height"
+                   WindowWidth="Width" WindowHeight="Height"
+                   OffsetX="OffsetX" OffsetY="OffsetY"
+                   Caption="@PreviewCaption" />
+
+    <div class="nb-monitors-page__actions">
+        <button type="button" class="nb-btn nb-btn--primary">Save Monitor Default</button>
+        <button type="button" class="nb-btn nb-btn--outline">Detect Displays</button>
+    </div>
+</div>
+
+@code {
+    private sealed record MonitorSample(string Name, string Detail, bool Selected = false);
+
+    private readonly int Width = 3440;
+    private readonly int Height = 1440;
+    private readonly int OffsetX = 0;
+    private readonly int OffsetY = 0;
+    private readonly string PreviewCaption = "3440×1440 @ 0,0 — full coverage";
+
+    private static readonly List<MonitorSample> Connected = new()
+    {
+        new("Samsung S34J55x", "3440×1440 · primary", Selected: true),
+        new("LG 27GP850",      "2560×1440"),
+    };
+
+    private static readonly List<MonitorSample> Saved = new()
+    {
+        new("Dell U2415",     "1920×1200 · 4 games"),
+        new("BenQ XL2411",    "1920×1080 · 2 games"),
+        new("Acer XB271HU",   "2560×1440 · 1 game"),
+    };
+}

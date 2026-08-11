@@ -1,0 +1,22 @@
+@namespace NoBorders.Components.Screens
+@* Stub per Phase 2.6's scope ("stub views for Permissions/About") — the
+   design bundle has no dedicated mockup for this nav item, but the
+   underlying feature is real and already shown in the current WinForms
+   Settings tab (CheckElevation/RestartAsAdmin), so this reuses that exact
+   content restyled with the new tokens rather than a blank placeholder.
+   design-handoff's 1g elevation-dialog icon treatment (amber warning
+   square) is reused here for the same "needs elevation" concept. Static —
+   Restart As Administrator doesn't do anything yet. *@
+
+<div class="nb-permissions-page__title">Permissions</div>
+
+<div class="nb-permissions-page__status">
+    <span class="nb-permissions-page__status-ring"></span>
+    <span>Running as Standard User</span>
+</div>
+
+<button type="button" class="nb-btn nb-btn--outline nb-permissions-page__restart">Restart as Administrator</button>
+
+<div class="nb-permissions-page__hint">
+    Only needed if a tracked game isn't going borderless and you see an elevation warning.
+</div>

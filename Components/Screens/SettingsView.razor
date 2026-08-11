@@ -1,0 +1,33 @@
+@namespace NoBorders.Components.Screens
+@* Settings — composes SettingsShell with whichever section's page is
+   active. "Hotkeys" and "Behaviour" both route to
+   HotkeysBehaviourSettingsPage: the mock only shows one page ("1f") for
+   both, with "Hotkeys" as the active nav item and a Behaviour section
+   further down the same page — no separate mockup exists for a
+   "Behaviour-only" state, so both nav items show this same content. *@
+
+<SettingsShell Section="Section">
+    @switch (Section)
+    {
+        case SettingsShell.SettingsSection.Monitors:
+            <MonitorsSettingsPage />
+            break;
+        case SettingsShell.SettingsSection.Hotkeys:
+        case SettingsShell.SettingsSection.Behaviour:
+            <HotkeysBehaviourSettingsPage />
+            break;
+        case SettingsShell.SettingsSection.Permissions:
+            <PermissionsSettingsPage />
+            break;
+        case SettingsShell.SettingsSection.Diagnostics:
+            <DiagnosticsSettingsPage />
+            break;
+        case SettingsShell.SettingsSection.About:
+            <AboutSettingsPage />
+            break;
+    }
+</SettingsShell>
+
+@code {
+    [Parameter] public SettingsShell.SettingsSection Section { get; set; } = SettingsShell.SettingsSection.Monitors;
+}

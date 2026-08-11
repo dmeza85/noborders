@@ -1,0 +1,55 @@
+.nb-monitor-card {
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-card);
+  padding: 11px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.nb-monitor-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-monitor-card__name {
+  font: 600 12.5px/1 var(--nb-font-ui);
+  color: var(--nb-text-body);
+}
+
+.nb-monitor-card__detail {
+  font-size: 10.5px;
+  color: var(--nb-text-muted);
+  margin-top: 6px;
+}
+
+/* Connected + selected (the current default-editing target) */
+.nb-monitor-card--selected {
+  border: 1.5px solid var(--nb-accent);
+  background: rgba(var(--nb-accent-rgb), .08);
+}
+
+.nb-monitor-card--selected .nb-monitor-card__name {
+  color: var(--nb-text-primary);
+}
+
+.nb-monitor-card--selected .nb-monitor-card__detail {
+  color: var(--nb-text-secondary);
+}
+
+/* Saved but not currently connected */
+.nb-monitor-card--saved {
+  border: 1px dashed var(--nb-border-strong);
+}
+
+.nb-monitor-card--saved .nb-monitor-card__name,
+.nb-monitor-card--saved .nb-monitor-card__detail {
+  color: var(--nb-text-secondary);
+}
+
+.nb-monitor-card__remove {
+  flex: none;
+  color: var(--nb-text-muted);
+  font: 400 11px/1 var(--nb-font-ui);
+  cursor: pointer;
+}

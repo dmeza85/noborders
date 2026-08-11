@@ -1,0 +1,29 @@
+@namespace NoBorders.Components.Screens
+@* Screen 4b — Settings: Diagnostics. The mock frames this as an isolated
+   520px card with its own "SETTINGS · DIAGNOSTICS" title bar, but 1e/1f
+   both show the full shell-with-nav treatment and the README says every
+   Settings view is "reachable from the existing Settings entry point" —
+   so this is just this page's content, hosted in the same SettingsShell
+   as the others (see SettingsView.razor). Static — Open Log/Export Log/
+   the toggle don't do anything yet. *@
+
+<div class="nb-diagnostics-page__log-row">
+    <div class="nb-diagnostics-page__log-info">
+        <div class="nb-diagnostics-page__log-title">Activity log</div>
+        <div class="nb-diagnostics-page__log-sub">Live view of matches, style changes and failures — opens in its own window.</div>
+    </div>
+    <button type="button" class="nb-diagnostics-page__open-log">Open Log</button>
+</div>
+
+<div class="nb-diagnostics-page__toggle-row">
+    <div class="nb-diagnostics-page__toggle-info">
+        <div class="nb-diagnostics-page__toggle-title">Verbose logging</div>
+        <div class="nb-diagnostics-page__toggle-sub">Records every enforcement tick. Larger file.</div>
+    </div>
+    <ToggleSwitch On="false" />
+</div>
+
+<div class="nb-diagnostics-page__footer">
+    <div class="nb-diagnostics-page__footer-text nb-mono">3 errors in the last session</div>
+    <button type="button" class="nb-diagnostics-page__export">Export Log</button>
+</div>

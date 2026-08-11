@@ -1,0 +1,26 @@
+.nb-toggle {
+  width: 42px;
+  height: 24px;
+  border-radius: var(--nb-radius-full);
+  background: var(--nb-border-alt);
+  display: flex;
+  align-items: center;
+  padding: 0 3px;
+  flex: none;
+}
+
+.nb-toggle--on {
+  background: var(--nb-accent);
+  justify-content: flex-end;
+}
+
+.nb-toggle__knob {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--nb-text-muted);
+}
+
+.nb-toggle--on .nb-toggle__knob {
+  background: var(--nb-on-accent-fg);
+}

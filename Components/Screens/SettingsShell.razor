@@ -1,0 +1,59 @@
+@namespace NoBorders.Components.Screens
+@*
+    Shared shell for the Settings views (1e Monitors, 1f Hotkeys &
+    Behaviour, 4b Diagnostics, plus the Permissions/About stubs) — title
+    strip + 180px left nav + content area. Static/hardcoded — Phase 2 is
+    visual parity only, no bindings, nav clicks don't navigate yet.
+
+    Adaptation note (extends MIGRATION_PLAN.md Decision #1): the mock
+    frames every Settings screen as its own 700px OS window with a title
+    bar carrying window-control glyphs (— ▢ ✕). Per Decision #2, Settings
+    is reached by navigating *within* the single BlazorWebView, not by
+    opening a second OS window — so those glyphs are dropped here for the
+    same reason MainShell drops them, and a "← Back" control takes their
+    place (not in the mock, since the mock assumes a closable window; this
+    is the necessary in-app equivalent).
+*@
+
+<div class="nb-settings">
+    <header class="nb-settings__titlebar">
+        <button type="button" class="nb-settings__back">← Back</button>
+        <div class="nb-text-wordmark nb-settings__wordmark">SETTINGS</div>
+    </header>
+
+    <div class="nb-settings__body">
+        <nav class="nb-settings__nav">
+            @foreach (var item in NavItems)
+            {
+                <div class="nb-settings__nav-item @(item == Section ? "nb-settings__nav-item--active" : "")">@SectionLabel(item)</div>
+            }
+        </nav>
+        <div class="nb-settings__content">
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    public enum SettingsSection { Monitors, Hotkeys, Behaviour, Permissions, Diagnostics, About }
+
+    [Parameter] public SettingsSection Section { get; set; } = SettingsSection.Monitors;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private static readonly SettingsSection[] NavItems =
+    {
+        SettingsSection.Monitors, SettingsSection.Hotkeys, SettingsSection.Behaviour,
+        SettingsSection.Permissions, SettingsSection.Diagnostics, SettingsSection.About,
+    };
+
+    private static string SectionLabel(SettingsSection s) => s switch
+    {
+        SettingsSection.Monitors    => "Monitors",
+        SettingsSection.Hotkeys     => "Hotkeys",
+        SettingsSection.Behaviour   => "Behaviour",
+        SettingsSection.Permissions => "Permissions",
+        SettingsSection.Diagnostics => "Diagnostics",
+        SettingsSection.About       => "About",
+        _ => s.ToString(),
+    };
+}

@@ -1,0 +1,14 @@
+.nb-keycap {
+  padding: 7px 11px;
+  border-radius: var(--nb-radius-pill);
+  background: var(--nb-field-alt);
+  border: 1px solid var(--nb-border-strong);
+  font: 600 12px/1 var(--nb-font-mono);
+  color: var(--nb-text-body);
+}
+
+.nb-keycap--active {
+  background: var(--nb-raised);
+  border-color: #33333f;
+  color: var(--nb-text-bright);
+}

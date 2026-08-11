@@ -1,0 +1,91 @@
+.nb-diagnostics-page__log-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid var(--nb-border-alt);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-field);
+}
+
+.nb-diagnostics-page__log-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-diagnostics-page__log-title {
+  font: 600 13.5px/1 var(--nb-font-ui);
+  color: var(--nb-text-primary);
+}
+
+.nb-diagnostics-page__log-sub {
+  font: 400 11.5px/1.4 var(--nb-font-ui);
+  color: var(--nb-text-secondary);
+  margin-top: 5px;
+}
+
+.nb-diagnostics-page__open-log {
+  flex: none;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--nb-radius-input);
+  border: none;
+  background: var(--nb-accent);
+  color: var(--nb-on-accent-fg);
+  font: 600 12px/32px var(--nb-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.nb-diagnostics-page__toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 2px 0;
+}
+
+.nb-diagnostics-page__toggle-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-diagnostics-page__toggle-title {
+  font: 500 13px/1 var(--nb-font-ui);
+  color: var(--nb-text-bright);
+}
+
+.nb-diagnostics-page__toggle-sub {
+  font: 400 11.5px/1.4 var(--nb-font-ui);
+  color: var(--nb-text-secondary);
+  margin-top: 4px;
+}
+
+.nb-diagnostics-page__footer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--nb-border-subtle);
+}
+
+.nb-diagnostics-page__footer-text {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--nb-text-muted);
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-diagnostics-page__export {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--nb-radius-pill);
+  border: 1px solid var(--nb-border-strong);
+  background: transparent;
+  color: var(--nb-text-body);
+  font: 500 11.5px/30px var(--nb-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}

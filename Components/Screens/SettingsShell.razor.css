@@ -1,0 +1,71 @@
+.nb-settings {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 900px; /* narrower floor than MainShell's 1120px — no 290px-fixed preview column requirement dominates here except on Monitors, and that well already centers/shrinks gracefully */
+  background: var(--nb-base);
+}
+
+.nb-settings__titlebar {
+  display: flex;
+  align-items: center;
+  height: var(--nb-titlebar-height);
+  background: var(--nb-chrome);
+  border-bottom: var(--nb-divider-width) solid var(--nb-divider-color);
+  padding: 0 14px;
+  gap: 14px;
+  flex: none;
+}
+
+.nb-settings__back {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--nb-text-secondary);
+  font: 500 12px/1 var(--nb-font-ui);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.nb-settings__wordmark {
+  color: var(--nb-text-bright);
+}
+
+.nb-settings__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.nb-settings__nav {
+  width: 180px;
+  flex: none;
+  background: var(--nb-chrome);
+  border-right: var(--nb-divider-width) solid var(--nb-divider-color);
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.nb-settings__nav-item {
+  padding: 8px 12px;
+  border-radius: var(--nb-radius-pill);
+  color: var(--nb-text-secondary);
+  font: 500 12.5px/1 var(--nb-font-ui);
+  cursor: default;
+}
+
+.nb-settings__nav-item--active {
+  background: rgba(var(--nb-accent-rgb), .14);
+  color: var(--nb-accent-text);
+  font-weight: 600;
+}
+
+.nb-settings__content {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
