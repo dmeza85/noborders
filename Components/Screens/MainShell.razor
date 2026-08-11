@@ -60,7 +60,7 @@
         <div class="nb-text-wordmark nb-shell__wordmark">NOBORDERS</div>
         <div class="nb-text-data nb-shell__version">v2.4</div>
         <div class="nb-shell__spacer"></div>
-        <button type="button" class="nb-shell__settings-btn">
+        <button type="button" class="nb-shell__settings-btn" @onclick="() => OnOpenSettings.InvokeAsync()">
             <span class="nb-shell__settings-ring"></span>Settings
         </button>
     </header>
@@ -118,8 +118,8 @@
 
         <div class="nb-shell__right">
             <div class="nb-shell__tabs">
-                <div class="nb-shell__tab @(ActiveTab == ShellTab.Display ? "nb-shell__tab--active" : "")">Display</div>
-                <div class="nb-shell__tab @(ActiveTab == ShellTab.Matching ? "nb-shell__tab--active" : "")">Matching</div>
+                <div class="nb-shell__tab @(ActiveTab == ShellTab.Display ? "nb-shell__tab--active" : "")" @onclick="() => OnTabChange.InvokeAsync(ShellTab.Display)">Display</div>
+                <div class="nb-shell__tab @(ActiveTab == ShellTab.Matching ? "nb-shell__tab--active" : "")" @onclick="() => OnTabChange.InvokeAsync(ShellTab.Matching)">Matching</div>
             </div>
             @RightPane
         </div>
@@ -143,6 +143,13 @@
 
     [Parameter] public ShellTab ActiveTab { get; set; } = ShellTab.Display;
     [Parameter] public RenderFragment? RightPane { get; set; }
+
+    // Phase 7.0: real navigation — MainWindowDisplayTab/MainWindowMatchingTab
+    // (still used for isolated testing) never needed these, since each is a
+    // fixed single-tab screen; the live app's root composes MainShell itself
+    // and needs to react to clicks instead.
+    [Parameter] public EventCallback OnOpenSettings { get; set; }
+    [Parameter] public EventCallback<ShellTab> OnTabChange { get; set; }
 
     // Phase 4.8: local-only UI state — which native OS dialog the mock's "+"
     // button used to open (BtnAddRunning_Click) is now an in-app modal

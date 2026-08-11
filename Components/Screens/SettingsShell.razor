@@ -17,7 +17,7 @@
 
 <div class="nb-settings">
     <header class="nb-settings__titlebar">
-        <button type="button" class="nb-settings__back">← Back</button>
+        <button type="button" class="nb-settings__back" @onclick="() => OnBack.InvokeAsync()">← Back</button>
         <div class="nb-text-wordmark nb-settings__wordmark">SETTINGS</div>
     </header>
 
@@ -25,7 +25,7 @@
         <nav class="nb-settings__nav">
             @foreach (var item in NavItems)
             {
-                <div class="nb-settings__nav-item @(item == Section ? "nb-settings__nav-item--active" : "")">@SectionLabel(item)</div>
+                <div class="nb-settings__nav-item @(item == Section ? "nb-settings__nav-item--active" : "")" @onclick="() => OnSectionChange.InvokeAsync(item)">@SectionLabel(item)</div>
             }
         </nav>
         <div class="nb-settings__content">
@@ -39,6 +39,11 @@
 
     [Parameter] public SettingsSection Section { get; set; } = SettingsSection.Monitors;
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    // Phase 7.0: real navigation — previously static (SettingsView's own doc
+    // comment: "nav clicks don't navigate yet").
+    [Parameter] public EventCallback OnBack { get; set; }
+    [Parameter] public EventCallback<SettingsSection> OnSectionChange { get; set; }
 
     private static readonly SettingsSection[] NavItems =
     {

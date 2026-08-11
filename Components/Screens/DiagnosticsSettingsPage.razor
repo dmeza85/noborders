@@ -16,7 +16,8 @@
    documents the same gap: real log parsing/tailing is explicitly Phase 6
    scope, not Phase 3's read-only-wiring). So this page stays static/
    hardcoded here rather than wiring some fields and fabricating others —
-   Open Log/Export Log/the toggle don't do anything yet.
+   Export Log/the Verbose logging toggle don't do anything yet. Open Log
+   is real as of Phase 7.0 (navigates to the Activity Log screen).
 
    Phase 8.3: added a real "Game artwork" row — the SteamGridDB API key
    field, bound to AppStateService.ArtworkApiKey/SetArtworkApiKey. This has
@@ -30,9 +31,9 @@
 <div class="nb-diagnostics-page__log-row">
     <div class="nb-diagnostics-page__log-info">
         <div class="nb-diagnostics-page__log-title">Activity log</div>
-        <div class="nb-diagnostics-page__log-sub">Live view of matches, style changes and failures — opens in its own window.</div>
+        <div class="nb-diagnostics-page__log-sub">Live view of matches, style changes and failures.</div>
     </div>
-    <button type="button" class="nb-diagnostics-page__open-log">Open Log</button>
+    <button type="button" class="nb-diagnostics-page__open-log" @onclick="() => OnOpenLog.InvokeAsync()">Open Log</button>
 </div>
 
 <div class="nb-diagnostics-page__toggle-row">
@@ -57,5 +58,8 @@
 </div>
 
 @code {
+    // Phase 7.0: real navigation to the Activity Log screen.
+    [Parameter] public EventCallback OnOpenLog { get; set; }
+
     private void OnApiKeyInput(ChangeEventArgs e) => State.SetArtworkApiKey(e.Value?.ToString() ?? "");
 }

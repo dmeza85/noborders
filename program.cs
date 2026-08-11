@@ -761,6 +761,11 @@ namespace NoBorders
         // "appended after" can't reorder what came before it either.
         private readonly ServiceProvider _blazorServices;
 
+        // Phase 7.0: the permanent Blazor mount — held so it's inspectable/
+        // disposable if ever needed, though nothing currently reaches back
+        // into it (all real interaction goes through AppStateService).
+        private BlazorWebView _blazorWebView = null!;
+
         // Resolved once, right after _blazorServices is built (Phase 4.1) — the
         // same singleton instance any Razor component's @inject resolves, since
         // AppStateService is registered via AddSingleton. Held so the
@@ -863,6 +868,42 @@ namespace NoBorders
             _chkMinToTray.CheckedChanged      += (s, e) => _appState.RaiseChanged();
             _chkStartWindows.CheckedChanged   += (s, e) => _appState.RaiseChanged();
             _chkStartMin.CheckedChanged       += (s, e) => _appState.RaiseChanged();
+
+            // ════════════════════════════════════════════════════════════════
+            // PHASE 7.0 CUTOVER (MIGRATION_PLAN.md) — permanent Blazor mount.
+            // ════════════════════════════════════════════════════════════════
+            // _pnlNav (the real "Games/Settings" pill bar, Dock=Top, 42px) and
+            // _lblStatus (the real native status label, Dock=Bottom, 24px) —
+            // because Dock=Fill always yields to sibling Top/Bottom/Left/Right
+            // docks in the same container regardless of add order — have been
+            // visible around every Blazor screen tested this entire migration
+            // (every temp-mount recipe run added its BlazorWebView the same
+            // way this one does; _lblStatus specifically was caught live
+            // during this item's own testing — ToggleGameActive's real
+            // ShowStatus call left "ZZZ Notepad Game — borderless disabled."
+            // showing through beneath Blazor's own status bar). Hiding both
+            // reclaims their space; neither has other dependents (_pnlNav only
+            // forwards clicks to _tabs.SelectedIndex; _lblStatus.Text is a
+            // pure write target for ShowStatus) — nothing reads either's
+            // Visible property.
+            _pnlNav.Visible = false;
+            _lblStatus.Visible = false;
+
+            // _tabs (and everything inside it — every Games/Settings control
+            // Phase 4's "trigger the real control" pattern depends on) is
+            // deliberately left fully alive, Visible=true throughout its own
+            // tree — only fully covered, never hidden or torn down. That's
+            // load-bearing, not incidental: PerformClick()/SelectedIndex
+            // assignment/etc. all still run through these real controls.
+            _blazorWebView = new BlazorWebView
+            {
+                HostPage = "wwwroot\\index.html",
+                Dock     = DockStyle.Fill,
+                Services = _blazorServices
+            };
+            _blazorWebView.RootComponents.Add<Components.Screens.AppShell>("#app");
+            this.Controls.Add(_blazorWebView);
+            _blazorWebView.BringToFront();
         }
 
         /// <summary>

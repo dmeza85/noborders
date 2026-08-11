@@ -6,7 +6,7 @@
    further down the same page — no separate mockup exists for a
    "Behaviour-only" state, so both nav items show this same content. *@
 
-<SettingsShell Section="Section">
+<SettingsShell Section="Section" OnBack="OnBack" OnSectionChange="OnSectionChange">
     @switch (Section)
     {
         case SettingsShell.SettingsSection.Monitors:
@@ -20,7 +20,7 @@
             <PermissionsSettingsPage />
             break;
         case SettingsShell.SettingsSection.Diagnostics:
-            <DiagnosticsSettingsPage />
+            <DiagnosticsSettingsPage OnOpenLog="OnOpenLog" />
             break;
         case SettingsShell.SettingsSection.About:
             <AboutSettingsPage />
@@ -30,4 +30,11 @@
 
 @code {
     [Parameter] public SettingsShell.SettingsSection Section { get; set; } = SettingsShell.SettingsSection.Monitors;
+
+    // Phase 7.0: real navigation — plain pass-through to SettingsShell/
+    // DiagnosticsSettingsPage; this component owns no navigation state
+    // itself, same as before (Section is still driven from outside).
+    [Parameter] public EventCallback OnBack { get; set; }
+    [Parameter] public EventCallback<SettingsShell.SettingsSection> OnSectionChange { get; set; }
+    [Parameter] public EventCallback OnOpenLog { get; set; }
 }

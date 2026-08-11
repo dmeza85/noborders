@@ -39,7 +39,7 @@
 
 <div class="nb-log-window">
     <header class="nb-log-window__titlebar">
-        <button type="button" class="nb-log-window__back">← Back</button>
+        <button type="button" class="nb-log-window__back" @onclick="() => OnBack.InvokeAsync()">← Back</button>
         <div class="nb-log-window__mark"></div>
         <div class="nb-text-wordmark nb-log-window__wordmark">ACTIVITY LOG</div>
         <div class="nb-log-window__filename nb-mono">noborders.log</div>
@@ -119,6 +119,10 @@
 </div>
 
 @code {
+    // Phase 7.0: real navigation back to Settings > Diagnostics, where this
+    // screen is opened from (Adaptation Decision #2).
+    [Parameter] public EventCallback OnBack { get; set; }
+
     private LogLevelChip.ChipLevel _filterLevel = LogLevelChip.ChipLevel.All;
     private string _filterText = "";
     private bool _autoScroll = true;

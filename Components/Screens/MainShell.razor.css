@@ -332,7 +332,7 @@
   padding-bottom: 10px;
   font: 500 13px/1 var(--nb-font-ui);
   color: #7a7a8a; /* one-off — doesn't match any named text token */
-  cursor: default;
+  cursor: pointer;
 }
 
 .nb-shell__tab--active {

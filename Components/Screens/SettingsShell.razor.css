@@ -54,7 +54,11 @@
   border-radius: var(--nb-radius-pill);
   color: var(--nb-text-secondary);
   font: 500 12.5px/1 var(--nb-font-ui);
-  cursor: default;
+  cursor: pointer;
+}
+
+.nb-settings__nav-item:hover:not(.nb-settings__nav-item--active) {
+  background: var(--nb-raised);
 }
 
 .nb-settings__nav-item--active {
