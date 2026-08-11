@@ -132,6 +132,16 @@
   color: var(--nb-accent-text);
 }
 
+/* Phase 4.9 — not in the mock (no dedicated "browse" affordance exists
+   there), a secondary link placed under the tip text rather than inventing
+   new rail iconography the design bundle doesn't specify. */
+.nb-add-app__browse {
+  margin-top: 4px;
+  color: var(--nb-accent-text);
+  cursor: pointer;
+  width: fit-content;
+}
+
 .nb-add-app__cancel {
   height: var(--nb-control-height-compact-btn);
   padding: 0 14px;

@@ -743,7 +743,7 @@ namespace NoBorders
                 () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
                 ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
                 () => _txtGameName.Text, FetchNameForSelectedGame,
-                SaveGameChanges, RemoveSelectedGame, AddGameFromRunningWindow,
+                SaveGameChanges, RemoveSelectedGame, AddGameFromRunningWindow, BrowseForExe,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -782,7 +782,7 @@ namespace NoBorders
             // subscriptions above — those handlers are completely untouched;
             // these just also notify Blazor once each has finished, regardless
             // of whether the change originated from the WinForms control or
-            // from the corresponding AppStateService method (Phase 4.1-4.7).
+            // from the corresponding AppStateService method (Phase 4.1-4.9).
             _lstGames.SelectedIndexChanged   += (s, e) => _appState.RaiseChanged();
             _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
             _chkActive.CheckedChanged        += (s, e) => _appState.RaiseChanged();
@@ -790,6 +790,7 @@ namespace NoBorders
             _btnFetchName.Click              += (s, e) => _appState.RaiseChanged();
             _btnSaveGame.Click               += (s, e) => _appState.RaiseChanged();
             _btnDeleteGame.Click             += (s, e) => _appState.RaiseChanged();
+            _btnAddBrowse.Click              += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2789,6 +2790,20 @@ namespace NoBorders
             if (ofd.ShowDialog(this) == DialogResult.OK)
                 AddGame(ofd.FileName, true);
         }
+
+        /// <summary>
+        /// Blazor "Browse for EXE…" affordance's entry point (MIGRATION_PLAN.md
+        /// Phase 4.9) — calls `PerformClick()`, so the real, unchanged
+        /// `BtnAddBrowse_Click` runs, including its native `OpenFileDialog`
+        /// (a real OS common dialog, not something the design mock replaces —
+        /// unlike 4.8's running-app picker, there's no in-app Blazor equivalent
+        /// to build here). Placement note: the mock has no dedicated "+" for
+        /// this at all (design-handoff/README.md never mentions "browse"), so
+        /// it's surfaced as a secondary link inside AddRunningAppModal (screen
+        /// 1d) rather than inventing new rail iconography the mock doesn't
+        /// specify — see that component's doc comment.
+        /// </summary>
+        private void BrowseForExe() => _btnAddBrowse.PerformClick();
 
         /// <param name="displayName">
         /// Optional human-readable name shown in the list. When null the sanitized

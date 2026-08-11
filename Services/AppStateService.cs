@@ -56,6 +56,7 @@ namespace NoBorders.Services
         private readonly Action _saveGameChanges;
         private readonly Action _removeSelectedGame;
         private readonly Action<OpenWindowEntry> _addGameFromRunningWindow;
+        private readonly Action _browseForExe;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -77,6 +78,7 @@ namespace NoBorders.Services
             Action saveGameChanges,
             Action removeSelectedGame,
             Action<OpenWindowEntry> addGameFromRunningWindow,
+            Action browseForExe,
             Action queueSave,
             Action saveNow)
         {
@@ -95,6 +97,7 @@ namespace NoBorders.Services
             _saveGameChanges          = saveGameChanges;
             _removeSelectedGame       = removeSelectedGame;
             _addGameFromRunningWindow = addGameFromRunningWindow;
+            _browseForExe             = browseForExe;
             _selectMonitorScope       = selectMonitorScope;
             _toggleGameActive         = toggleGameActive;
             _queueSave                = queueSave;
@@ -247,6 +250,15 @@ namespace NoBorders.Services
         /// the Browse-for-EXE path) both already call.
         /// </summary>
         public void AddGameFromRunningWindow(OpenWindowEntry entry) => _addGameFromRunningWindow(entry);
+
+        /// <summary>
+        /// Opens the native "Select Game Executable" file picker exactly as
+        /// clicking "＋ Browse for EXE…" would (Phase 4.9) — forwards to
+        /// MainForm's `PerformClick()` on `_btnAddBrowse`, so the real,
+        /// unchanged `BtnAddBrowse_Click` runs (a genuine OS common dialog,
+        /// blocking until dismissed — not something the design mock replaces).
+        /// </summary>
+        public void BrowseForExe() => _browseForExe();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

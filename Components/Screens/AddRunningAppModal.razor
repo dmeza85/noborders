@@ -18,7 +18,15 @@
    one Phase 4 sub-item that doesn't trigger a native WinForms control:
    Phase 1/2 already replaced BtnAddRunning_Click's native dialog with this
    in-app modal. Search stays static (real window count only) — filtering
-   isn't part of this sub-item's scope. *@
+   isn't part of this sub-item's scope.
+
+   Phase 4.9: "Browse for EXE…" calls AppStateService.BrowseForExe, which
+   forwards to MainForm's real BtnAddBrowse_Click via PerformClick() — a
+   genuine native OS file picker, not a Blazor view (there's nothing to
+   replace here the way 4.8 replaced the running-app dialog). The mock has
+   no dedicated affordance for this at all (design-handoff/README.md never
+   mentions "browse"), so it's placed as a secondary link next to the tip
+   text rather than inventing rail iconography the mock doesn't specify. *@
 
 <ModalOverlay Width="560">
     <div class="nb-add-app__header">
@@ -56,6 +64,7 @@
     <div class="nb-add-app__footer">
         <div class="nb-add-app__tip">
             Tip: press <span class="nb-mono nb-add-app__tip-key">Ctrl+Shift+A</span> in-game to add the focused window.
+            <div class="nb-add-app__browse" @onclick="Browse">Not running? Browse for EXE…</div>
         </div>
         <button type="button" class="nb-btn nb-btn--outline nb-add-app__cancel" @onclick="Cancel">Cancel</button>
         <button type="button" class="nb-btn nb-btn--primary nb-add-app__add" disabled="@(_selected == null)" @onclick="AddSelected">Add Game</button>
@@ -72,6 +81,12 @@
     private bool IsTracked(OpenWindowEntry row) => State.Games.Any(g => g.CompiledPattern.IsMatch(row.Exe));
 
     private async Task Cancel() => await OnClose.InvokeAsync();
+
+    private async Task Browse()
+    {
+        State.BrowseForExe();
+        await OnClose.InvokeAsync();
+    }
 
     private async Task AddSelected()
     {
