@@ -1,0 +1,74 @@
+@namespace NoBorders.Components.Screens
+@* Reusable "Result Preview" block — design-handoff/README.md screen 3a
+   ("Result preview states") documents the two states rendered here; both
+   screen 2a and screen 1e embed this exact block (1e: "same component as
+   2a"). The geometry math (scale to the 290×132 well, band/label
+   positions) is genuinely computed from the parameters, not hardcoded
+   sample values, since this is meant to be reused once real data is wired
+   up in a later phase — only the *values passed in* are hardcoded per
+   Phase 2's "static shell" scope. *@
+
+<div class="nb-preview">
+    <div class="nb-text-label nb-preview__label">RESULT PREVIEW</div>
+    <div class="nb-preview__well">
+        <div class="nb-preview__monitor @(IsFullCoverage ? "" : "nb-preview__monitor--windowed")">
+            @if (!IsFullCoverage)
+            {
+                @if (OffsetX > 0)
+                {
+                    <div class="nb-preview__band-x" style="@BandXStyle"></div>
+                }
+                @if (OffsetY > 0)
+                {
+                    <div class="nb-preview__band-y" style="@BandYStyle"></div>
+                }
+                <div class="nb-preview__label-x nb-mono" style="@LabelXStyle">X @OffsetX</div>
+                <div class="nb-preview__label-y nb-mono" style="@LabelYStyle">Y @OffsetY</div>
+                <div class="nb-preview__label-monitor nb-mono">@MonitorWidth×@MonitorHeight monitor</div>
+            }
+            <div class="nb-preview__window @(IsFullCoverage ? "nb-preview__window--full" : "")" style="@WindowStyle">
+                <span class="nb-mono">@Caption</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int MonitorWidth { get; set; }
+    [Parameter] public int MonitorHeight { get; set; }
+    [Parameter] public int WindowWidth { get; set; }
+    [Parameter] public int WindowHeight { get; set; }
+    [Parameter] public int OffsetX { get; set; }
+    [Parameter] public int OffsetY { get; set; }
+    [Parameter] public string Caption { get; set; } = "";
+
+    private const double WellWidth = 290;
+    private const double WellHeight = 132;
+
+    private double ScaleX => MonitorWidth > 0 ? WellWidth / MonitorWidth : 0;
+    private double ScaleY => MonitorHeight > 0 ? WellHeight / MonitorHeight : 0;
+
+    private bool IsFullCoverage =>
+        OffsetX == 0 && OffsetY == 0 &&
+        WindowWidth == MonitorWidth && WindowHeight == MonitorHeight;
+
+    private string WindowStyle => IsFullCoverage
+        ? string.Empty
+        : $"left:{Px(OffsetX * ScaleX)};top:{Px(OffsetY * ScaleY)};width:{Px(WindowWidth * ScaleX)};height:{Px(WindowHeight * ScaleY)}";
+
+    private string BandXStyle => $"width:{Px(OffsetX * ScaleX)}";
+
+    private string BandYStyle =>
+        $"left:{Px(OffsetX * ScaleX)};width:{Px(WindowWidth * ScaleX)};height:{Px(OffsetY * ScaleY)}";
+
+    // Vertically centered against the window's own height, horizontally
+    // pinned near the well edge — matches the mock's "X 440" placement.
+    private string LabelXStyle => $"top:{Px(OffsetY * ScaleY + (WindowHeight * ScaleY / 2) - 4.5)}";
+
+    // Pinned just right of the window's left edge, near the well top —
+    // matches the mock's "Y 180" placement.
+    private string LabelYStyle => $"left:{Px(OffsetX * ScaleX + 7)}";
+
+    private static string Px(double value) =>
+        value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "px";
+}

@@ -42,13 +42,10 @@
     </div>
 
     <div class="nb-display-pane__right">
-        <div class="nb-text-label nb-display-pane__label">RESULT PREVIEW</div>
-        <div class="nb-display-pane__preview-well">
-            <div class="nb-display-pane__preview-monitor">
-                <div class="nb-display-pane__preview-window"></div>
-                <div class="nb-display-pane__preview-caption nb-mono">@PreviewCaption</div>
-            </div>
-        </div>
+        <ResultPreview MonitorWidth="Width" MonitorHeight="Height"
+                       WindowWidth="Width" WindowHeight="Height"
+                       OffsetX="OffsetX" OffsetY="OffsetY"
+                       Caption="@PreviewCaption" />
         <div class="nb-display-pane__actions">
             <button type="button" class="nb-btn nb-btn--primary">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>

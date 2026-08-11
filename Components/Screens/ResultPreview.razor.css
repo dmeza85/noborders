@@ -1,0 +1,92 @@
+.nb-preview__label {
+  margin-bottom: 10px;
+}
+
+.nb-preview__well {
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-chrome);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 168px;
+}
+
+.nb-preview__monitor {
+  width: 290px;
+  height: 132px;
+  border: 1px dashed #33333f;
+  border-radius: 4px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Only the uncovered portion of the monitor needs a texture — when the
+   window fills it entirely there's nothing left to show. */
+.nb-preview__monitor--windowed {
+  background: repeating-linear-gradient(135deg, #111116 0 6px, #0d0d11 6px 12px);
+}
+
+.nb-preview__band-x {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: rgba(var(--nb-accent-rgb), .06);
+  border-right: 1px dashed #3a3a4a;
+}
+
+.nb-preview__band-y {
+  position: absolute;
+  top: 0;
+  background: rgba(var(--nb-accent-rgb), .06);
+  border-bottom: 1px dashed #3a3a4a;
+}
+
+.nb-preview__label-x,
+.nb-preview__label-y {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 500;
+  color: #7a7a8a; /* one-off — doesn't match any named text token */
+}
+
+.nb-preview__label-x {
+  left: 2px;
+}
+
+.nb-preview__label-y {
+  top: 4px;
+}
+
+.nb-preview__label-monitor {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  font-size: 9px;
+  color: var(--nb-text-faint);
+}
+
+.nb-preview__window {
+  position: absolute;
+  background: rgba(var(--nb-accent-rgb), .16);
+  border: 1.5px solid var(--nb-accent);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--nb-accent-text);
+  white-space: nowrap;
+}
+
+/* Full coverage uses a slightly lower fill alpha than the windowed
+   state per the literal mock (.14 vs .16) — not unified, kept faithful. */
+.nb-preview__window--full {
+  inset: 0;
+  background: rgba(var(--nb-accent-rgb), .14);
+}

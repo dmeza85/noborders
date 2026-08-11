@@ -83,44 +83,6 @@
   min-width: 0;
 }
 
-.nb-display-pane__preview-well {
-  border: 1px solid var(--nb-border);
-  border-radius: var(--nb-radius-card);
-  background: var(--nb-chrome);
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 168px;
-}
-
-.nb-display-pane__preview-monitor {
-  width: 290px;
-  height: 132px;
-  border: 1px dashed #33333f;
-  border-radius: 4px;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.nb-display-pane__preview-window {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--nb-accent-rgb), .14);
-  border: 1.5px solid var(--nb-accent);
-  border-radius: 3px;
-}
-
-.nb-display-pane__preview-caption {
-  position: relative;
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--nb-accent-text);
-  white-space: nowrap;
-}
-
 .nb-display-pane__actions {
   display: flex;
   gap: 8px;
