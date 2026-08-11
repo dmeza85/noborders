@@ -49,6 +49,7 @@ namespace NoBorders.Services
         private readonly Func<List<string>> _getMonitorOptions;
         private readonly Func<string> _getActiveScope;
         private readonly Action<string> _selectMonitorScope;
+        private readonly Action _toggleGameActive;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -63,6 +64,7 @@ namespace NoBorders.Services
             Func<List<string>> getMonitorOptions,
             Func<string> getActiveScope,
             Action<string> selectMonitorScope,
+            Action toggleGameActive,
             Action queueSave,
             Action saveNow)
         {
@@ -76,6 +78,7 @@ namespace NoBorders.Services
             _getMonitorOptions      = getMonitorOptions;
             _getActiveScope         = getActiveScope;
             _selectMonitorScope     = selectMonitorScope;
+            _toggleGameActive       = toggleGameActive;
             _queueSave              = queueSave;
             _saveNow                = saveNow;
         }
@@ -150,6 +153,15 @@ namespace NoBorders.Services
         /// `SaveUIToProfile` before switching).
         /// </summary>
         public void SelectMonitorScope(string scope) => _selectMonitorScope(scope);
+
+        /// <summary>
+        /// Flips the selected game's `IsActive` exactly as clicking the WinForms
+        /// borderless toggle would (Phase 4.3) — forwards to MainForm's
+        /// `ToggleGameActive`, so the real, unchanged `ChkActive_CheckedChanged`
+        /// handler runs (which also saves the config and immediately
+        /// enforces/un-enforces the window). No-op if no game is selected.
+        /// </summary>
+        public void ToggleActive() => _toggleGameActive();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

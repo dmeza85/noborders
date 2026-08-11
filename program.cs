@@ -741,6 +741,7 @@ namespace NoBorders
                 () => _monitors, () => _lblHotkeyAddStatus.Text, () => _lblHotkeyRefreshStatus.Text,
                 SelectGame,
                 () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
+                ToggleGameActive,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -779,9 +780,10 @@ namespace NoBorders
             // subscriptions above — those handlers are completely untouched;
             // these just also notify Blazor once each has finished, regardless
             // of whether the change originated from the WinForms control or
-            // from the corresponding AppStateService method (Phase 4.1, 4.2).
-            _lstGames.SelectedIndexChanged  += (s, e) => _appState.RaiseChanged();
+            // from the corresponding AppStateService method (Phase 4.1-4.3).
+            _lstGames.SelectedIndexChanged   += (s, e) => _appState.RaiseChanged();
             _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
+            _chkActive.CheckedChanged        += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2510,6 +2512,18 @@ namespace NoBorders
             ShowStatus(_chkActive.Checked
                 ? $"{_selectedGame.GameName} — borderless enabled."
                 : $"{_selectedGame.GameName} — borderless disabled.");
+        }
+
+        /// <summary>
+        /// Blazor hero primary button's entry point (MIGRATION_PLAN.md Phase 4.3)
+        /// — flips `_chkActive.Checked`, which fires the real, unchanged
+        /// `ChkActive_CheckedChanged` above. No-ops with no selected game, same
+        /// as the WinForms button being unreachable in that state.
+        /// </summary>
+        private void ToggleGameActive()
+        {
+            if (_selectedGame == null) return;
+            _chkActive.Checked = !_chkActive.Checked;
         }
 
         private void BtnLoadDefaults_Click(object? sender, EventArgs e)

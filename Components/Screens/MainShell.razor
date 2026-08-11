@@ -55,7 +55,7 @@
                 <div class="nb-shell__hero-meta nb-mono">@HeroMetaLine(DisplayedGame)</div>
             </div>
             <div class="nb-shell__hero-actions">
-                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--primary" disabled="@(DisplayedGame == null)">
+                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--primary" disabled="@(DisplayedGame == null)" @onclick="OnTogglePrimary">
                     @(IsDisplayedActive ? "Disable Borderless" : "Enable Borderless")
                 </button>
                 <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--secondary" disabled="@(DisplayedGame == null)">Re-Apply</button>
@@ -120,6 +120,20 @@
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
     private bool IsDisplayedActive => DisplayedGame?.IsActive == true;
+
+    // Phase 4.3: ChkActive_CheckedChanged (via State.ToggleActive) only acts
+    // on MainForm's real _selectedGame, which is still null before the first
+    // click from either UI even though DisplayedGame is already showing
+    // something (the Phase 3.3 display-only fallback). Rather than leaving
+    // the button silently do nothing in that window, establish the real
+    // selection first — exactly what a user clicking the visibly-shown
+    // game's button would expect — then toggle.
+    private void OnTogglePrimary()
+    {
+        if (State.SelectedGame == null && DisplayedGame != null)
+            State.SelectGame(DisplayedGame);
+        State.ToggleActive();
+    }
 
     // A GameConfig's Profiles dictionary is keyed by monitor friendly-name, so
     // "the" resolution/offset/monitor isn't well-defined without a selected
