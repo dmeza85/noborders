@@ -31,6 +31,27 @@
     glyphs (— ▢ ✕) and the divider that separated them from the Settings
     button are intentionally dropped here — only the wordmark/version
     chip/Settings button remain as a thin in-content header row.
+
+    Phase 6.1: the rail rows below were already pure Razor/CSS as of Phase
+    3.3/4.1 (real State.Games, selected/active tiers, ON pill) — nothing
+    here still depends on MainForm's LstGames_DrawItem owner-draw painting;
+    that method keeps running only because it still paints the live
+    WinForms ListBox per Phase 5.3's finding, not because Blazor needs it.
+    Added this phase: a hover state (MainShell.razor.css), since the mock
+    has no explicit hover treatment to copy but every other clickable
+    surface in the app has one. Deliberately NOT added: a "running-now"
+    badge/grouping, even though this plan item's own title lists it as one
+    of the three states to build — design-handoff/README.md's 2a section
+    is explicit ("No multi-app 'running now' grouping — explicitly
+    removed. The UI shows one selected game's state; do not reintroduce
+    active counts"), which overrides this checklist item's wording per the
+    same "design bundle wins on drift" rule Phase 5.2 established. The ON
+    pill already present (g.IsActive, i.e. borderless-enabled) is a
+    different concept from "process currently running" and stays as-is;
+    Phase 4.14's RefreshGamesListOrder-driven running-first *sort order* is
+    unrelated to this — it's the frozen WinForms list-ordering behavior
+    reflected for free through State.Games, not a new visual indicator, so
+    it isn't the "grouping" the README is telling us not to build.
 *@
 
 <div class="nb-shell">

@@ -242,6 +242,11 @@
   gap: 11px;
   padding: 9px 16px;
   border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.nb-shell__rail-row:hover:not(.nb-shell__rail-row--selected) {
+  background: var(--nb-raised);
 }
 
 .nb-shell__rail-row--selected {
