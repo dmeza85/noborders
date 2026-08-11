@@ -34,3 +34,11 @@
 .nb-btn--compact {
   padding: 0 13px;
 }
+
+/* Destructive action, e.g. "Remove Game" on screen 5a. */
+.nb-btn--danger-outline {
+  background: transparent;
+  border: 1px solid var(--nb-danger-border);
+  color: var(--nb-danger);
+  font-weight: 500;
+}

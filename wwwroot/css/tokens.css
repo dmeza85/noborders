@@ -55,6 +55,7 @@
   --nb-warning-text-message: #e8d3a4; /* WARN row message */
   --nb-danger:              #ff6b74; /* close button, ERROR level, destructive text */
   --nb-danger-text:         #ffb9bd; /* ERROR row metadata / message */
+  --nb-danger-border:       #3a2028; /* dark red-tinted border for danger-outline buttons/chips, e.g. "Remove Game" on screen 5a */
   --nb-on-accent-fg:        #0a0a0c; /* text on violet or green fills */
   --nb-on-accent-fg-amber:  #180f02; /* text on amber (warning) fills */
 

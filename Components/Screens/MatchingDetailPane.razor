@@ -1,0 +1,89 @@
+@namespace NoBorders.Components.Screens
+@* Screen 5a's right-pane content (Matching tab), design-handoff/README.md
+   §"5a — Main window, Matching tab". Static/hardcoded sample data — Phase 2
+   is visual parity only, no bindings, nothing here is interactive yet
+   (regex validation, live rescan, mode-chip switching all come later). *@
+
+<div class="nb-matching-pane">
+    <div class="nb-matching-pane__left">
+        <div class="nb-text-label nb-matching-pane__label">DISPLAY NAME</div>
+        <div class="nb-matching-pane__name-row">
+            <div class="nb-matching-pane__name-field">@DisplayName</div>
+            <button type="button" class="nb-matching-pane__fetch-btn" title="Fetch name from the running window">↺</button>
+        </div>
+
+        <div class="nb-text-label nb-matching-pane__label">MATCH PATTERN</div>
+        <div class="nb-matching-pane__pattern-field nb-mono">@MatchPattern</div>
+        <div class="nb-matching-pane__validity">
+            <span class="nb-matching-pane__validity-dot"></span>
+            <span>@ValidityText</span>
+        </div>
+
+        <div class="nb-matching-pane__chips">
+            <div class="nb-matching-pane__chip nb-matching-pane__chip--active">Window Title</div>
+            <div class="nb-matching-pane__chip">Process Name</div>
+        </div>
+
+        <div class="nb-text-label nb-matching-pane__label">EXECUTABLE</div>
+        <div class="nb-matching-pane__exe nb-mono">@ExecutablePath</div>
+        <div class="nb-matching-pane__exe-caption">Used for the icon and to re-find the game after a restart.</div>
+    </div>
+
+    <div class="nb-matching-pane__right">
+        <div class="nb-matching-pane__test-header">
+            <div class="nb-text-label">LIVE TEST · OPEN WINDOWS</div>
+            <div class="nb-matching-pane__test-hairline"></div>
+            <div class="nb-matching-pane__rescan">Rescan</div>
+        </div>
+
+        <div class="nb-matching-pane__test-list">
+            @foreach (var w in OpenWindows)
+            {
+                <div class="nb-match-row @(w.IsMatch ? "nb-match-row--match" : "")">
+                    <div class="nb-match-row__thumb"></div>
+                    <div class="nb-match-row__info">
+                        <div class="nb-match-row__title">@w.Title</div>
+                        <div class="nb-match-row__meta nb-mono">@w.Exe · PID @w.Pid</div>
+                    </div>
+                    @if (w.IsMatch)
+                    {
+                        <div class="nb-match-row__verdict nb-match-row__verdict--match nb-mono">MATCH</div>
+                    }
+                    else
+                    {
+                        <div class="nb-match-row__verdict nb-match-row__verdict--no nb-mono">NO</div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="nb-matching-pane__summary">
+            <div class="nb-matching-pane__summary-text nb-mono">@SummaryText</div>
+            <div class="nb-matching-pane__summary-link nb-mono">Use Title Of Selected</div>
+        </div>
+
+        <div class="nb-matching-pane__actions">
+            <button type="button" class="nb-btn nb-btn--primary">Save Changes</button>
+            <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
+            <button type="button" class="nb-btn nb-btn--danger-outline">Remove Game</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed record OpenWindow(string Title, string Exe, int Pid, bool IsMatch);
+
+    private readonly string DisplayName = "Helldivers 2";
+    private readonly string MatchPattern = "^HELLDIVERS.?2";
+    private readonly string ValidityText = "Valid regex · case-insensitive · 1 window matched";
+    private readonly string ExecutablePath = @"D:\Steam\steamapps\common\Helldivers 2\bin\helldivers2.exe";
+    private readonly string SummaryText = "matches exactly 1 of 14 open windows";
+
+    private static readonly List<OpenWindow> OpenWindows = new()
+    {
+        new("HELLDIVERS™ 2",          "helldivers2.exe",  8842,  IsMatch: true),
+        new("Helldivers 2 Launcher",  "hd2_launcher.exe", 8790,  IsMatch: false),
+        new("ELDEN RING™",            "eldenring.exe",    14822, IsMatch: false),
+        new("Discord",                "Discord.exe",      5210,  IsMatch: false),
+    };
+}
