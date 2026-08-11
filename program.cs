@@ -808,7 +808,8 @@ namespace NoBorders
                 () => _undoTarget != null && _undoTarget == _selectedGame, UndoLastSave,
                 g => _runningGames.Contains(g),
                 QueueSave, SaveConfig,
-                RestartAsAdmin));
+                RestartAsAdmin,
+                () => _settings.SteamGridDbApiKey, SetSteamGridDbApiKey));
             return services.BuildServiceProvider();
         }
 
@@ -2906,6 +2907,21 @@ namespace NoBorders
         private void AddGameFromRunningWindow(OpenWindowEntry entry)
         {
             AddGame(entry.Exe, false, entry.WindowTitle);
+            _appState.RaiseChanged();
+        }
+
+        /// <summary>
+        /// Phase 8.3: Settings > Diagnostics' SteamGridDB API key field —
+        /// direct mutation + persist, same shape as AddGameFromRunningWindow
+        /// above (no pre-existing WinForms control to reuse, since this
+        /// setting is entirely net-new). Debounced via QueueSave rather than
+        /// SaveConfig so typing into the field doesn't hit disk on every
+        /// keystroke.
+        /// </summary>
+        private void SetSteamGridDbApiKey(string key)
+        {
+            _settings.SteamGridDbApiKey = key;
+            QueueSave();
             _appState.RaiseChanged();
         }
 

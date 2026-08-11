@@ -60,6 +60,27 @@
   margin-top: 4px;
 }
 
+.nb-diagnostics-page__artwork-input {
+  flex: none;
+  width: 180px;
+  height: var(--nb-control-height-compact);
+  padding: 0 11px;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-input);
+  background: var(--nb-field);
+  color: var(--nb-text-body);
+  font-size: 12px;
+}
+
+.nb-diagnostics-page__artwork-input::placeholder {
+  color: var(--nb-text-muted);
+}
+
+.nb-diagnostics-page__artwork-input:focus {
+  outline: none;
+  border-color: var(--nb-border-strong);
+}
+
 .nb-diagnostics-page__footer {
   display: flex;
   align-items: center;

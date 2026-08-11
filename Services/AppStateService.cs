@@ -74,6 +74,8 @@ namespace NoBorders.Services
         private readonly Action _queueSave;
         private readonly Action _saveNow;
         private readonly Action _restartAsAdmin;
+        private readonly Func<string> _getArtworkApiKey;
+        private readonly Action<string> _setArtworkApiKey;
 
         public AppStateService(
             Func<AppSettings> getSettings,
@@ -110,7 +112,9 @@ namespace NoBorders.Services
             Func<GameConfig, bool> isGameRunning,
             Action queueSave,
             Action saveNow,
-            Action restartAsAdmin)
+            Action restartAsAdmin,
+            Func<string> getArtworkApiKey,
+            Action<string> setArtworkApiKey)
         {
             _getSettings              = getSettings;
             _getSelectedGame          = getSelectedGame;
@@ -147,6 +151,8 @@ namespace NoBorders.Services
             _queueSave                = queueSave;
             _saveNow                  = saveNow;
             _restartAsAdmin           = restartAsAdmin;
+            _getArtworkApiKey         = getArtworkApiKey;
+            _setArtworkApiKey         = setArtworkApiKey;
         }
 
         /// <summary>
@@ -473,5 +479,17 @@ namespace NoBorders.Services
         /// only ever invoked on an explicit user click, never automatically.
         /// </summary>
         public void RestartAsAdmin() => _restartAsAdmin();
+
+        /// <summary>
+        /// Phase 8.3: SteamGridDB personal API key, pasted in Settings >
+        /// Diagnostics. Unlike most of this service's write methods, there's no
+        /// pre-existing WinForms control to trigger — this setting never existed
+        /// before this migration — so <see cref="SetArtworkApiKey"/> forwards to
+        /// a MainForm method that mutates `_settings.SteamGridDbApiKey` and
+        /// persists directly (same shape as `AddGameFromRunningWindow`, Phase
+        /// 4.8, the other case with no real control to reuse).
+        /// </summary>
+        public string ArtworkApiKey => _getArtworkApiKey();
+        public void SetArtworkApiKey(string key) => _setArtworkApiKey(key);
     }
 }
