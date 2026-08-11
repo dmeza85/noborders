@@ -65,6 +65,24 @@
   display: block;
 }
 
+/* Not in the mock (its one resting sample was always "registered") — real
+   registration status has three real outcomes (Phase 3.5): a hotkey can
+   fail to register (most commonly another app already owns that
+   combination) or be intentionally unbound, not just succeed. */
+.nb-hotkeys-page__status--muted {
+  color: var(--nb-text-muted);
+}
+.nb-hotkeys-page__status--muted .nb-hotkeys-page__status-dot {
+  background: var(--nb-text-muted);
+}
+
+.nb-hotkeys-page__status--danger {
+  color: #ff6b74;
+}
+.nb-hotkeys-page__status--danger .nb-hotkeys-page__status-dot {
+  background: #ff6b74;
+}
+
 .nb-hotkeys-page__combo {
   display: flex;
   align-items: center;

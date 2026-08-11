@@ -1,33 +1,51 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
 @* Screen 1e — Settings: Monitors & defaults. design-handoff/README.md
    explicitly notes the RESULT PREVIEW block here is "the same component
    as 2a", so this reuses ResultPreview.razor rather than re-implementing
-   it. Static/hardcoded sample data — Phase 2 is visual parity only. *@
+   it.
+
+   Phase 3.5: wired to real data. "Connected" is MainForm._monitors
+   (Screen.AllScreens, refreshed by RefreshMonitors); "Saved · not
+   connected" is AppSettings.KnownMonitors minus whatever's currently
+   connected. Real monitors don't carry a persisted resolution once
+   unplugged (Screen.AllScreens only reports connected displays), so a
+   saved-disconnected card's subline shows its saved default profile size
+   (MonitorDefaults[name]) labeled "default" rather than implying it's the
+   monitor's native resolution — those are two different numbers that can
+   legitimately disagree. The baseline-default fields/ResultPreview below
+   use the same display-only-fallback pattern as MainShell's DisplayedGame:
+   no click-to-select exists yet (Phase 4), so they show the primary (or
+   first) connected monitor's saved default, honestly falling back to
+   GameDisplayProfile's own schema defaults when nothing's been saved for
+   it yet — exactly what MainForm.GetEffectiveProfile()/BtnLoadDefaults_Click
+   would resolve to. *@
 
 <div class="nb-monitors-page">
     <div class="nb-monitors-page__title">Monitor baseline defaults</div>
     <div class="nb-monitors-page__subline">New games added on a monitor inherit these values. Existing games keep their own.</div>
 
     <div class="nb-monitors-page__group-header">
-        <div class="nb-text-label" style="color:var(--nb-success)">CONNECTED · @Connected.Count</div>
+        <div class="nb-text-label" style="color:var(--nb-success)">CONNECTED · @State.Monitors.Count</div>
         <div class="nb-monitors-page__hairline"></div>
     </div>
     <div class="nb-monitors-page__grid">
-        @foreach (var m in Connected)
+        @foreach (var m in State.Monitors)
         {
-            <MonitorCard Name="@m.Name" Detail="@m.Detail" Selected="@m.Selected" />
+            <MonitorCard Name="@m.ID" Detail="@ConnectedDetail(m)" Selected="@(m.ID == DisplayedMonitorName)" />
         }
     </div>
 
     <div class="nb-monitors-page__group-header nb-monitors-page__group-header--saved">
-        <div class="nb-text-label">SAVED · NOT CONNECTED · @Saved.Count</div>
+        <div class="nb-text-label">SAVED · NOT CONNECTED · @SavedDisconnected.Count</div>
         <div class="nb-monitors-page__hairline"></div>
         <div class="nb-monitors-page__remove-all">Remove All</div>
     </div>
     <div class="nb-monitors-page__grid">
-        @foreach (var m in Saved)
+        @foreach (var name in SavedDisconnected)
         {
-            <MonitorCard Name="@m.Name" Detail="@m.Detail" Saved="true" />
+            <MonitorCard Name="@name" Detail="@SavedDetail(name)" Saved="true" />
         }
     </div>
     <div class="nb-monitors-page__caption">Saved monitors keep their defaults so profiles come back if the display is reconnected.</div>
@@ -35,32 +53,32 @@
     <div class="nb-monitors-page__fields">
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">WIDTH</div>
-            <div class="nb-monitors-page__field-value nb-mono">@Width</div>
+            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.Width</div>
         </div>
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">HEIGHT</div>
-            <div class="nb-monitors-page__field-value nb-mono">@Height</div>
+            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.Height</div>
         </div>
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">OFFSET X</div>
-            <div class="nb-monitors-page__field-value nb-mono">@OffsetX</div>
+            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.OffsetX</div>
         </div>
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">OFFSET Y</div>
-            <div class="nb-monitors-page__field-value nb-mono">@OffsetY</div>
+            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.OffsetY</div>
         </div>
     </div>
 
     <label class="nb-monitors-page__check">
-        <span class="nb-monitors-page__check-box"></span>
+        <span class="nb-monitors-page__check-box @(DisplayedDefault.ConstrainMouse ? "nb-monitors-page__check-box--checked" : "")"></span>
         <span>Lock cursor to window bounds by default</span>
     </label>
 
     <div class="nb-monitors-page__divider"></div>
 
-    <ResultPreview MonitorWidth="Width" MonitorHeight="Height"
-                   WindowWidth="Width" WindowHeight="Height"
-                   OffsetX="OffsetX" OffsetY="OffsetY"
+    <ResultPreview MonitorWidth="PreviewMonitorWidth" MonitorHeight="PreviewMonitorHeight"
+                   WindowWidth="DisplayedDefault.Width" WindowHeight="DisplayedDefault.Height"
+                   OffsetX="DisplayedDefault.OffsetX" OffsetY="DisplayedDefault.OffsetY"
                    Caption="@PreviewCaption" />
 
     <div class="nb-monitors-page__actions">
@@ -70,24 +88,65 @@
 </div>
 
 @code {
-    private sealed record MonitorSample(string Name, string Detail, bool Selected = false);
+    // Display-only fallback (same rationale as MainShell.DisplayedGame): no
+    // monitor-card click-to-select is wired yet (Phase 4), so this picks the
+    // primary connected monitor — falling back to the first connected, then
+    // the first saved-disconnected name — purely to have something honest to
+    // show below rather than the service silently deciding a "selection".
+    private string DisplayedMonitorName =>
+        (State.Monitors.FirstOrDefault(m => m.Primary) ?? State.Monitors.FirstOrDefault())?.ID
+        ?? SavedDisconnected.FirstOrDefault()
+        ?? string.Empty;
 
-    private readonly int Width = 3440;
-    private readonly int Height = 1440;
-    private readonly int OffsetX = 0;
-    private readonly int OffsetY = 0;
-    private readonly string PreviewCaption = "3440×1440 @ 0,0 — full coverage";
+    private MonitorItem? DisplayedConnectedMonitor =>
+        State.Monitors.FirstOrDefault(m => m.ID == DisplayedMonitorName);
 
-    private static readonly List<MonitorSample> Connected = new()
+    // Same fallback chain as MainForm.GetEffectiveProfile() minus the
+    // per-game-profile branch (there's no selected game on this page) —
+    // saved default if one exists, otherwise GameDisplayProfile's own
+    // schema defaults (1920×1080 @ 0,0).
+    private GameDisplayProfile DisplayedDefault =>
+        !string.IsNullOrEmpty(DisplayedMonitorName) && State.MonitorDefaults.TryGetValue(DisplayedMonitorName, out var def)
+            ? def
+            : new GameDisplayProfile();
+
+    // The well needs the monitor's own physical resolution, which is only
+    // knowable while it's connected — a saved-but-disconnected monitor has
+    // no such number on file, so this falls back to the default profile's
+    // own size (better than a 0×0 well).
+    private int PreviewMonitorWidth  => DisplayedConnectedMonitor?.Width  ?? DisplayedDefault.Width;
+    private int PreviewMonitorHeight => DisplayedConnectedMonitor?.Height ?? DisplayedDefault.Height;
+
+    private string PreviewCaption
     {
-        new("Samsung S34J55x", "3440×1440 · primary", Selected: true),
-        new("LG 27GP850",      "2560×1440"),
-    };
+        get
+        {
+            var d = DisplayedDefault;
+            bool fullCoverage = d.OffsetX == 0 && d.OffsetY == 0
+                && d.Width == PreviewMonitorWidth && d.Height == PreviewMonitorHeight;
+            string core = $"{d.Width}×{d.Height} @ {d.OffsetX},{d.OffsetY}";
+            return fullCoverage ? $"{core} — full coverage" : core;
+        }
+    }
 
-    private static readonly List<MonitorSample> Saved = new()
+    private static string ConnectedDetail(MonitorItem m) =>
+        m.Primary ? $"{m.Width}×{m.Height} · primary" : $"{m.Width}×{m.Height}";
+
+    private List<string> SavedDisconnected =>
+        State.KnownMonitors
+            .Where(k => !State.Monitors.Any(m => string.Equals(m.ID, k, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private int GameCountFor(string monitorName) =>
+        State.Games.Count(g => g.Profiles.ContainsKey(monitorName));
+
+    private string SavedDetail(string monitorName)
     {
-        new("Dell U2415",     "1920×1200 · 4 games"),
-        new("BenQ XL2411",    "1920×1080 · 2 games"),
-        new("Acer XB271HU",   "2560×1440 · 1 game"),
-    };
+        int games = GameCountFor(monitorName);
+        string gameText = $"{games} game{(games == 1 ? "" : "s")}";
+        return State.MonitorDefaults.TryGetValue(monitorName, out var def)
+            ? $"{def.Width}×{def.Height} default · {gameText}"
+            : gameText;
+    }
 }

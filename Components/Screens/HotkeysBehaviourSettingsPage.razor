@@ -1,40 +1,65 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
 @* Screen 1f — Settings: Hotkeys & Behaviour. The mock shows both sections
    on one page with "Hotkeys" active in the nav; "Behaviour" is a separate
    nav item but no distinct mock exists for it, so SettingsView.razor
    routes both nav states to this same page (see its doc comment).
-   Static/hardcoded — the capture-state card, toggles, and Rebind button
-   don't do anything yet. *@
+
+   Phase 3.5: both binding rows and all three Behaviour toggles are wired to
+   real data. The mock's one row shows a live "capturing" demo state to
+   document what that state looks like, but nothing is actually capturing
+   here (Rebind's click handler is Phase 4/6 territory) — showing a
+   permanently-stuck capture card would misrepresent real state, so both
+   rows render in the resting style, with the real HotkeyConfig combo
+   (AppSettings.HotkeyAddApp/HotkeyRefreshApp — MainForm's actual binding
+   for Ctrl+Shift+A / Ctrl+Shift+R by default, not the mock's Alt+F11
+   sample) and the real registration status text as last set on
+   MainForm's own status labels by TryRegisterHotkey — a read of the
+   global-hotkey system's existing output, since that system itself is
+   frozen (MIGRATION_PLAN.md) and not touched here. Rebind stays static. *@
 
 <div class="nb-hotkeys-page__title">Global hotkeys</div>
 <div class="nb-hotkeys-page__subline">Work while a game has focus. Click a binding, then press your combo.</div>
 
-<div class="nb-hotkeys-page__binding nb-hotkeys-page__binding--capturing">
+<div class="nb-hotkeys-page__binding">
     <div class="nb-hotkeys-page__binding-info">
-        <div class="nb-hotkeys-page__binding-name">Add focused app</div>
-        <div class="nb-hotkeys-page__binding-sub">Listening… press a key combination. Esc to cancel.</div>
+        <div class="nb-hotkeys-page__binding-name nb-hotkeys-page__binding-name--resting">Add focused app</div>
+        <div class="nb-hotkeys-page__status nb-hotkeys-page__status--@StatusClass(State.HotkeyAddStatusText)">
+            <span class="nb-hotkeys-page__status-dot"></span>
+            <span class="nb-mono">@State.HotkeyAddStatusText</span>
+        </div>
     </div>
     <div class="nb-hotkeys-page__combo">
-        <KeyCap Active="true">Ctrl</KeyCap>
-        <span class="nb-hotkeys-page__plus">+</span>
-        <KeyCap Active="true">Shift</KeyCap>
-        <span class="nb-hotkeys-page__plus">+</span>
-        <div class="nb-hotkeys-page__capture-slot"></div>
+        @foreach (var (part, isLast) in WithLast(ComboParts(State.HotkeyAddApp)))
+        {
+            <KeyCap>@part</KeyCap>
+            @if (!isLast)
+            {
+                <span class="nb-hotkeys-page__plus">+</span>
+            }
+        }
     </div>
+    <button type="button" class="nb-hotkeys-page__rebind">Rebind</button>
 </div>
 
 <div class="nb-hotkeys-page__binding">
     <div class="nb-hotkeys-page__binding-info">
         <div class="nb-hotkeys-page__binding-name nb-hotkeys-page__binding-name--resting">Re-apply / refresh displays</div>
-        <div class="nb-hotkeys-page__status">
+        <div class="nb-hotkeys-page__status nb-hotkeys-page__status--@StatusClass(State.HotkeyRefreshStatusText)">
             <span class="nb-hotkeys-page__status-dot"></span>
-            <span class="nb-mono">registered</span>
+            <span class="nb-mono">@State.HotkeyRefreshStatusText</span>
         </div>
     </div>
     <div class="nb-hotkeys-page__combo">
-        <KeyCap>Alt</KeyCap>
-        <span class="nb-hotkeys-page__plus">+</span>
-        <KeyCap>F11</KeyCap>
+        @foreach (var (part, isLast) in WithLast(ComboParts(State.HotkeyRefreshApp)))
+        {
+            <KeyCap>@part</KeyCap>
+            @if (!isLast)
+            {
+                <span class="nb-hotkeys-page__plus">+</span>
+            }
+        }
     </div>
     <button type="button" class="nb-hotkeys-page__rebind">Rebind</button>
 </div>
@@ -47,17 +72,36 @@
         <div class="nb-hotkeys-page__toggle-name">Minimize to system tray</div>
         <div class="nb-hotkeys-page__toggle-sub">Keeps enforcing while hidden</div>
     </div>
-    <ToggleSwitch On="true" />
+    <ToggleSwitch On="@State.MinimizeToTray" />
 </div>
 <div class="nb-hotkeys-page__toggle-row nb-hotkeys-page__toggle-row--divided">
     <div class="nb-hotkeys-page__toggle-info">
         <div class="nb-hotkeys-page__toggle-name">Start with Windows</div>
     </div>
-    <ToggleSwitch On="true" />
+    <ToggleSwitch On="@State.StartWithWindows" />
 </div>
 <div class="nb-hotkeys-page__toggle-row nb-hotkeys-page__toggle-row--divided nb-hotkeys-page__toggle-row--indented">
     <div class="nb-hotkeys-page__toggle-info">
         <div class="nb-hotkeys-page__toggle-name nb-hotkeys-page__toggle-name--muted">Start minimized to tray</div>
     </div>
-    <ToggleSwitch On="false" />
+    <ToggleSwitch On="@State.StartMinimized" />
 </div>
+
+@code {
+    private static string[] ComboParts(HotkeyConfig cfg) => cfg.ToString().Split(" + ");
+
+    private static IEnumerable<(string part, bool isLast)> WithLast(string[] parts)
+    {
+        for (int i = 0; i < parts.Length; i++)
+            yield return (parts[i], i == parts.Length - 1);
+    }
+
+    // TryRegisterHotkey's status text always starts with "Active", "Disabled",
+    // or "Not active — ..." (see program.cs) — anything else (e.g. the label's
+    // pre-OnLoad placeholder "Not yet registered") is a startup transient, not
+    // a failure, so it's treated the same as "muted" rather than danger-red.
+    private static string StatusClass(string statusText) =>
+        statusText.StartsWith("Active", StringComparison.Ordinal) ? "success" :
+        statusText.StartsWith("Not active", StringComparison.Ordinal) ? "danger" :
+        "muted";
+}

@@ -28,6 +28,9 @@ namespace NoBorders.Services
         private readonly Func<AppSettings> _getSettings;
         private readonly Func<GameConfig?> _getSelectedGame;
         private readonly Func<List<OpenWindowEntry>> _getOpenWindows;
+        private readonly Func<List<MonitorItem>> _getMonitors;
+        private readonly Func<string> _getHotkeyAddStatus;
+        private readonly Func<string> _getHotkeyRefreshStatus;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -35,14 +38,20 @@ namespace NoBorders.Services
             Func<AppSettings> getSettings,
             Func<GameConfig?> getSelectedGame,
             Func<List<OpenWindowEntry>> getOpenWindows,
+            Func<List<MonitorItem>> getMonitors,
+            Func<string> getHotkeyAddStatus,
+            Func<string> getHotkeyRefreshStatus,
             Action queueSave,
             Action saveNow)
         {
-            _getSettings     = getSettings;
-            _getSelectedGame = getSelectedGame;
-            _getOpenWindows  = getOpenWindows;
-            _queueSave       = queueSave;
-            _saveNow         = saveNow;
+            _getSettings            = getSettings;
+            _getSelectedGame        = getSelectedGame;
+            _getOpenWindows         = getOpenWindows;
+            _getMonitors            = getMonitors;
+            _getHotkeyAddStatus     = getHotkeyAddStatus;
+            _getHotkeyRefreshStatus = getHotkeyRefreshStatus;
+            _queueSave              = queueSave;
+            _saveNow                = saveNow;
         }
 
         /// <summary>The live AppSettings instance — same object MainForm reads/writes.</summary>
@@ -75,6 +84,27 @@ namespace NoBorders.Services
         /// rather than in a loop.
         /// </summary>
         public List<OpenWindowEntry> GetOpenWindows() => _getOpenWindows();
+
+        /// <summary>
+        /// Currently connected monitors — same `MainForm._monitors` list built by
+        /// `RefreshMonitors()` (Phase 3.5), including the `Width`/`Height`/`Primary`
+        /// fields added there for this view. Live accessor, not a snapshot: `_monitors`
+        /// is a `readonly` list that RefreshMonitors clears and repopulates in place,
+        /// so the same instance is always current.
+        /// </summary>
+        public List<MonitorItem> Monitors => _getMonitors();
+
+        /// <summary>
+        /// Real registration-outcome text for the "Add focused app" hotkey, as last
+        /// set by `TryRegisterHotkey` on its status label (e.g. "Active", "Disabled",
+        /// "Not active — conflicts with another app"). A read of that label's current
+        /// `Text`, not a reimplementation — the hotkey system itself is frozen
+        /// (MIGRATION_PLAN.md), so this only observes its existing output.
+        /// </summary>
+        public string HotkeyAddStatusText => _getHotkeyAddStatus();
+
+        /// <summary>Same as <see cref="HotkeyAddStatusText"/>, for the "Re-apply / refresh displays" hotkey.</summary>
+        public string HotkeyRefreshStatusText => _getHotkeyRefreshStatus();
 
         /// <summary>Debounced save, same as MainForm's QueueSave() (600ms via _saveDebounce).</summary>
         public void QueueSave() => _queueSave();

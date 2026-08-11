@@ -88,6 +88,23 @@
   border-radius: 5px;
   border: 1px solid var(--nb-border-strong-alt);
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Not in the mock (its one static sample was unchecked) — ConstrainMouse is
+   real per-monitor data (Phase 3.5), so both states need to render. */
+.nb-monitors-page__check-box--checked {
+  background: var(--nb-accent);
+  border-color: var(--nb-accent);
+}
+
+.nb-monitors-page__check-box--checked::after {
+  content: "\2713";
+  font-size: 12px;
+  line-height: 1;
+  color: var(--nb-on-accent-fg);
 }
 
 .nb-monitors-page__check > span:last-child {

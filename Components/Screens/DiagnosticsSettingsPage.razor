@@ -4,8 +4,17 @@
    both show the full shell-with-nav treatment and the README says every
    Settings view is "reachable from the existing Settings entry point" —
    so this is just this page's content, hosted in the same SettingsShell
-   as the others (see SettingsView.razor). Static — Open Log/Export Log/
-   the toggle don't do anything yet. *@
+   as the others (see SettingsView.razor).
+
+   Phase 3.5 scope note: unlike 1e/1f, nothing on this page corresponds to
+   a real AppSettings field or other tracked app state today —
+   AppLogger.Log() is an unconditional flat-file writer with no verbose/
+   quiet levels to back a "Verbose logging" toggle, and there's no in-memory
+   error counter behind "N errors in the last session" (ActivityLogWindow.razor
+   documents the same gap: real log parsing/tailing is explicitly Phase 6
+   scope, not Phase 3's read-only-wiring). So this page stays static/
+   hardcoded here rather than wiring some fields and fabricating others —
+   Open Log/Export Log/the toggle don't do anything yet. *@
 
 <div class="nb-diagnostics-page__log-row">
     <div class="nb-diagnostics-page__log-info">

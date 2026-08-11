@@ -117,6 +117,13 @@ namespace NoBorders
     {
         public string ID         { get; set; } = string.Empty; // friendly name shown to user
         public string DeviceName { get; set; } = string.Empty; // GDI device name e.g. \\.\DISPLAY1
+        // Native resolution and primary-ness, filled in by RefreshMonitors from
+        // Screen.Bounds/Screen.Primary. Added for the Settings > Monitors Blazor
+        // view (MIGRATION_PLAN.md Phase 3.5) — MonitorItem itself isn't
+        // serialized anywhere, so this has no config-format impact.
+        public int  Width         { get; set; }
+        public int  Height        { get; set; }
+        public bool Primary       { get; set; }
         public override string ToString() => ID;
     }
 
@@ -721,7 +728,9 @@ namespace NoBorders
             // _settings/_selectedGame on every access rather than capturing a
             // snapshot, so this is correct regardless of exact timing.
             services.AddSingleton(_ => new AppStateService(
-                () => _settings, () => _selectedGame, GetOpenWindowEntries, QueueSave, SaveConfig));
+                () => _settings, () => _selectedGame, GetOpenWindowEntries,
+                () => _monitors, () => _lblHotkeyAddStatus.Text, () => _lblHotkeyRefreshStatus.Text,
+                QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
 
@@ -2018,7 +2027,12 @@ namespace NoBorders
                     }
                     else seenNames[friendly] = 1;
 
-                    _monitors.Add(new MonitorItem { ID = friendly, DeviceName = screen.DeviceName });
+                    _monitors.Add(new MonitorItem
+                    {
+                        ID = friendly, DeviceName = screen.DeviceName,
+                        Width = screen.Bounds.Width, Height = screen.Bounds.Height,
+                        Primary = screen.Primary
+                    });
                     if (!IsIgnoredName(friendly)) _settings.KnownMonitors.Add(friendly);
                 }
 
