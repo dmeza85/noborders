@@ -49,8 +49,14 @@
    Pattern text (still DisplayedGame.RegexPattern today — no editable regex
    input exists yet, so there's nothing to diverge from) onto the game.
 
-   Still static: Undo/Remove Game (Phase 4.13/4.7), Rescan, and "Use Title
-   Of Selected" (net-new write actions). *@
+   Phase 4.7: Remove Game calls AppStateService.RemoveSelectedGame, which
+   forwards to MainForm's real BtnDeleteGame_Click via PerformClick() — no
+   confirmation prompt, matching that the WinForms button never had one
+   either. Restores any enforced windows to bordered first, then deletes
+   and persists.
+
+   Still static: Undo (Phase 4.13), Rescan, and "Use Title Of Selected"
+   (net-new write actions). *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
@@ -114,7 +120,7 @@
         <div class="nb-matching-pane__actions">
             <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveChanges">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
-            <button type="button" class="nb-btn nb-btn--danger-outline">Remove Game</button>
+            <button type="button" class="nb-btn nb-btn--danger-outline" @onclick="OnRemoveGame">Remove Game</button>
         </div>
     </div>
 </div>
@@ -147,6 +153,12 @@
     {
         EnsureSelected();
         State.SaveGameChanges();
+    }
+
+    private void OnRemoveGame()
+    {
+        EnsureSelected();
+        State.RemoveSelectedGame();
     }
 
     // Re-enumerated on every render, same as MainShell's rail does implicitly

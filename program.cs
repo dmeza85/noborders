@@ -743,7 +743,7 @@ namespace NoBorders
                 () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
                 ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
                 () => _txtGameName.Text, FetchNameForSelectedGame,
-                SaveGameChanges,
+                SaveGameChanges, RemoveSelectedGame,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -782,13 +782,14 @@ namespace NoBorders
             // subscriptions above — those handlers are completely untouched;
             // these just also notify Blazor once each has finished, regardless
             // of whether the change originated from the WinForms control or
-            // from the corresponding AppStateService method (Phase 4.1-4.6).
+            // from the corresponding AppStateService method (Phase 4.1-4.7).
             _lstGames.SelectedIndexChanged   += (s, e) => _appState.RaiseChanged();
             _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
             _chkActive.CheckedChanged        += (s, e) => _appState.RaiseChanged();
             _btnLoadDefaults.Click           += (s, e) => _appState.RaiseChanged();
             _btnFetchName.Click              += (s, e) => _appState.RaiseChanged();
             _btnSaveGame.Click               += (s, e) => _appState.RaiseChanged();
+            _btnDeleteGame.Click             += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2644,6 +2645,15 @@ namespace NoBorders
             PopulateGamesList();
             ShowStatus($"{name} removed.");
         }
+
+        /// <summary>
+        /// Blazor "Remove Game" button's entry point (MIGRATION_PLAN.md Phase 4.7)
+        /// — calls `PerformClick()`, so the real, unchanged `BtnDeleteGame_Click`
+        /// runs. That handler has no confirmation prompt today, so this doesn't
+        /// add one either — reproducing exact existing behavior, not inventing
+        /// safer-seeming UX the original app never had.
+        /// </summary>
+        private void RemoveSelectedGame() => _btnDeleteGame.PerformClick();
 
         /// <summary>
         /// Restores any windows currently being enforced for the given game back

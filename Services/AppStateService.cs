@@ -54,6 +54,7 @@ namespace NoBorders.Services
         private readonly Func<string> _getPendingDisplayName;
         private readonly Action _fetchName;
         private readonly Action _saveGameChanges;
+        private readonly Action _removeSelectedGame;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -73,6 +74,7 @@ namespace NoBorders.Services
             Func<string> getPendingDisplayName,
             Action fetchName,
             Action saveGameChanges,
+            Action removeSelectedGame,
             Action queueSave,
             Action saveNow)
         {
@@ -89,6 +91,7 @@ namespace NoBorders.Services
             _getPendingDisplayName  = getPendingDisplayName;
             _fetchName              = fetchName;
             _saveGameChanges        = saveGameChanges;
+            _removeSelectedGame     = removeSelectedGame;
             _selectMonitorScope     = selectMonitorScope;
             _toggleGameActive       = toggleGameActive;
             _queueSave              = queueSave;
@@ -219,6 +222,16 @@ namespace NoBorders.Services
         /// *other* Save Changes button (`_btnSaveAdvanced`) already shared.
         /// </summary>
         public void SaveGameChanges() => _saveGameChanges();
+
+        /// <summary>
+        /// Removes the selected game entirely, exactly as clicking "Remove Game"
+        /// would (Phase 4.7) — forwards to MainForm's `PerformClick()` on
+        /// `_btnDeleteGame`, so the real, unchanged `BtnDeleteGame_Click` runs
+        /// (restores any enforced windows to bordered first, then deletes and
+        /// persists). That handler has no confirmation prompt, and neither does
+        /// this — see its doc comment in program.cs. No-op if no game is selected.
+        /// </summary>
+        public void RemoveSelectedGame() => _removeSelectedGame();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same
