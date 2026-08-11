@@ -42,8 +42,14 @@
    disconnected cards (Phase 3.5) — is only knowable while that monitor is
    currently connected (AppStateService.Monitors); a saved profile for a
    now-unplugged monitor honestly shows "monitor not connected" instead of
-   a fabricated percentage. Save Changes/Undo/Load Monitor Defaults/Center
-   On Monitor remain static (Phase 4/6 — all write actions). *@
+   a fabricated percentage.
+
+   Phase 4.4: "Load Monitor Defaults" calls AppStateService.LoadMonitorDefaults,
+   which forwards to MainForm's real BtnLoadDefaults_Click via PerformClick() —
+   loads the active scope's saved MonitorDefaults entry onto the selected
+   game and immediately persists/enforces it, exactly as the WinForms button
+   always has. Save Changes/Undo/Center On Monitor remain static (Phase
+   4.6/4.13/6 respectively). *@
 
 <div class="nb-display-pane">
     <div class="nb-display-pane__left">
@@ -111,7 +117,7 @@
         <div class="nb-display-pane__actions">
             <button type="button" class="nb-btn nb-btn--primary">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
-            <button type="button" class="nb-btn nb-btn--outline">Load Monitor Defaults</button>
+            <button type="button" class="nb-btn nb-btn--outline" @onclick="OnLoadMonitorDefaults">Load Monitor Defaults</button>
         </div>
     </div>
 </div>
@@ -134,6 +140,23 @@
     {
         var value = e.Value?.ToString();
         if (!string.IsNullOrEmpty(value)) State.SelectMonitorScope(value);
+    }
+
+    // Write actions below all guard on MainForm's real _selectedGame, which
+    // can still be null while DisplayedGame is only showing the Phase 3.3
+    // display-only fallback. Same fix as MainShell's hero button (Phase 4.3):
+    // establish the real selection first so a click against what's visibly
+    // shown never silently no-ops.
+    private void EnsureSelected()
+    {
+        if (State.SelectedGame == null && DisplayedGame != null)
+            State.SelectGame(DisplayedGame);
+    }
+
+    private void OnLoadMonitorDefaults()
+    {
+        EnsureSelected();
+        State.LoadMonitorDefaults();
     }
 
     // Same fallback chain as MainForm.GetEffectiveProfile(): the game's own

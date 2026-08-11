@@ -741,7 +741,7 @@ namespace NoBorders
                 () => _monitors, () => _lblHotkeyAddStatus.Text, () => _lblHotkeyRefreshStatus.Text,
                 SelectGame,
                 () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
-                ToggleGameActive,
+                ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -780,10 +780,11 @@ namespace NoBorders
             // subscriptions above — those handlers are completely untouched;
             // these just also notify Blazor once each has finished, regardless
             // of whether the change originated from the WinForms control or
-            // from the corresponding AppStateService method (Phase 4.1-4.3).
+            // from the corresponding AppStateService method (Phase 4.1-4.4).
             _lstGames.SelectedIndexChanged   += (s, e) => _appState.RaiseChanged();
             _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
             _chkActive.CheckedChanged        += (s, e) => _appState.RaiseChanged();
+            _btnLoadDefaults.Click           += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2551,6 +2552,14 @@ namespace NoBorders
                 ShowStatus($"No saved defaults found for {_activeScope}.");
             }
         }
+
+        /// <summary>
+        /// Blazor "Load Monitor Defaults" button's entry point (MIGRATION_PLAN.md
+        /// Phase 4.4) — calls `PerformClick()`, which raises the real `Click` event
+        /// exactly as a physical click would, so `BtnLoadDefaults_Click` above runs
+        /// unchanged (plus the `Changed`-raising subscriber added in the constructor).
+        /// </summary>
+        private void LoadMonitorDefaultsForSelectedGame() => _btnLoadDefaults.PerformClick();
 
         private void BtnFetchName_Click(object? sender, EventArgs e)
         {

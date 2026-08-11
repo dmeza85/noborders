@@ -50,6 +50,7 @@ namespace NoBorders.Services
         private readonly Func<string> _getActiveScope;
         private readonly Action<string> _selectMonitorScope;
         private readonly Action _toggleGameActive;
+        private readonly Action _loadMonitorDefaults;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -65,6 +66,7 @@ namespace NoBorders.Services
             Func<string> getActiveScope,
             Action<string> selectMonitorScope,
             Action toggleGameActive,
+            Action loadMonitorDefaults,
             Action queueSave,
             Action saveNow)
         {
@@ -77,6 +79,7 @@ namespace NoBorders.Services
             _selectGame             = selectGame;
             _getMonitorOptions      = getMonitorOptions;
             _getActiveScope         = getActiveScope;
+            _loadMonitorDefaults    = loadMonitorDefaults;
             _selectMonitorScope     = selectMonitorScope;
             _toggleGameActive       = toggleGameActive;
             _queueSave              = queueSave;
@@ -162,6 +165,16 @@ namespace NoBorders.Services
         /// enforces/un-enforces the window). No-op if no game is selected.
         /// </summary>
         public void ToggleActive() => _toggleGameActive();
+
+        /// <summary>
+        /// Loads the current monitor scope's saved default profile onto the
+        /// selected game and immediately applies it, exactly as clicking "Load
+        /// Monitor Defaults" would (Phase 4.4) — forwards to MainForm's own
+        /// `PerformClick()` on that button, so the real, unchanged
+        /// `BtnLoadDefaults_Click` runs. No-op (with a status message) if there's
+        /// no saved default for the active scope.
+        /// </summary>
+        public void LoadMonitorDefaults() => _loadMonitorDefaults();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same
