@@ -1,0 +1,29 @@
+.nb-log-chip {
+  padding: 6px 11px;
+  border-radius: var(--nb-radius-full);
+  border: 1px solid var(--nb-border);
+  font: 500 11.5px/1 var(--nb-font-ui);
+  white-space: nowrap;
+  flex: none;
+}
+
+.nb-log-chip--info {
+  color: var(--nb-text-secondary);
+}
+
+.nb-log-chip--warn {
+  border-color: var(--nb-warning-border);
+  color: var(--nb-warning);
+}
+
+.nb-log-chip--error {
+  border-color: var(--nb-danger-border);
+  color: var(--nb-danger);
+}
+
+.nb-log-chip--selected {
+  background: rgba(var(--nb-accent-rgb), .14);
+  border-color: rgba(var(--nb-accent-rgb), .35);
+  color: var(--nb-accent-text);
+  font-weight: 600;
+}

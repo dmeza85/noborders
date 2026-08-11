@@ -1,0 +1,104 @@
+@namespace NoBorders.Components.Screens
+@*
+    Screen 4a — Activity Log. design-handoff/README.md frames this as "a
+    separate top-level window", but per Adaptation Decision #2
+    (MIGRATION_PLAN.md), it's an in-app view within the single
+    BlazorWebView like Settings — opened from Settings → Diagnostics'
+    "Open Log" button — so the mock's window-control glyphs are dropped
+    here for the same reason as SettingsShell, with the same "← Back"
+    substitute.
+
+    This is the one Phase 2 screen that's genuinely net-new UI rather
+    than a redesign of something that already exists in program.cs — the
+    real feature is just the AppLogger log file today. Static/hardcoded
+    sample data — Phase 2 is visual parity only; level filters, the
+    search field, Auto-Scroll/Pause, row selection, and Clear Log don't
+    do anything yet.
+*@
+
+<div class="nb-log-window">
+    <header class="nb-log-window__titlebar">
+        <button type="button" class="nb-log-window__back">← Back</button>
+        <div class="nb-log-window__mark"></div>
+        <div class="nb-text-wordmark nb-log-window__wordmark">ACTIVITY LOG</div>
+        <div class="nb-log-window__filename nb-mono">noborders.log</div>
+    </header>
+
+    <div class="nb-log-window__toolbar">
+        <div class="nb-log-window__chips">
+            <LogLevelChip Label="All 248" Selected="true" />
+            <LogLevelChip Label="Info 231" Level="LogLevelChip.ChipLevel.Info" />
+            <LogLevelChip Label="Warn 14" Level="LogLevelChip.ChipLevel.Warn" />
+            <LogLevelChip Label="Error 3" Level="LogLevelChip.ChipLevel.Error" />
+        </div>
+        <div class="nb-log-window__filter">
+            <span class="nb-log-window__filter-ring"></span>
+            <span>Filter lines…</span>
+        </div>
+        <div class="nb-log-window__autoscroll">
+            <ToggleSwitch On="true" Small="true" />
+            <span>Auto-Scroll</span>
+        </div>
+        <button type="button" class="nb-log-window__toolbtn">Pause</button>
+        <button type="button" class="nb-log-window__toolbtn">Open Folder</button>
+    </div>
+
+    <div class="nb-log-window__body">
+        <div class="nb-log-window__list">
+            <div class="nb-log-window__list-header nb-mono">
+                <div>TIME</div><div>LEVEL</div><div>SOURCE</div><div>MESSAGE</div>
+            </div>
+            <div class="nb-log-window__rows">
+                @foreach (var entry in Entries)
+                {
+                    <LogRow Time="@entry.Time" Level="@entry.Level" Source="@entry.Source" Message="@entry.Message" />
+                }
+            </div>
+            <div class="nb-log-window__tailing nb-mono">
+                <span class="nb-log-window__tailing-dot"></span>tailing — new lines appear here
+            </div>
+        </div>
+
+        <div class="nb-log-window__detail">
+            <div class="nb-text-label nb-log-window__detail-label">SELECTED ENTRY</div>
+            <div class="nb-log-window__detail-pill nb-mono">ERROR</div>
+            <div class="nb-log-window__detail-message">SetWindowLong failed — ACCESS_DENIED (5)</div>
+            <div class="nb-log-window__detail-kv nb-mono">
+                <div>time&nbsp;&nbsp;14:33:19.482</div>
+                <div>game&nbsp;&nbsp;Valorant</div>
+                <div>hwnd&nbsp;&nbsp;0x000407AE</div>
+                <div>pid&nbsp;&nbsp;&nbsp;&nbsp;11204</div>
+            </div>
+            <div class="nb-log-window__detail-explain">The game runs elevated. Restart NoBorders as administrator to let it modify this window.</div>
+            <div class="nb-log-window__detail-actions">
+                <button type="button" class="nb-btn nb-btn--warning nb-log-window__restart">Restart As Admin</button>
+                <button type="button" class="nb-btn nb-btn--outline nb-log-window__copy">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="nb-log-window__statusbar nb-text-statusbar">
+        <span>%LOCALAPPDATA%\NoBorders\noborders.log</span>
+        <span>248 lines · 61 KB</span>
+        <div class="nb-log-window__statusbar-spacer"></div>
+        <span class="nb-log-window__clear">Clear Log</span>
+    </footer>
+</div>
+
+@code {
+    private sealed record LogEntry(string Time, LogRow.LogLevel Level, string Source, string Message);
+
+    private static readonly List<LogEntry> Entries = new()
+    {
+        new("14:22:07", LogRow.LogLevel.Info,  "ShellHook", "window created — eldenring.exe"),
+        new("14:22:07", LogRow.LogLevel.Info,  "Match",     "pattern \"elden.?ring\" matched title \"ELDEN RING™\""),
+        new("14:22:08", LogRow.LogLevel.Info,  "Style",     "removed WS_CAPTION | WS_THICKFRAME"),
+        new("14:22:08", LogRow.LogLevel.Ok,    "Position",  "3440×1440 @ 0,0 on Samsung S34J55x"),
+        new("14:24:51", LogRow.LogLevel.Warn,  "Cursor",    "ClipCursor released by foreground change"),
+        new("14:31:02", LogRow.LogLevel.Info,  "Display",   "WM_DISPLAYCHANGE — re-applying 2 rules"),
+        new("14:33:19", LogRow.LogLevel.Error, "Style",     "SetWindowLong failed — ACCESS_DENIED (5) · vgc-protected"),
+        new("14:33:20", LogRow.LogLevel.Info,  "Elevation", "prompted user to restart as administrator"),
+        new("14:40:44", LogRow.LogLevel.Info,  "Hotkey",    "Ctrl+Shift+R → refresh requested"),
+        new("14:40:44", LogRow.LogLevel.Ok,    "Position",  "2560×1440 @ 0,0 on LG 27GP850"),
+    };
+}

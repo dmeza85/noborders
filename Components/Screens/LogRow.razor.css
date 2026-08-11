@@ -1,0 +1,58 @@
+.nb-log-row {
+  display: grid;
+  grid-template-columns: 78px 62px 128px 1fr;
+  padding: 7px 14px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  border-bottom: 1px solid #101015; /* one-off — subtle separator distinct from any base/chrome token */
+  border-left: 2px solid transparent;
+}
+
+.nb-log-row__time,
+.nb-log-row__source {
+  color: #9a9aa8; /* one-off — doesn't match any named text token */
+}
+
+.nb-log-row__level {
+  color: #6a6a7a; /* one-off INFO-level muted gray, distinct from --nb-text-muted */
+}
+
+.nb-log-row__message {
+  color: var(--nb-text-body);
+}
+
+.nb-log-row--ok .nb-log-row__level {
+  color: var(--nb-success);
+}
+
+.nb-log-row--warn {
+  background: rgba(240, 180, 41, .06);
+}
+
+.nb-log-row--warn .nb-log-row__time,
+.nb-log-row--warn .nb-log-row__source {
+  color: var(--nb-warning-text-meta);
+}
+
+.nb-log-row--warn .nb-log-row__level {
+  color: var(--nb-warning);
+}
+
+.nb-log-row--warn .nb-log-row__message {
+  color: var(--nb-warning-text-message);
+}
+
+.nb-log-row--error {
+  background: rgba(255, 107, 116, .09);
+  border-left-color: var(--nb-danger);
+}
+
+.nb-log-row--error .nb-log-row__time,
+.nb-log-row--error .nb-log-row__source,
+.nb-log-row--error .nb-log-row__message {
+  color: var(--nb-danger-text);
+}
+
+.nb-log-row--error .nb-log-row__level {
+  color: var(--nb-danger);
+}

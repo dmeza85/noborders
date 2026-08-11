@@ -1,0 +1,31 @@
+@namespace NoBorders.Components.Screens
+@* Activity log list row, screen 4a. WARN/ERROR get a distinct row
+   background/text treatment; INFO/OK share the neutral treatment (only
+   the LEVEL cell's color differs between those two). Static — clicking a
+   row doesn't select it into the detail pane yet. *@
+
+<div class="nb-log-row nb-log-row--@LevelClass nb-mono">
+    <div class="nb-log-row__time">@Time</div>
+    <div class="nb-log-row__level">@LevelText</div>
+    <div class="nb-log-row__source">@Source</div>
+    <div class="nb-log-row__message">@Message</div>
+</div>
+
+@code {
+    public enum LogLevel { Info, Ok, Warn, Error }
+
+    [Parameter] public string Time { get; set; } = "";
+    [Parameter] public LogLevel Level { get; set; }
+    [Parameter] public string Source { get; set; } = "";
+    [Parameter] public string Message { get; set; } = "";
+
+    private string LevelText => Level switch
+    {
+        LogLevel.Ok    => "OK",
+        LogLevel.Warn  => "WARN",
+        LogLevel.Error => "ERROR",
+        _              => "INFO",
+    };
+
+    private string LevelClass => Level.ToString().ToLowerInvariant();
+}

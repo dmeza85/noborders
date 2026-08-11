@@ -53,6 +53,7 @@
   --nb-warning:             #f0b429; /* elevation prompt, WARN log level */
   --nb-warning-text-meta:   #e0be7a; /* WARN row metadata */
   --nb-warning-text-message: #e8d3a4; /* WARN row message */
+  --nb-warning-border:      #3a3320; /* dark amber-tinted border for warning chips, e.g. the log window's "Warn 14" filter */
   --nb-danger:              #ff6b74; /* close button, ERROR level, destructive text */
   --nb-danger-text:         #ffb9bd; /* ERROR row metadata / message */
   --nb-danger-border:       #3a2028; /* dark red-tinted border for danger-outline buttons/chips, e.g. "Remove Game" on screen 5a */

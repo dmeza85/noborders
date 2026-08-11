@@ -1,11 +1,14 @@
 @namespace NoBorders.Components.Screens
 @* 42×24 pill toggle — reused across Hotkeys/Behaviour (1f, 3×) and
-   Diagnostics (4b, 1×). Visual only, not wired to state yet. *@
+   Diagnostics (4b, 1×). "Small" is the 24×14 variant used for the
+   Activity Log window's Auto-Scroll toggle (4a). Visual only, not wired
+   to state yet. *@
 
-<div class="nb-toggle @(On ? "nb-toggle--on" : "")">
+<div class="nb-toggle @(On ? "nb-toggle--on" : "") @(Small ? "nb-toggle--small" : "")">
     <div class="nb-toggle__knob"></div>
 </div>
 
 @code {
     [Parameter] public bool On { get; set; }
+    [Parameter] public bool Small { get; set; }
 }

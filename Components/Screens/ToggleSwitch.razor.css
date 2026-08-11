@@ -24,3 +24,14 @@
 .nb-toggle--on .nb-toggle__knob {
   background: var(--nb-on-accent-fg);
 }
+
+.nb-toggle--small {
+  width: 24px;
+  height: 14px;
+  padding: 0 2px;
+}
+
+.nb-toggle--small .nb-toggle__knob {
+  width: 10px;
+  height: 10px;
+}

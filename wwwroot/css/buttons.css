@@ -42,3 +42,10 @@
   color: var(--nb-danger);
   font-weight: 500;
 }
+
+/* Elevation-related primary action, e.g. "Restart As Admin" on screens
+   4a/1g — amber fill, distinct from the violet primary. */
+.nb-btn--warning {
+  background: var(--nb-warning);
+  color: var(--nb-on-accent-fg-amber);
+}
