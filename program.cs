@@ -17,6 +17,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 using Microsoft.AspNetCore.Components.WebView.WindowsForms;
 using Microsoft.Extensions.DependencyInjection;
+using NoBorders.Services;
 
 namespace NoBorders
 {
@@ -689,22 +690,30 @@ namespace NoBorders
         private readonly Button          _btnRestartAdmin = new Button();
 
         // ── Blazor ───────────────────────────────────────────────────────────────
-        // DI container for the BlazorWebView control. Built via a field initializer
-        // so it's ready before the constructor body runs, without inserting itself
-        // into (or reordering) the CheckElevation -> LoadConfig -> BuildUI ->
-        // SetupTrayIcon -> RefreshMonitors -> PopulateGamesList -> ApplyTheme flow
-        // below. Nothing consumes this yet — no BlazorWebView control is mounted
-        // anywhere in the app (Phase 1.3's throwaway test tab proved it works and was
-        // removed in Phase 1.5); Phase 2 mounts one for real.
-        private readonly ServiceProvider _blazorServices = CreateBlazorServices();
+        // DI container for the BlazorWebView control. `CreateBlazorServices()` now
+        // registers AppStateService against the live _settings field/QueueSave/
+        // SaveConfig, which requires instance context (`this`) — C# doesn't allow
+        // field initializers to call instance methods (CS0236), so unlike Phase
+        // 1.2's original version, this can no longer be built via a field
+        // initializer. Instead it's assigned at the very end of the constructor
+        // body (see below), appended after the existing 7-call flow rather than
+        // interleaved with it — equally non-disruptive to that ordering, since
+        // "appended after" can't reorder what came before it either.
+        private readonly ServiceProvider _blazorServices;
 
-        private static ServiceProvider CreateBlazorServices()
+        private ServiceProvider CreateBlazorServices()
         {
             var services = new ServiceCollection();
             services.AddWindowsFormsBlazorWebView();
 #if DEBUG
             services.AddBlazorWebViewDeveloperTools();
 #endif
+            // Lazy factory — only runs whenever something first resolves
+            // AppStateService, which happens long after LoadConfig() has already
+            // run, and the Func<AppSettings> accessor re-reads _settings on every
+            // access rather than capturing a snapshot, so this is correct
+            // regardless of exact timing.
+            services.AddSingleton(_ => new AppStateService(() => _settings, QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
 
@@ -732,6 +741,10 @@ namespace NoBorders
             this.Resize      += OnResize;
             this.FormClosing += OnFormClosing;
             this.Load        += OnLoad;
+
+            // Appended after the flow above rather than a field initializer — see
+            // the comment on the _blazorServices field for why.
+            _blazorServices = CreateBlazorServices();
         }
 
         /// <summary>
