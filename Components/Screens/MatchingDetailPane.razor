@@ -55,8 +55,14 @@
    either. Restores any enforced windows to bordered first, then deletes
    and persists.
 
-   Still static: Undo (Phase 4.13), Rescan, and "Use Title Of Selected"
-   (net-new write actions). *@
+   Phase 4.13: ↶ Undo calls AppStateService.Undo — net-new per the README,
+   shared with DisplayDetailPane's own Undo (both forward to MainForm's
+   single UndoLastSave, matching "both tabs share Save Changes / Undo").
+   Disabled (State.CanUndo false) until a Save Changes commit has happened
+   for the currently selected game this session.
+
+   Still static: Rescan and "Use Title Of Selected" (net-new write
+   actions, Phase 6). *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
@@ -119,7 +125,7 @@
 
         <div class="nb-matching-pane__actions">
             <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveChanges">Save Changes</button>
-            <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
+            <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change" disabled="@(!State.CanUndo)" @onclick="() => State.Undo()">↶ Undo</button>
             <button type="button" class="nb-btn nb-btn--danger-outline" @onclick="OnRemoveGame">Remove Game</button>
         </div>
     </div>

@@ -59,7 +59,16 @@
    oversight), so today Save Changes mainly re-commits the pending display
    name (see MatchingDetailPane) and re-persists whatever profile is already
    loaded — a real, working round-trip, just not yet a way to change the
-   numbers from Blazor. Undo/Center On Monitor remain static (Phase 4.13/6). *@
+   numbers from Blazor.
+
+   Phase 4.13: ↶ Undo calls AppStateService.Undo — net-new per the README
+   (no prior WinForms UI/handler existed for this). Disabled
+   (State.CanUndo false) until a Save Changes commit has happened for the
+   currently selected game this session; forwards to MainForm's
+   UndoLastSave, which restores the pre-Save GameName/RegexPattern/Profiles
+   snapshot MainForm captures right before BtnSaveGame_Click applies its
+   changes (single-level — one Undo consumes the snapshot). Center On
+   Monitor remains static (Phase 6). *@
 
 <div class="nb-display-pane">
     <div class="nb-display-pane__left">
@@ -126,7 +135,7 @@
 
         <div class="nb-display-pane__actions">
             <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveChanges">Save Changes</button>
-            <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
+            <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change" disabled="@(!State.CanUndo)" @onclick="() => State.Undo()">↶ Undo</button>
             <button type="button" class="nb-btn nb-btn--outline" @onclick="OnLoadMonitorDefaults">Load Monitor Defaults</button>
         </div>
     </div>

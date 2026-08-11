@@ -472,6 +472,21 @@ namespace NoBorders
         private bool         _updatingUI  = false;
         private string       _activeScope = string.Empty; // currently viewed monitor scope
 
+        // Single-level Undo (MIGRATION_PLAN.md Phase 4.13) — net-new per the
+        // README, no prior WinForms UI or handler existed for this. Captures
+        // the affected game's pre-change GameName/RegexPattern/Profiles right
+        // before BtnSaveGame_Click applies a Save Changes commit; Undo restores
+        // exactly that snapshot, then clears it (a second Undo click has
+        // nothing further to revert to, matching "the last committed change",
+        // singular, not a multi-step history). _undoTarget doubles as the
+        // "is there anything to undo" flag and as the "for which game" scope —
+        // switching to a different game correctly disables Undo without
+        // discarding the pending snapshot, in case the user switches back.
+        private GameConfig? _undoTarget;
+        private string _undoGameName = string.Empty;
+        private string _undoRegexPattern = string.Empty;
+        private Dictionary<string, GameDisplayProfile> _undoProfiles = new(StringComparer.OrdinalIgnoreCase);
+
         private readonly string _configPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "games_config.json");
 
@@ -749,6 +764,7 @@ namespace NoBorders
                 () => _capturingHotkeyId == HOTKEY_ID_ADD, () => _capturingHotkeyId == HOTKEY_ID_REFRESH,
                 ToggleHotkeyAddCapture, ToggleHotkeyRefreshCapture,
                 ToggleMinimizeToTray, ToggleStartWithWindows, ToggleStartMinimized,
+                () => _undoTarget != null && _undoTarget == _selectedGame, UndoLastSave,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -2621,6 +2637,7 @@ namespace NoBorders
         private void BtnSaveGame_Click(object? sender, EventArgs e)
         {
             if (_selectedGame == null) return;
+            CaptureUndoSnapshot(_selectedGame); // Phase 4.13 — before any mutation below
             _selectedGame.GameName     = _txtGameName.Text.Trim();
             _selectedGame.RegexPattern = _txtRegex.Text.Trim();
             _selectedGame.InvalidatePattern();
@@ -2631,6 +2648,54 @@ namespace NoBorders
             PopulateGamesList();
             _lstGames.SelectedIndex = idx;
             ShowStatus($"Saved changes for {_selectedGame.GameName}.");
+        }
+
+        /// <summary>Records <paramref name="game"/>'s pre-Save state so <see cref="UndoLastSave"/> can restore it. See the field group's doc comment for the single-level-undo rationale.</summary>
+        private void CaptureUndoSnapshot(GameConfig game)
+        {
+            _undoTarget       = game;
+            _undoGameName     = game.GameName;
+            _undoRegexPattern = game.RegexPattern;
+            _undoProfiles     = game.Profiles.ToDictionary(
+                kv => kv.Key,
+                kv => new GameDisplayProfile
+                {
+                    Width = kv.Value.Width, Height = kv.Value.Height,
+                    OffsetX = kv.Value.OffsetX, OffsetY = kv.Value.OffsetY,
+                    ConstrainMouse = kv.Value.ConstrainMouse
+                },
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Blazor "↶ Undo" buttons' entry point (MIGRATION_PLAN.md Phase 4.13) —
+        /// net-new, no WinForms UI or handler existed for this before (README:
+        /// "reverts the last committed change to the current game's config").
+        /// Restores <see cref="_undoTarget"/> to its pre-Save-Changes snapshot,
+        /// persists and re-enforces it exactly like a normal save would, then
+        /// clears the snapshot — a second click has nothing left to undo.
+        /// </summary>
+        private void UndoLastSave()
+        {
+            if (_undoTarget == null) return;
+            var game = _undoTarget;
+
+            game.GameName     = _undoGameName;
+            game.RegexPattern = _undoRegexPattern;
+            game.InvalidatePattern();
+            game.Profiles.Clear();
+            foreach (var kv in _undoProfiles) game.Profiles[kv.Key] = kv.Value;
+
+            SaveConfig();
+            if (game.IsActive) EnforceGame(game);
+
+            int idx = _lstGames.SelectedIndex;
+            PopulateGamesList();
+            _lstGames.SelectedIndex = idx;
+            ShowStatus($"Undid last change for {game.GameName}.");
+
+            _undoTarget = null; // consumed — single level
+            _appState.RaiseChanged();
         }
 
         /// <summary>

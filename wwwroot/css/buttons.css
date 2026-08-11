@@ -17,6 +17,14 @@
   cursor: pointer;
 }
 
+/* README §"Interaction notes": "↶ Undo ... disabled at 50% opacity when
+   there is nothing to undo" (Phase 4.13) — shared here since any .nb-btn
+   can end up conditionally disabled, not just Undo. */
+.nb-btn:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
 .nb-btn--primary {
   background: var(--nb-accent);
   color: var(--nb-on-accent-fg);

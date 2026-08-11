@@ -68,6 +68,8 @@ namespace NoBorders.Services
         private readonly Action _toggleMinimizeToTray;
         private readonly Action _toggleStartWithWindows;
         private readonly Action _toggleStartMinimized;
+        private readonly Func<bool> _getCanUndo;
+        private readonly Action _undo;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -101,6 +103,8 @@ namespace NoBorders.Services
             Action toggleMinimizeToTray,
             Action toggleStartWithWindows,
             Action toggleStartMinimized,
+            Func<bool> getCanUndo,
+            Action undo,
             Action queueSave,
             Action saveNow)
         {
@@ -131,6 +135,8 @@ namespace NoBorders.Services
             _toggleMinimizeToTray         = toggleMinimizeToTray;
             _toggleStartWithWindows       = toggleStartWithWindows;
             _toggleStartMinimized         = toggleStartMinimized;
+            _getCanUndo               = getCanUndo;
+            _undo                     = undo;
             _selectMonitorScope       = selectMonitorScope;
             _toggleGameActive         = toggleGameActive;
             _queueSave                = queueSave;
@@ -380,6 +386,28 @@ namespace NoBorders.Services
         /// the real, unchanged `CheckedChanged` lambda.
         /// </summary>
         public void ToggleStartMinimized() => _toggleStartMinimized();
+
+        /// <summary>
+        /// True when there is a Save Changes snapshot to revert for the
+        /// currently selected game (Phase 4.13 — net-new, no prior WinForms UI
+        /// for this existed). False both when nothing has been saved yet this
+        /// session and when the last save was for a *different* game than the
+        /// one currently selected — Undo only ever reverts "the last committed
+        /// change to the current game's config", per the README, never a
+        /// stale snapshot for whatever used to be selected.
+        /// </summary>
+        public bool CanUndo => _getCanUndo();
+
+        /// <summary>
+        /// Reverts the selected game to its state immediately before the last
+        /// Save Changes commit, exactly as the mock's "↶ Undo" describes —
+        /// forwards to MainForm's `UndoLastSave`, which restores the captured
+        /// GameName/RegexPattern/Profiles snapshot, persists, and re-enforces
+        /// if the game is active. No-op if <see cref="CanUndo"/> is false.
+        /// Single-level: consumes the snapshot, so a second call has nothing
+        /// left to revert to until another Save Changes happens.
+        /// </summary>
+        public void Undo() => _undo();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same
