@@ -1,0 +1,128 @@
+/*
+ * Design tokens — extracted verbatim from design-handoff/README.md's
+ * "Design Tokens" section. This is the single source of truth for color,
+ * type, spacing, and radius across every Razor view (and, per Phase 5, the
+ * one place the app's native dark palette values are meant to line up
+ * with). Do not hand-roll a color/size that already has a token here.
+ *
+ * Dark only — the design bundle is a single fixed palette with no light
+ * mode (see MIGRATION_PLAN.md "Resolved decisions", 2026-08-10).
+ *
+ * Where the README gives a range or a pair of hex values for one bucket
+ * (e.g. "Field: #131318 / #16161d"), both are kept as separate tokens
+ * (`--nb-field`, `--nb-field-alt`) since the source notes they're distinct
+ * values used on different elements, not an ambiguous single value — pick
+ * whichever matches the specific element in design-handoff's HTML/
+ * screenshots when building that screen.
+ */
+
+:root {
+  /* ── Color · surfaces (darkest → lightest) ────────────────────────── */
+  --nb-base:           #0a0a0c; /* canvas behind windows, deepest surfaces */
+  --nb-chrome:          #0b0b0e; /* title bar, status bar, side rails, log list, preview well */
+  --nb-surface:         #0f0f13; /* main content panes, cards */
+  --nb-field:           #131318; /* inputs, search boxes, list rows */
+  --nb-field-alt:       #16161d; /* inputs, search boxes, list rows (alt) */
+  --nb-raised:          #1c1c23; /* dividers, stepper buttons, neutral button fill */
+  --nb-raised-alt:      #22222b; /* dividers, stepper buttons, neutral button fill (alt) */
+
+  /* ── Color · borders ──────────────────────────────────────────────── */
+  --nb-border-subtle:   #1c1c23; /* panel separators, 1px hairlines */
+  --nb-border:          #23232c; /* input and card borders */
+  --nb-border-alt:      #26262f; /* input and card borders (alt) */
+  --nb-border-strong:   #2c2c38; /* secondary button borders, focused fields */
+  --nb-border-strong-alt: #2f2f3c; /* secondary button borders, focused fields (alt) */
+
+  /* ── Color · text ─────────────────────────────────────────────────── */
+  --nb-text-primary:    #f2f2f7; /* headings, values */
+  --nb-text-bright:     #e8e8ee; /* body-strong, labels on chrome */
+  --nb-text-body:       #c9c9d6; /* secondary buttons, list items */
+  --nb-text-secondary:  #8a8a99; /* sublines, hints, log metadata — contrast floor: anything the user *reads* must be this or lighter */
+  --nb-text-muted:      #55556a; /* all-caps mono field labels, placeholders — decorative only, never body copy */
+  --nb-text-faint:      #4e4e5c; /* table header strip only — decorative only */
+
+  /* ── Color · accent (violet) ──────────────────────────────────────── */
+  --nb-accent-rgb:      139, 108, 255;
+  --nb-accent:          #8b6cff; /* primary buttons, selection, active tab/nav, preview fill */
+  --nb-accent-tint:     rgba(var(--nb-accent-rgb), 0.12); /* documented range .08–.16 — use rgba(var(--nb-accent-rgb), <alpha>) directly for a specific screen's exact value */
+  --nb-accent-text:     #b9a6ff; /* text/labels on accent tints */
+
+  /* ── Color · status ───────────────────────────────────────────────── */
+  --nb-success:             #3ddc84; /* borderless ON, OK log level, connected group, regex match */
+  --nb-success-on-fill:     #08120c; /* text inside a success-filled pill */
+  --nb-warning:             #f0b429; /* elevation prompt, WARN log level */
+  --nb-warning-text-meta:   #e0be7a; /* WARN row metadata */
+  --nb-warning-text-message: #e8d3a4; /* WARN row message */
+  --nb-danger:              #ff6b74; /* close button, ERROR level, destructive text */
+  --nb-danger-text:         #ffb9bd; /* ERROR row metadata / message */
+  --nb-on-accent-fg:        #0a0a0c; /* text on violet or green fills */
+  --nb-on-accent-fg-amber:  #180f02; /* text on amber (warning) fills */
+
+  /* ── Typography · families ────────────────────────────────────────── */
+  --nb-font-ui:   'Barlow', sans-serif;             /* UI / display */
+  --nb-font-mono: 'JetBrains Mono', monospace;      /* data / technical — resolutions, offsets, timestamps, hotkeys, regex, PIDs, paths, all-caps section labels */
+
+  /* ── Typography · roles (size / weight / line-height / letter-spacing) */
+  --nb-text-hero-size:        44px;
+  --nb-text-hero-weight:      700;
+  --nb-text-hero-line-height: 1;
+  --nb-text-hero-letter-spacing: -0.02em;
+
+  --nb-text-screen-title-size:   18px; /* documented range 17–19px */
+  --nb-text-screen-title-weight: 700;
+
+  --nb-text-label-size:            10px; /* documented range 9.5–10px, all-caps mono section labels e.g. "TARGET MONITOR" */
+  --nb-text-label-weight:          700;
+  --nb-text-label-letter-spacing:  0.14em; /* documented range .12–.16em */
+
+  --nb-text-body-size:   13px; /* documented range 12.5–13.5px */
+  --nb-text-body-weight: 500;  /* documented range 400–600 */
+
+  --nb-text-subline-size:        12px; /* documented range 11.5–12px */
+  --nb-text-subline-line-height: 1.45; /* documented range 1.4–1.5 */
+
+  --nb-text-field-value-size:   13.5px; /* documented range 13–14px, mono — W/H/offset, regex */
+  --nb-text-field-value-weight: 500;
+
+  --nb-text-data-size:        11.5px; /* documented range 11–12px, mono — log lines */
+  --nb-text-data-weight:      400;    /* documented range 400–500 */
+  --nb-text-data-line-height: 1.4;
+
+  --nb-text-wordmark-size:            12px; /* mono chrome wordmark "NOBORDERS" */
+  --nb-text-wordmark-weight:          700;
+  --nb-text-wordmark-letter-spacing:  0.16em;
+
+  --nb-text-statusbar-size: 10.5px; /* mono */
+
+  /* ── Spacing, radius, control sizing ──────────────────────────────── */
+  --nb-titlebar-height:      40px;
+  --nb-titlebar-height-log:  38px; /* Activity Log window title bar */
+  --nb-statusbar-height:     26px; /* documented range 26–28px */
+  --nb-statusbar-height-log: 28px; /* Activity Log window status bar */
+
+  --nb-radius-chrome-btn: 4px;
+  --nb-radius-pill:       6px; /* documented range 5–7px, small pills/steppers */
+  --nb-radius-input:      8px; /* inputs & buttons */
+  --nb-radius-card:       10px; /* documented range 9–10px, cards/panels */
+  --nb-radius-window:     12px;
+  --nb-radius-full:       999px; /* filter chips and toggles */
+
+  --nb-control-height-chrome-btn: 26px;
+  --nb-control-height-compact:    30px; /* compact button/field */
+  --nb-control-height-standard:   36px; /* documented range 34–36px */
+  --nb-control-height-hero-btn:   42px;
+
+  --nb-gap-button-group: 8px;
+  --nb-gap-fields:       10px;
+  --nb-gap-panes:        20px; /* documented range 16–26px */
+  --nb-pane-padding:     22px; /* documented range 20–26px */
+
+  --nb-divider-width: 1px;
+  --nb-divider-color: var(--nb-border-subtle);
+
+  /* ── Placeholder art (cover/hero striped fill — swap for real art) ── */
+  --nb-placeholder-art: repeating-linear-gradient(135deg, #1b1b23 0 8px, #16161d 8px 16px);
+  --nb-placeholder-art-hero: repeating-linear-gradient(115deg, #1b1b23 0 10px, #16161d 10px 20px);
+  --nb-placeholder-thumb-selected: repeating-linear-gradient(135deg, #22222c 0 8px, #1a1a22 8px 16px);
+  --nb-placeholder-thumb: repeating-linear-gradient(135deg, #1c1c24 0 8px, #16161d 8px 16px);
+}
