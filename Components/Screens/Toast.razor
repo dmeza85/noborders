@@ -1,0 +1,29 @@
+@namespace NoBorders.Components.Screens
+@* Screen 1g's toast, design-handoff/README.md §"1g". Static visual only —
+   Phase 2. Corner positioning here approximates ShowToast's existing GDI
+   placement (18px from the bottom-right corner) for a representative
+   screenshot; the actual auto-dismiss/fade/progress animation is
+   Phase 6.2's job when this replaces that GDI implementation. *@
+
+<div class="nb-toast">
+    <div class="nb-toast__row">
+        <div class="nb-toast__thumb"></div>
+        <div class="nb-toast__body">
+            <div class="nb-toast__status">
+                <span class="nb-toast__dot"></span>
+                <span class="nb-toast__title">@Title</span>
+            </div>
+            <div class="nb-toast__detail">@Detail</div>
+            <div class="nb-toast__undo nb-mono">Undo · Ctrl+Shift+Z</div>
+        </div>
+    </div>
+    <div class="nb-toast__progress-track">
+        <div class="nb-toast__progress-fill" style="width:@(Progress)%"></div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Borderless applied";
+    [Parameter] public string Detail { get; set; } = "Helldivers 2 → 2560×1440 on LG 27GP850";
+    [Parameter] public int Progress { get; set; } = 62;
+}

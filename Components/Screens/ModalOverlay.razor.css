@@ -9,9 +9,11 @@
 }
 
 .nb-modal-overlay__card {
-  border: 1px solid #2a2a36; /* one-off — the mock's modal-card border, distinct from --nb-border/--nb-border-strong */
+  /* border-color and background are set inline per-instance (ModalOverlay.razor
+     parameters) — 1d's generic modal and 1g's amber-tinted elevation dialog use
+     different one-off values, neither matching --nb-border/--nb-border-strong. */
+  border: 1px solid;
   border-radius: var(--nb-radius-window);
-  background: var(--nb-base);
   overflow: hidden;
   display: flex;
   flex-direction: column;

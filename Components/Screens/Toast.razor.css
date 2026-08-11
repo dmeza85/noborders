@@ -1,0 +1,74 @@
+.nb-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: 330px;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-input); /* matches the existing GDI ShowToast's RoundedRect(..., 8) */
+  background: #111116; /* one-off — doesn't match any named surface token */
+  padding: 14px 15px;
+  z-index: 200;
+}
+
+.nb-toast__row {
+  display: flex;
+  gap: 11px;
+}
+
+.nb-toast__thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--nb-radius-input);
+  background-image: var(--nb-placeholder-thumb-selected);
+  flex: none;
+}
+
+.nb-toast__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-toast__status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.nb-toast__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nb-success);
+  display: block;
+  flex: none;
+}
+
+.nb-toast__title {
+  font: 600 12.5px/1 var(--nb-font-ui);
+  color: var(--nb-text-primary);
+}
+
+.nb-toast__detail {
+  font: 400 11.5px/1.45 var(--nb-font-ui);
+  color: var(--nb-text-secondary);
+  margin-top: 5px;
+}
+
+.nb-toast__undo {
+  font-size: 10.5px;
+  color: var(--nb-accent);
+  margin-top: 8px;
+}
+
+.nb-toast__progress-track {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--nb-raised-alt);
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.nb-toast__progress-fill {
+  height: 2px;
+  background: var(--nb-accent);
+}

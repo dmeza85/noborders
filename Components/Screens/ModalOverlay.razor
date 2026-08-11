@@ -1,20 +1,23 @@
 @namespace NoBorders.Components.Screens
 @* Reusable modal backdrop + centered card — screen 1d (Add Running App)
-   is the first consumer; the elevation dialog (screen 1g, Phase 2.9) is
-   a known second one. The mock's own "dv-card" framing doesn't specify a
-   backdrop scrim (its design canvas just floats cards on the canvas
-   background), so the dim-scrim treatment here is a reasonable,
-   undocumented-but-necessary addition for an *actual* modal rather than
-   a value transcribed from the mock. Static — no dismiss-on-backdrop-click
-   wiring yet. *@
+   and screen 1g's elevation dialog (Phase 2.9) both use this. The mock's
+   own "dv-card" framing doesn't specify a backdrop scrim (its design
+   canvas just floats cards on the canvas background), so the dim-scrim
+   treatment here is a reasonable, undocumented-but-necessary addition
+   for an *actual* modal rather than a value transcribed from the mock.
+   BorderColor/Background are overridable since 1g's card uses a distinct
+   amber-tinted border and surface background, not the generic modal
+   card's values. Static — no dismiss-on-backdrop-click wiring yet. *@
 
 <div class="nb-modal-overlay">
-    <div class="nb-modal-overlay__card" style="width:@(Width)px">
+    <div class="nb-modal-overlay__card" style="width:@(Width)px;border-color:@BorderColor;background:@Background">
         @ChildContent
     </div>
 </div>
 
 @code {
     [Parameter] public int Width { get; set; } = 560;
+    [Parameter] public string BorderColor { get; set; } = "#2a2a36";
+    [Parameter] public string Background { get; set; } = "var(--nb-base)";
     [Parameter] public RenderFragment? ChildContent { get; set; }
 }
