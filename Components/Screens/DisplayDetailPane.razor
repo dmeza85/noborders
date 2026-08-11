@@ -1,8 +1,18 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
+@implements IDisposable
 @* Screen 2a's right-pane content (Display tab), design-handoff/README.md
    §"2a — Main window, Display tab".
+
+   Phase 4.1: subscribes to AppStateService.Changed directly rather than
+   relying on MainShell's own re-render to cascade down through the
+   RightPane RenderFragment — that cascade turned out NOT to reliably
+   reach this component in practice (confirmed live: selecting a different
+   rail row updated MainShell's hero/rail but left this pane showing the
+   previously-selected game's profile). Every component that reads
+   AppStateService now subscribes for itself; see MainShell.razor for the
+   same pattern.
 
    Phase 3.6: Width/Height/Offset X/Offset Y/Lock-cursor and the Result
    Preview (screen 3a's component) are wired to the selected game's real
@@ -84,6 +94,10 @@
 </div>
 
 @code {
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+    public void Dispose() => State.Changed -= OnStateChanged;
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
     private string TargetMonitorName =>

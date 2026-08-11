@@ -715,6 +715,15 @@ namespace NoBorders
         // "appended after" can't reorder what came before it either.
         private readonly ServiceProvider _blazorServices;
 
+        // Resolved once, right after _blazorServices is built (Phase 4.1) — the
+        // same singleton instance any Razor component's @inject resolves, since
+        // AppStateService is registered via AddSingleton. Held so the
+        // constructor can subscribe existing WinForms events (below) to
+        // AppStateService.RaiseChanged() without those events' own handlers
+        // needing any Blazor awareness — see AppStateService.Changed's doc
+        // comment for why MainForm, not the service, owns raising it.
+        private AppStateService _appState = null!;
+
         private ServiceProvider CreateBlazorServices()
         {
             var services = new ServiceCollection();
@@ -730,7 +739,7 @@ namespace NoBorders
             services.AddSingleton(_ => new AppStateService(
                 () => _settings, () => _selectedGame, GetOpenWindowEntries,
                 () => _monitors, () => _lblHotkeyAddStatus.Text, () => _lblHotkeyRefreshStatus.Text,
-                QueueSave, SaveConfig));
+                SelectGame, QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
 
@@ -762,6 +771,14 @@ namespace NoBorders
             // Appended after the flow above rather than a field initializer — see
             // the comment on the _blazorServices field for why.
             _blazorServices = CreateBlazorServices();
+            _appState       = _blazorServices.GetRequiredService<AppStateService>();
+
+            // Additional subscriber on top of BuildUI()'s own
+            // `+= LstGames_SelectedIndexChanged` above — that handler is
+            // completely untouched; this just also notifies Blazor once it's
+            // done, regardless of whether the selection change originated from
+            // the WinForms list or from AppStateService.SelectGame (Phase 4.1).
+            _lstGames.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2370,6 +2387,20 @@ namespace NoBorders
             e.Graphics.DrawLine(borderPen,
                 e.Bounds.X, e.Bounds.Bottom - 1,
                 e.Bounds.Right, e.Bounds.Bottom - 1);
+        }
+
+        /// <summary>
+        /// Blazor rail click's entry point (MIGRATION_PLAN.md Phase 4.1) — selects
+        /// exactly as clicking the corresponding WinForms list row would, by finding
+        /// that row and setting `SelectedIndex`, which fires the real
+        /// `LstGames_SelectedIndexChanged` below unchanged. Does not touch
+        /// `_selectedGame` directly, so there is exactly one code path that ever
+        /// assigns it, regardless of which UI triggered the selection.
+        /// </summary>
+        private void SelectGame(GameConfig game)
+        {
+            int idx = _lstGames.Items.IndexOf(game);
+            if (idx >= 0) _lstGames.SelectedIndex = idx;
         }
 
         private void LstGames_SelectedIndexChanged(object? sender, EventArgs e)

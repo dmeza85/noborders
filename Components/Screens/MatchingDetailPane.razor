@@ -2,8 +2,16 @@
 @using NoBorders.Services
 @using System.Text.RegularExpressions
 @inject AppStateService State
+@implements IDisposable
 @* Screen 5a's right-pane content (Matching tab), design-handoff/README.md
    §"5a — Main window, Matching tab".
+
+   Phase 4.1: subscribes to AppStateService.Changed directly, same reason
+   as DisplayDetailPane.razor — re-rendering only cascades reliably from
+   the component that owns the RightPane RenderFragment (MainWindowMatchingTab)
+   down through MainShell's own StateHasChanged, not automatically into
+   this component just because it happens to be nested inside that
+   fragment. See MainShell.razor for the same subscribe/unsubscribe shape.
 
    Phase 3.4: live-test list, regex validity line, and mode chips are wired
    to the real selected game's GameConfig.CompiledPattern and a real
@@ -94,6 +102,10 @@
 </div>
 
 @code {
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+    public void Dispose() => State.Changed -= OnStateChanged;
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
     // Re-enumerated on every render, same as MainShell's rail does implicitly

@@ -20,8 +20,22 @@ namespace NoBorders.Services
     ///
     /// <see cref="QueueSave"/>/<see cref="SaveNow"/> forward to MainForm's
     /// existing QueueSave()/SaveConfig() — this service never writes the config
-    /// file itself. Not exercised yet: Phase 3 (3.1–3.7) is read-only wiring;
-    /// Phase 4 wires the actual event handlers that call these.
+    /// file itself. Phase 3 (3.1–3.7) was read-only wiring; Phase 4 starts wiring
+    /// actual event handlers, beginning with <see cref="SelectGame"/> (4.1).
+    ///
+    /// <see cref="Changed"/> is the bridge that makes writes from Phase 4 onward
+    /// visible in the Razor UI at all: MainForm mutates its own fields (e.g.
+    /// <c>_selectedGame</c>) by reusing existing WinForms handler bodies — those
+    /// handlers have no idea a BlazorWebView exists and never call
+    /// `StateHasChanged()`. MainForm raises `Changed` itself immediately after
+    /// invoking one of those handlers (see the `_lstGames.SelectedIndexChanged`
+    /// subscriber added in the constructor for 4.1); components subscribe in
+    /// `OnInitialized`/unsubscribe in `Dispose` and re-render from it. This
+    /// service never raises `Changed` on its own initiative — every write method
+    /// below (`SelectGame`, and whatever Phase 4 adds after it) calls straight
+    /// into a MainForm method that both performs the mutation and raises
+    /// `Changed` itself, once, after — the DI/service layer doesn't duplicate
+    /// that decision.
     /// </summary>
     public sealed class AppStateService
     {
@@ -31,6 +45,7 @@ namespace NoBorders.Services
         private readonly Func<List<MonitorItem>> _getMonitors;
         private readonly Func<string> _getHotkeyAddStatus;
         private readonly Func<string> _getHotkeyRefreshStatus;
+        private readonly Action<GameConfig> _selectGame;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -41,6 +56,7 @@ namespace NoBorders.Services
             Func<List<MonitorItem>> getMonitors,
             Func<string> getHotkeyAddStatus,
             Func<string> getHotkeyRefreshStatus,
+            Action<GameConfig> selectGame,
             Action queueSave,
             Action saveNow)
         {
@@ -50,9 +66,20 @@ namespace NoBorders.Services
             _getMonitors            = getMonitors;
             _getHotkeyAddStatus     = getHotkeyAddStatus;
             _getHotkeyRefreshStatus = getHotkeyRefreshStatus;
+            _selectGame             = selectGame;
             _queueSave              = queueSave;
             _saveNow                = saveNow;
         }
+
+        /// <summary>
+        /// Raised after any write method here has caused MainForm state to
+        /// change, so subscribed components know to re-render. See the class
+        /// doc comment — MainForm raises this itself, this service never does.
+        /// </summary>
+        public event Action? Changed;
+
+        /// <summary>Called by MainForm, once, right after a handler it invoked has finished mutating state.</summary>
+        public void RaiseChanged() => Changed?.Invoke();
 
         /// <summary>The live AppSettings instance — same object MainForm reads/writes.</summary>
         public AppSettings Settings => _getSettings();
@@ -68,13 +95,24 @@ namespace NoBorders.Services
 
         /// <summary>
         /// MainForm's <c>_selectedGame</c> — null until the user has clicked a
-        /// rail row in the (still-live) WinForms UI or, once Phase 4.1 wires rail
-        /// clicks, in the Razor UI. Components that need *something* to display
-        /// before a selection exists fall back to <c>Games.FirstOrDefault()</c>
-        /// themselves (see MainShell.razor) rather than this service silently
-        /// picking one — selection state should read exactly as it is.
+        /// rail row, in either the WinForms list or (Phase 4.1) the Razor rail.
+        /// Components that need *something* to display before a selection exists
+        /// fall back to <c>Games.FirstOrDefault()</c> themselves (see
+        /// MainShell.razor) rather than this service silently picking one —
+        /// selection state should read exactly as it is.
         /// </summary>
         public GameConfig? SelectedGame => _getSelectedGame();
+
+        /// <summary>
+        /// Selects a game exactly as clicking its row in the WinForms games list
+        /// would (Phase 4.1) — forwards to MainForm's own lookup-by-reference
+        /// against `_lstGames.Items`/`SelectedIndex`, so the real
+        /// `LstGames_SelectedIndexChanged` handler runs unchanged and every
+        /// WinForms control it also updates (monitor combo, advanced fields,
+        /// etc.) stays in sync even though those controls aren't the visible UI
+        /// anymore — MainForm remains the single source of truth for selection.
+        /// </summary>
+        public void SelectGame(GameConfig game) => _selectGame(game);
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same
