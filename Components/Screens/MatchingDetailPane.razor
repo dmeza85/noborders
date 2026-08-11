@@ -87,7 +87,14 @@
         <div class="nb-text-label nb-matching-pane__label">EXECUTABLE</div>
         <div class="nb-matching-pane__exe nb-mono">@(string.IsNullOrEmpty(DisplayedGame?.ExePath) ? "(not recorded)" : DisplayedGame.ExePath)</div>
         <div class="nb-matching-pane__exe-caption">Used for the icon and to re-find the game after a restart.</div>
+
+        <button type="button" class="nb-btn nb-btn--outline nb-matching-pane__fetch-artwork" disabled="@(DisplayedGame == null)" @onclick="OnFetchArtwork">Fetch Artwork</button>
     </div>
+
+    @if (_showArtworkModal && DisplayedGame != null)
+    {
+        <ArtworkPickerModal Game="DisplayedGame" OnClose="() => _showArtworkModal = false" />
+    }
 
     <div class="nb-matching-pane__right">
         <div class="nb-matching-pane__test-header">
@@ -165,6 +172,18 @@
     {
         EnsureSelected();
         State.RemoveSelectedGame();
+    }
+
+    // Phase 8.3: local-only UI state, same shape as MainShell's _showAddModal
+    // (Phase 4.8) — which native affordance this replaces never existed
+    // before this migration, so opening/closing the picker is just this
+    // component's own state, not anything MainForm needs to know about.
+    private bool _showArtworkModal;
+
+    private void OnFetchArtwork()
+    {
+        EnsureSelected();
+        _showArtworkModal = true;
     }
 
     // Re-enumerated on every render, same as MainShell's rail does implicitly

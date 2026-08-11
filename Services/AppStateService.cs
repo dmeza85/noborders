@@ -76,6 +76,7 @@ namespace NoBorders.Services
         private readonly Action _restartAsAdmin;
         private readonly Func<string> _getArtworkApiKey;
         private readonly Action<string> _setArtworkApiKey;
+        private readonly Action<string, string> _applyArtwork;
 
         public AppStateService(
             Func<AppSettings> getSettings,
@@ -114,7 +115,8 @@ namespace NoBorders.Services
             Action saveNow,
             Action restartAsAdmin,
             Func<string> getArtworkApiKey,
-            Action<string> setArtworkApiKey)
+            Action<string> setArtworkApiKey,
+            Action<string, string> applyArtwork)
         {
             _getSettings              = getSettings;
             _getSelectedGame          = getSelectedGame;
@@ -153,6 +155,7 @@ namespace NoBorders.Services
             _restartAsAdmin           = restartAsAdmin;
             _getArtworkApiKey         = getArtworkApiKey;
             _setArtworkApiKey         = setArtworkApiKey;
+            _applyArtwork             = applyArtwork;
         }
 
         /// <summary>
@@ -491,5 +494,17 @@ namespace NoBorders.Services
         /// </summary>
         public string ArtworkApiKey => _getArtworkApiKey();
         public void SetArtworkApiKey(string key) => _setArtworkApiKey(key);
+
+        /// <summary>
+        /// Phase 8.3: commits fetched artwork paths onto MainForm's real
+        /// `_selectedGame` and persists — the write half of the "Fetch Artwork"
+        /// flow (Services/ArtworkService.cs does the actual network/disk work,
+        /// which is stateless I/O with nothing WinForms-specific about it, so
+        /// it's called directly from the Razor picker component; only the
+        /// "commit onto this game's config" step needs to go through MainForm,
+        /// same division as everywhere else in Phase 4). Same "no pre-existing
+        /// control to reuse" shape as SetArtworkApiKey.
+        /// </summary>
+        public void ApplyArtwork(string heroPath, string iconPath) => _applyArtwork(heroPath, iconPath);
     }
 }

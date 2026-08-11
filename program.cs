@@ -809,7 +809,8 @@ namespace NoBorders
                 g => _runningGames.Contains(g),
                 QueueSave, SaveConfig,
                 RestartAsAdmin,
-                () => _settings.SteamGridDbApiKey, SetSteamGridDbApiKey));
+                () => _settings.SteamGridDbApiKey, SetSteamGridDbApiKey,
+                ApplyArtwork));
             return services.BuildServiceProvider();
         }
 
@@ -2921,6 +2922,23 @@ namespace NoBorders
         private void SetSteamGridDbApiKey(string key)
         {
             _settings.SteamGridDbApiKey = key;
+            QueueSave();
+            _appState.RaiseChanged();
+        }
+
+        /// <summary>
+        /// Phase 8.3: writes fetched artwork paths onto the real, currently
+        /// selected game and persists — same direct-mutation shape as
+        /// SetSteamGridDbApiKey above. A no-op if nothing is genuinely selected
+        /// (the Fetch Artwork picker's caller already runs EnsureSelected()
+        /// first, same as every other write action since Phase 4.3, but this
+        /// guards independently rather than trusting the caller).
+        /// </summary>
+        private void ApplyArtwork(string heroPath, string iconPath)
+        {
+            if (_selectedGame == null) return;
+            _selectedGame.HeroImagePath = heroPath;
+            _selectedGame.IconImagePath = iconPath;
             QueueSave();
             _appState.RaiseChanged();
         }

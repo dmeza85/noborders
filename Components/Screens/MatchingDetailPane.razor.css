@@ -133,6 +133,14 @@
   color: var(--nb-text-secondary);
 }
 
+.nb-matching-pane__fetch-artwork {
+  height: var(--nb-control-height-compact-btn);
+  padding: 0 14px;
+  font-size: 12px;
+  line-height: 32px;
+  margin-top: 12px;
+}
+
 /* ── Right column — live test ────────────────────────────────────── */
 .nb-matching-pane__right {
   flex: 1;

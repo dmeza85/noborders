@@ -1,0 +1,150 @@
+@namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
+@inject ArtworkService Artwork
+@* Phase 8.3 (MIGRATION_PLAN.md) — no mock precedent (the design bundle
+   predates Phase 8), so this is styled off AddRunningAppModal.razor's own
+   established modal-row language rather than invented from scratch.
+
+   Searches SteamGridDB for Game.GameName on open (never auto-applies —
+   the same "don't fabricate a match" principle as the Matching tab's real
+   regex testing: an ambiguous title like "Portal" could resolve to a dozen
+   different real SteamGridDB entries, so the user always picks). "Use this
+   game's own icon instead" is always available regardless of search
+   outcome — the fully offline ExtractExeIcon fallback, for when there's no
+   API key, no match, no network, or the user just doesn't want to wait on
+   a search. Downloading is the one truly async step (a real network
+   round-trip), so this is the one modal in the app with a loading state. *@
+
+<ModalOverlay Width="480">
+    <div class="nb-art-picker__header">
+        <div class="nb-art-picker__title">Fetch artwork</div>
+        <div class="nb-art-picker__subline">@SublineText</div>
+    </div>
+
+    <div class="nb-art-picker__body">
+        @if (_downloading)
+        {
+            <div class="nb-art-picker__status">Downloading art…</div>
+        }
+        else if (_search == null)
+        {
+            <div class="nb-art-picker__status">Searching…</div>
+        }
+        else if (_search.Status == ArtworkFetchStatus.NoApiKey)
+        {
+            <div class="nb-art-picker__status">
+                No SteamGridDB API key set. Add one for free in
+                <span class="nb-mono">Settings → Diagnostics</span>, or use this
+                game's own icon below.
+            </div>
+        }
+        else if (_search.Status == ArtworkFetchStatus.NoMatch)
+        {
+            <div class="nb-art-picker__status">No SteamGridDB matches found for "@Game.GameName".</div>
+        }
+        else if (_search.Status == ArtworkFetchStatus.NetworkError)
+        {
+            <div class="nb-art-picker__status nb-art-picker__status--error">Couldn't reach SteamGridDB@(string.IsNullOrEmpty(_search.Error) ? "." : $": {_search.Error}")</div>
+        }
+        else
+        {
+            <div class="nb-art-picker__rows">
+                @foreach (var c in _search.Candidates)
+                {
+                    bool selected = _selected?.SteamGridDbId == c.SteamGridDbId;
+                    <div class="nb-art-picker__row @(selected ? "nb-art-picker__row--selected" : "")" @onclick="() => _selected = c">
+                        <div class="nb-art-picker__thumb @(selected ? "nb-art-picker__thumb--selected" : "")"></div>
+                        <div class="nb-art-picker__name @(selected ? "nb-art-picker__name--selected" : "")">@c.Name</div>
+                        @if (selected)
+                        {
+                            <div class="nb-art-picker__check">✓</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_error != null)
+        {
+            <div class="nb-art-picker__status nb-art-picker__status--error">@_error</div>
+        }
+    </div>
+
+    <div class="nb-art-picker__footer">
+        <div class="nb-art-picker__fallback" @onclick="UseExeIconOnly">Use this game's own icon instead</div>
+        <button type="button" class="nb-btn nb-btn--outline nb-art-picker__cancel" @onclick="Cancel" disabled="@_downloading">Cancel</button>
+        <button type="button" class="nb-btn nb-btn--primary nb-art-picker__confirm" disabled="@(_selected == null || _downloading)" @onclick="ConfirmSelected">Fetch Artwork</button>
+    </div>
+</ModalOverlay>
+
+@code {
+    [Parameter] public GameConfig Game { get; set; } = null!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ArtworkSearchResult? _search;
+    private ArtworkCandidate? _selected;
+    private bool _downloading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _search = await Artwork.SearchAsync(Game.GameName);
+    }
+
+    private string Slug => string.IsNullOrEmpty(Game.ExePath) ? Game.GameName : Game.ExePath;
+
+    private string SublineText
+    {
+        get
+        {
+            if (_downloading) return "Downloading the selected art…";
+            if (_search == null) return $"Searching SteamGridDB for \"{Game.GameName}\"…";
+            return _search.Status switch
+            {
+                ArtworkFetchStatus.Success => "Pick the closest match, or use the offline icon below.",
+                _ => "SteamGridDB search finished.",
+            };
+        }
+    }
+
+    private async Task Cancel() => await OnClose.InvokeAsync();
+
+    private async Task ConfirmSelected()
+    {
+        if (_selected is not { } candidate || _downloading) return;
+        _downloading = true;
+        _error = null;
+        StateHasChanged();
+
+        var result = await Artwork.DownloadAsync(candidate.SteamGridDbId, Slug);
+        _downloading = false;
+
+        if (result.Status != ArtworkFetchStatus.Success || (result.HeroPath == null && result.IconPath == null))
+        {
+            _error = result.Error ?? "That entry has no usable art uploaded — try a different match or use the offline icon.";
+            StateHasChanged();
+            return;
+        }
+
+        // A candidate missing one of the two art types (e.g. a hero but no
+        // icon uploaded) shouldn't blank out whatever this game already had
+        // for the other slot — only overwrite the slot that actually got a
+        // new result.
+        State.ApplyArtwork(result.HeroPath ?? Game.HeroImagePath, result.IconPath ?? Game.IconImagePath);
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task UseExeIconOnly()
+    {
+        string? iconPath = Artwork.ExtractExeIcon(Game.ExePath, Slug);
+        if (iconPath == null)
+        {
+            _error = "Couldn't read an icon from this game's .exe.";
+            StateHasChanged();
+            return;
+        }
+        State.ApplyArtwork(Game.HeroImagePath, iconPath);
+        await OnClose.InvokeAsync();
+    }
+}
