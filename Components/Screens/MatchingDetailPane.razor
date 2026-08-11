@@ -42,8 +42,15 @@
    still shows DisplayedGame?.GameName (the Phase 3.3 display-only
    fallback), since the buffer hasn't been populated for anything yet.
 
-   Still static: Save Changes/Undo/Remove Game (Phase 4.6/4.13/4.7),
-   Rescan, and "Use Title Of Selected" (net-new write actions). *@
+   Phase 4.6: Save Changes calls AppStateService.SaveGameChanges, shared with
+   DisplayDetailPane's own Save Changes button (both forward to MainForm's
+   single BtnSaveGame_Click, matching the README's "both tabs share Save
+   Changes / Undo"). Commits PendingDisplayName and the pending Match
+   Pattern text (still DisplayedGame.RegexPattern today — no editable regex
+   input exists yet, so there's nothing to diverge from) onto the game.
+
+   Still static: Undo/Remove Game (Phase 4.13/4.7), Rescan, and "Use Title
+   Of Selected" (net-new write actions). *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
@@ -105,7 +112,7 @@
         </div>
 
         <div class="nb-matching-pane__actions">
-            <button type="button" class="nb-btn nb-btn--primary">Save Changes</button>
+            <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveChanges">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
             <button type="button" class="nb-btn nb-btn--danger-outline">Remove Game</button>
         </div>
@@ -134,6 +141,12 @@
     {
         EnsureSelected();
         State.FetchName();
+    }
+
+    private void OnSaveChanges()
+    {
+        EnsureSelected();
+        State.SaveGameChanges();
     }
 
     // Re-enumerated on every render, same as MainShell's rail does implicitly

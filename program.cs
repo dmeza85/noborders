@@ -743,6 +743,7 @@ namespace NoBorders
                 () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
                 ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
                 () => _txtGameName.Text, FetchNameForSelectedGame,
+                SaveGameChanges,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -781,12 +782,13 @@ namespace NoBorders
             // subscriptions above — those handlers are completely untouched;
             // these just also notify Blazor once each has finished, regardless
             // of whether the change originated from the WinForms control or
-            // from the corresponding AppStateService method (Phase 4.1-4.5).
+            // from the corresponding AppStateService method (Phase 4.1-4.6).
             _lstGames.SelectedIndexChanged   += (s, e) => _appState.RaiseChanged();
             _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
             _chkActive.CheckedChanged        += (s, e) => _appState.RaiseChanged();
             _btnLoadDefaults.Click           += (s, e) => _appState.RaiseChanged();
             _btnFetchName.Click              += (s, e) => _appState.RaiseChanged();
+            _btnSaveGame.Click               += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2617,6 +2619,17 @@ namespace NoBorders
             _lstGames.SelectedIndex = idx;
             ShowStatus($"Saved changes for {_selectedGame.GameName}.");
         }
+
+        /// <summary>
+        /// Blazor "Save Changes" buttons' entry point (MIGRATION_PLAN.md Phase
+        /// 4.6) — shared by both the Display and Matching tabs, per the README
+        /// ("both tabs share Save Changes / Undo"), same as the WinForms UI's own
+        /// two Save Changes buttons (`_btnSaveGame`/`_btnSaveAdvanced`) both being
+        /// wired to the same `BtnSaveGame_Click`. Calls `PerformClick()` on
+        /// `_btnSaveGame`, so the real, unchanged handler runs regardless of which
+        /// Blazor tab is showing.
+        /// </summary>
+        private void SaveGameChanges() => _btnSaveGame.PerformClick();
 
         private void BtnDeleteGame_Click(object? sender, EventArgs e)
         {

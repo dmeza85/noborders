@@ -53,6 +53,7 @@ namespace NoBorders.Services
         private readonly Action _loadMonitorDefaults;
         private readonly Func<string> _getPendingDisplayName;
         private readonly Action _fetchName;
+        private readonly Action _saveGameChanges;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -71,6 +72,7 @@ namespace NoBorders.Services
             Action loadMonitorDefaults,
             Func<string> getPendingDisplayName,
             Action fetchName,
+            Action saveGameChanges,
             Action queueSave,
             Action saveNow)
         {
@@ -86,6 +88,7 @@ namespace NoBorders.Services
             _loadMonitorDefaults    = loadMonitorDefaults;
             _getPendingDisplayName  = getPendingDisplayName;
             _fetchName              = fetchName;
+            _saveGameChanges        = saveGameChanges;
             _selectMonitorScope     = selectMonitorScope;
             _toggleGameActive       = toggleGameActive;
             _queueSave              = queueSave;
@@ -204,6 +207,18 @@ namespace NoBorders.Services
         /// currently running.
         /// </summary>
         public void FetchName() => _fetchName();
+
+        /// <summary>
+        /// Commits the pending edits — <see cref="PendingDisplayName"/>, the
+        /// match pattern, and the active scope's numeric/lock-cursor fields —
+        /// onto the selected game and persists them, exactly as clicking either
+        /// "Save Changes" button would (Phase 4.6; the README notes both the
+        /// Display and Matching tabs share one Save Changes/Undo). Forwards to
+        /// MainForm's `PerformClick()` on `_btnSaveGame`, which the real
+        /// `BtnSaveGame_Click` is wired to — the same handler the WinForms UI's
+        /// *other* Save Changes button (`_btnSaveAdvanced`) already shared.
+        /// </summary>
+        public void SaveGameChanges() => _saveGameChanges();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

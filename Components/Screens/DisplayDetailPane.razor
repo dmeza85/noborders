@@ -48,8 +48,18 @@
    which forwards to MainForm's real BtnLoadDefaults_Click via PerformClick() —
    loads the active scope's saved MonitorDefaults entry onto the selected
    game and immediately persists/enforces it, exactly as the WinForms button
-   always has. Save Changes/Undo/Center On Monitor remain static (Phase
-   4.6/4.13/6 respectively). *@
+   always has.
+
+   Phase 4.6: Save Changes calls AppStateService.SaveGameChanges, shared with
+   MatchingDetailPane's own Save Changes button (README: "both tabs share
+   Save Changes / Undo"). Width/Height/Offset/Lock-cursor here are still
+   read-only display (SteppedNumberField has no click handling yet — the
+   README's ±1/Shift±10/Ctrl±100 stepper interaction isn't itemized anywhere
+   in Phase 4 and is being treated as out of this migration's scope, not an
+   oversight), so today Save Changes mainly re-commits the pending display
+   name (see MatchingDetailPane) and re-persists whatever profile is already
+   loaded — a real, working round-trip, just not yet a way to change the
+   numbers from Blazor. Undo/Center On Monitor remain static (Phase 4.13/6). *@
 
 <div class="nb-display-pane">
     <div class="nb-display-pane__left">
@@ -115,7 +125,7 @@
         </div>
 
         <div class="nb-display-pane__actions">
-            <button type="button" class="nb-btn nb-btn--primary">Save Changes</button>
+            <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveChanges">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
             <button type="button" class="nb-btn nb-btn--outline" @onclick="OnLoadMonitorDefaults">Load Monitor Defaults</button>
         </div>
@@ -157,6 +167,12 @@
     {
         EnsureSelected();
         State.LoadMonitorDefaults();
+    }
+
+    private void OnSaveChanges()
+    {
+        EnsureSelected();
+        State.SaveGameChanges();
     }
 
     // Same fallback chain as MainForm.GetEffectiveProfile(): the game's own
