@@ -66,11 +66,18 @@
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  background: var(--nb-accent);
-  color: var(--nb-on-accent-fg);
-  font: 700 11px/18px var(--nb-font-ui);
+  border: 1px solid var(--nb-border-strong-alt);
+  font: 700 11px/16px var(--nb-font-ui);
   text-align: center;
   flex: none;
+}
+
+/* Mock's one static sample was always checked — ConstrainMouse is real
+   per-game/per-monitor data (Phase 3.6), so both states need to render. */
+.nb-display-pane__check-box--checked {
+  background: var(--nb-accent);
+  border-color: var(--nb-accent);
+  color: var(--nb-on-accent-fg);
 }
 
 .nb-display-pane__check > span:last-child {
@@ -81,6 +88,48 @@
 .nb-display-pane__right {
   flex: 1;
   min-width: 0;
+}
+
+/* Not in the mock's static Phase 2 shell — screen 3a's coverage %/
+   fits-on-screen summary line, first built here in Phase 3.6 since it
+   has nothing real to compute against until the profile/monitor data
+   exists. Same visual shape as MatchingDetailPane's summary bar. */
+.nb-display-pane__summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--nb-radius-input);
+  background: var(--nb-chrome);
+  border: 1px solid var(--nb-border-subtle);
+}
+
+.nb-display-pane__summary-text {
+  font-size: 11px;
+  line-height: 1.6;
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-display-pane__summary-text--ok {
+  color: var(--nb-success);
+}
+
+.nb-display-pane__summary-text--warning {
+  color: var(--nb-warning);
+}
+
+.nb-display-pane__summary-text--neutral {
+  color: var(--nb-text-secondary);
+}
+
+.nb-display-pane__center-link {
+  flex: none;
+  font: 500 11px/1 var(--nb-font-mono);
+  color: var(--nb-accent-text);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .nb-display-pane__actions {

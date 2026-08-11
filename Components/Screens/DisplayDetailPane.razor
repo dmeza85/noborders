@@ -1,51 +1,80 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
 @* Screen 2a's right-pane content (Display tab), design-handoff/README.md
-   §"2a — Main window, Display tab". Static/hardcoded sample data — Phase 2
-   is visual parity only, no bindings, nothing here is interactive yet. *@
+   §"2a — Main window, Display tab".
+
+   Phase 3.6: Width/Height/Offset X/Offset Y/Lock-cursor and the Result
+   Preview (screen 3a's component) are wired to the selected game's real
+   resolved profile, using the exact same fallback chain as
+   MainForm.GetEffectiveProfile()/BtnLoadDefaults_Click — the game's own
+   saved Profiles[monitor] if any, else that monitor's MonitorDefaults
+   entry, else GameDisplayProfile's own 1920×1080 schema default. No
+   monitor-scope dropdown is wired yet (Phase 4.2), so — same display-only-
+   fallback pattern as MainShell.DisplayedGame — TargetMonitorName picks
+   the game's first saved profile's monitor, else the primary connected
+   monitor, else the first known monitor name.
+
+   3a's coverage %/fits-on-screen summary line (`w*h / mw*mh`, per the
+   README's implementation note) didn't exist as static UI from Phase 2 —
+   this is the first place it's built, since the math has nothing real to
+   compute against until now. Coverage needs the monitor's actual physical
+   resolution, which — like the Settings > Monitors page's saved-
+   disconnected cards (Phase 3.5) — is only knowable while that monitor is
+   currently connected (AppStateService.Monitors); a saved profile for a
+   now-unplugged monitor honestly shows "monitor not connected" instead of
+   a fabricated percentage. Save Changes/Undo/Load Monitor Defaults/Center
+   On Monitor remain static (Phase 4/6 — all write actions). *@
 
 <div class="nb-display-pane">
     <div class="nb-display-pane__left">
         <div class="nb-text-label nb-display-pane__label">TARGET MONITOR</div>
         <div class="nb-display-pane__select">
-            <span>@TargetMonitor</span>
+            <span>@(string.IsNullOrEmpty(TargetMonitorName) ? "No monitor" : TargetMonitorName)</span>
             <span class="nb-display-pane__select-caret">▾</span>
         </div>
 
         <div class="nb-display-pane__row">
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">WIDTH</div>
-                <SteppedNumberField Value="@Width" />
+                <SteppedNumberField Value="@DisplayedProfile.Width" />
             </div>
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">HEIGHT</div>
-                <SteppedNumberField Value="@Height" />
+                <SteppedNumberField Value="@DisplayedProfile.Height" />
             </div>
         </div>
 
         <div class="nb-display-pane__row nb-display-pane__row--offsets">
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">OFFSET X</div>
-                <SteppedNumberField Value="@OffsetX" BorderSubtle="true" />
+                <SteppedNumberField Value="@DisplayedProfile.OffsetX" BorderSubtle="true" />
             </div>
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">OFFSET Y</div>
-                <SteppedNumberField Value="@OffsetY" BorderSubtle="true" />
+                <SteppedNumberField Value="@DisplayedProfile.OffsetY" BorderSubtle="true" />
             </div>
         </div>
 
         <div class="nb-text-subline nb-display-pane__hint">Arrows step by 1 px · hold Shift for 10 · Ctrl for 100</div>
 
         <label class="nb-display-pane__check">
-            <span class="nb-display-pane__check-box">✓</span>
+            <span class="nb-display-pane__check-box @(DisplayedProfile.ConstrainMouse ? "nb-display-pane__check-box--checked" : "")">@(DisplayedProfile.ConstrainMouse ? "✓" : "")</span>
             <span>Lock cursor to window bounds</span>
         </label>
     </div>
 
     <div class="nb-display-pane__right">
-        <ResultPreview MonitorWidth="Width" MonitorHeight="Height"
-                       WindowWidth="Width" WindowHeight="Height"
-                       OffsetX="OffsetX" OffsetY="OffsetY"
+        <ResultPreview MonitorWidth="PreviewMonitorWidth" MonitorHeight="PreviewMonitorHeight"
+                       WindowWidth="DisplayedProfile.Width" WindowHeight="DisplayedProfile.Height"
+                       OffsetX="DisplayedProfile.OffsetX" OffsetY="DisplayedProfile.OffsetY"
                        Caption="@PreviewCaption" />
+
+        <div class="nb-display-pane__summary">
+            <div class="nb-display-pane__summary-text nb-mono nb-display-pane__summary-text--@SummaryClass()">@SummaryText()</div>
+            <div class="nb-display-pane__center-link nb-mono">Center On Monitor</div>
+        </div>
+
         <div class="nb-display-pane__actions">
             <button type="button" class="nb-btn nb-btn--primary">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
@@ -55,10 +84,87 @@
 </div>
 
 @code {
-    private readonly string TargetMonitor = "LG 27GP850";
-    private readonly int Width = 2560;
-    private readonly int Height = 1440;
-    private readonly int OffsetX = 0;
-    private readonly int OffsetY = 0;
-    private readonly string PreviewCaption = "2560×1440 @ 0,0 — full coverage";
+    private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
+
+    private string TargetMonitorName =>
+        DisplayedGame?.Profiles.Keys.FirstOrDefault()
+        ?? (State.Monitors.FirstOrDefault(m => m.Primary) ?? State.Monitors.FirstOrDefault())?.ID
+        ?? State.KnownMonitors.FirstOrDefault()
+        ?? string.Empty;
+
+    // Same fallback chain as MainForm.GetEffectiveProfile(): the game's own
+    // saved profile for this monitor, else that monitor's saved default,
+    // else GameDisplayProfile's own schema default.
+    private GameDisplayProfile DisplayedProfile
+    {
+        get
+        {
+            if (DisplayedGame != null && !string.IsNullOrEmpty(TargetMonitorName)
+                && DisplayedGame.Profiles.TryGetValue(TargetMonitorName, out var gp))
+                return gp;
+            if (!string.IsNullOrEmpty(TargetMonitorName) && State.MonitorDefaults.TryGetValue(TargetMonitorName, out var def))
+                return def;
+            return new GameDisplayProfile();
+        }
+    }
+
+    // Only known while the target monitor is actually connected — a saved
+    // profile for an unplugged monitor has no physical resolution on file.
+    private MonitorItem? TargetMonitorConnected =>
+        State.Monitors.FirstOrDefault(m => m.ID == TargetMonitorName);
+
+    private int PreviewMonitorWidth  => TargetMonitorConnected?.Width  ?? DisplayedProfile.Width;
+    private int PreviewMonitorHeight => TargetMonitorConnected?.Height ?? DisplayedProfile.Height;
+
+    private string PreviewCaption
+    {
+        get
+        {
+            var p = DisplayedProfile;
+            bool fullCoverage = p.OffsetX == 0 && p.OffsetY == 0
+                && p.Width == PreviewMonitorWidth && p.Height == PreviewMonitorHeight;
+            string core = $"{p.Width}×{p.Height} @ {p.OffsetX},{p.OffsetY}";
+            return fullCoverage ? $"{core} — full coverage" : core;
+        }
+    }
+
+    // README's implementation note: "percentage is area coverage (w*h / mw*mh)".
+    private int? CoveragePercent
+    {
+        get
+        {
+            var m = TargetMonitorConnected;
+            if (m == null || m.Width <= 0 || m.Height <= 0) return null;
+            var p = DisplayedProfile;
+            return (int)Math.Round((double)(p.Width * p.Height) / (m.Width * m.Height) * 100);
+        }
+    }
+
+    // README: "'fits on screen' flips to a warning when offset + size exceeds monitor bounds".
+    private bool? FitsOnScreen
+    {
+        get
+        {
+            var m = TargetMonitorConnected;
+            if (m == null) return null;
+            var p = DisplayedProfile;
+            return p.OffsetX >= 0 && p.OffsetY >= 0
+                && p.OffsetX + p.Width <= m.Width
+                && p.OffsetY + p.Height <= m.Height;
+        }
+    }
+
+    private string SummaryClass() =>
+        DisplayedGame == null || CoveragePercent == null ? "neutral" : (FitsOnScreen == true ? "ok" : "warning");
+
+    private string SummaryText()
+    {
+        if (DisplayedGame == null) return "no game selected";
+        if (string.IsNullOrEmpty(TargetMonitorName)) return "no monitor available";
+        var p = DisplayedProfile;
+        string core = $"{p.Width}×{p.Height} @ {p.OffsetX},{p.OffsetY}";
+        if (CoveragePercent is not int pct) return $"{core} — {TargetMonitorName} not connected, coverage unknown";
+        string fit = FitsOnScreen == true ? "fits on screen" : "out of bounds";
+        return $"{core} — {pct}% of {TargetMonitorName} · {fit}";
+    }
 }
