@@ -51,6 +51,8 @@ namespace NoBorders.Services
         private readonly Action<string> _selectMonitorScope;
         private readonly Action _toggleGameActive;
         private readonly Action _loadMonitorDefaults;
+        private readonly Func<string> _getPendingDisplayName;
+        private readonly Action _fetchName;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -67,6 +69,8 @@ namespace NoBorders.Services
             Action<string> selectMonitorScope,
             Action toggleGameActive,
             Action loadMonitorDefaults,
+            Func<string> getPendingDisplayName,
+            Action fetchName,
             Action queueSave,
             Action saveNow)
         {
@@ -80,6 +84,8 @@ namespace NoBorders.Services
             _getMonitorOptions      = getMonitorOptions;
             _getActiveScope         = getActiveScope;
             _loadMonitorDefaults    = loadMonitorDefaults;
+            _getPendingDisplayName  = getPendingDisplayName;
+            _fetchName              = fetchName;
             _selectMonitorScope     = selectMonitorScope;
             _toggleGameActive       = toggleGameActive;
             _queueSave              = queueSave;
@@ -175,6 +181,29 @@ namespace NoBorders.Services
         /// no saved default for the active scope.
         /// </summary>
         public void LoadMonitorDefaults() => _loadMonitorDefaults();
+
+        /// <summary>
+        /// MainForm's `_txtGameName.Text` — the pending display-name edit buffer,
+        /// not `GameConfig.GameName` directly (Phase 4.5). Kept in sync with the
+        /// selected game's real name on selection (`LstGames_SelectedIndexChanged`),
+        /// but can diverge from it once <see cref="FetchName"/> fills it with a
+        /// freshly-fetched window title; only committed to `GameConfig.GameName`
+        /// by Save Changes (Phase 4.6). Components should prefer this over
+        /// `SelectedGame.GameName` once a game is actually selected, so a fetch
+        /// is visible before it's saved.
+        /// </summary>
+        public string PendingDisplayName => _getPendingDisplayName();
+
+        /// <summary>
+        /// Fetches the display name from the selected game's currently-running
+        /// window, exactly as clicking the ↺ button would (Phase 4.5) — forwards
+        /// to MainForm's `PerformClick()` on the real fetch button, so the real,
+        /// unchanged `BtnFetchName_Click` runs. Only fills
+        /// <see cref="PendingDisplayName"/>; does not persist anything (that's
+        /// Save Changes' job). No-op (with a status message) if the game isn't
+        /// currently running.
+        /// </summary>
+        public void FetchName() => _fetchName();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

@@ -31,15 +31,26 @@
    Title" stays present (the mock's intent) but inactive, since it isn't
    real functionality yet, not invented here.
 
-   Still static: Save Changes/Undo/Remove Game (Phase 4), the fetch-name
-   button, Rescan, and "Use Title Of Selected" (all write actions/Phase 4). *@
+   Phase 4.5: the ↺ fetch-name button calls AppStateService.FetchName, which
+   forwards to MainForm's real BtnFetchName_Click via PerformClick() — it
+   only fills the WinForms pending-edit buffer (_txtGameName.Text), not
+   GameConfig.GameName directly (that's Save Changes' job, Phase 4.6). So
+   once a game is really selected, DISPLAY NAME shows
+   AppStateService.PendingDisplayName (that buffer) instead of
+   DisplayedGame.GameName directly — otherwise a successful fetch would be
+   invisible until some later save/reload. Before any real selection,
+   still shows DisplayedGame?.GameName (the Phase 3.3 display-only
+   fallback), since the buffer hasn't been populated for anything yet.
+
+   Still static: Save Changes/Undo/Remove Game (Phase 4.6/4.13/4.7),
+   Rescan, and "Use Title Of Selected" (net-new write actions). *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
         <div class="nb-text-label nb-matching-pane__label">DISPLAY NAME</div>
         <div class="nb-matching-pane__name-row">
-            <div class="nb-matching-pane__name-field">@(DisplayedGame?.GameName ?? "")</div>
-            <button type="button" class="nb-matching-pane__fetch-btn" title="Fetch name from the running window">↺</button>
+            <div class="nb-matching-pane__name-field">@DisplayName</div>
+            <button type="button" class="nb-matching-pane__fetch-btn" title="Fetch name from the running window" @onclick="OnFetchName">↺</button>
         </div>
 
         <div class="nb-text-label nb-matching-pane__label">MATCH PATTERN</div>
@@ -107,6 +118,23 @@
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
+
+    // Prefer the live pending-edit buffer once a real selection exists, so a
+    // successful fetch shows up immediately (see the doc comment above).
+    private string DisplayName =>
+        State.SelectedGame != null ? State.PendingDisplayName : (DisplayedGame?.GameName ?? "");
+
+    private void EnsureSelected()
+    {
+        if (State.SelectedGame == null && DisplayedGame != null)
+            State.SelectGame(DisplayedGame);
+    }
+
+    private void OnFetchName()
+    {
+        EnsureSelected();
+        State.FetchName();
+    }
 
     // Re-enumerated on every render, same as MainShell's rail does implicitly
     // via State.Games — the process list can change between renders and

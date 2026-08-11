@@ -742,6 +742,7 @@ namespace NoBorders
                 SelectGame,
                 () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
                 ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
+                () => _txtGameName.Text, FetchNameForSelectedGame,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -780,11 +781,12 @@ namespace NoBorders
             // subscriptions above — those handlers are completely untouched;
             // these just also notify Blazor once each has finished, regardless
             // of whether the change originated from the WinForms control or
-            // from the corresponding AppStateService method (Phase 4.1-4.4).
+            // from the corresponding AppStateService method (Phase 4.1-4.5).
             _lstGames.SelectedIndexChanged   += (s, e) => _appState.RaiseChanged();
             _cmbMonitor.SelectedIndexChanged += (s, e) => _appState.RaiseChanged();
             _chkActive.CheckedChanged        += (s, e) => _appState.RaiseChanged();
             _btnLoadDefaults.Click           += (s, e) => _appState.RaiseChanged();
+            _btnFetchName.Click              += (s, e) => _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -2592,6 +2594,14 @@ namespace NoBorders
                 ShowStatus("Game doesn't appear to be running — launch it first.");
             }
         }
+
+        /// <summary>
+        /// Blazor fetch-name (↺) button's entry point (MIGRATION_PLAN.md Phase 4.5)
+        /// — calls `PerformClick()`, so the real, unchanged `BtnFetchName_Click`
+        /// above runs (which only fills `_txtGameName.Text`; committing it to
+        /// `_selectedGame.GameName` is Save Changes' job, Phase 4.6).
+        /// </summary>
+        private void FetchNameForSelectedGame() => _btnFetchName.PerformClick();
 
         private void BtnSaveGame_Click(object? sender, EventArgs e)
         {
