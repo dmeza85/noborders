@@ -1,67 +1,113 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
+@implements IDisposable
 @* Screen 1f — Settings: Hotkeys & Behaviour. The mock shows both sections
    on one page with "Hotkeys" active in the nav; "Behaviour" is a separate
    nav item but no distinct mock exists for it, so SettingsView.razor
    routes both nav states to this same page (see its doc comment).
 
    Phase 3.5: both binding rows and all three Behaviour toggles are wired to
-   real data. The mock's one row shows a live "capturing" demo state to
-   document what that state looks like, but nothing is actually capturing
-   here (Rebind's click handler is Phase 4/6 territory) — showing a
-   permanently-stuck capture card would misrepresent real state, so both
-   rows render in the resting style, with the real HotkeyConfig combo
-   (AppSettings.HotkeyAddApp/HotkeyRefreshApp — MainForm's actual binding
-   for Ctrl+Shift+A / Ctrl+Shift+R by default, not the mock's Alt+F11
-   sample) and the real registration status text as last set on
+   real data — the real HotkeyConfig combo (AppSettings.HotkeyAddApp/
+   HotkeyRefreshApp) and the real registration status text as last set on
    MainForm's own status labels by TryRegisterHotkey — a read of the
    global-hotkey system's existing output, since that system itself is
-   frozen (MIGRATION_PLAN.md) and not touched here. Rebind stays static. *@
+   frozen (MIGRATION_PLAN.md) and not touched by this page.
+
+   Phase 4.11: Rebind calls AppStateService.ToggleHotkeyAddCapture/
+   ToggleHotkeyRefreshCapture, which forward to MainForm's real toggle
+   logic (begins or cancels a capture session via the frozen
+   `_capturingHotkeyId` state machine — that machine's own decisions are
+   untouched, only its outcome is now also raised as AppStateService.Changed
+   so this page re-renders from it). While capturing, the row switches to
+   the mock's "capturing" visual, but — since the state machine tracks only
+   "am I capturing" and "what got captured", not "which modifiers are
+   currently physically held before the final key" — this doesn't attempt
+   the mock's live modifier-chip lighting (Ctrl/Shift lit progressively);
+   that data doesn't exist without changing the frozen capture logic, so a
+   single honest "Listening…" slot stands in for it rather than fabricating
+   chip state. The actual key combo is captured by MainForm's frozen
+   `CaptureHotkey` — a `KeyDown` handler on the real WinForms textbox.
+   `BeginHotkeyCapture`'s own `.Focus()` call needed a real fix to work from
+   here (see its doc comment in program.cs: a synchronous `Focus()` was
+   silently overridden by the WebView2 Chromium widget re-asserting its own
+   OS focus right after the click, confirmed live via `GetGUIThreadInfo`;
+   deferring it through `BeginInvoke` fixed it). Esc-to-cancel and
+   Backspace/Delete-to-clear both come free from that same handler. *@
 
 <div class="nb-hotkeys-page__title">Global hotkeys</div>
 <div class="nb-hotkeys-page__subline">Work while a game has focus. Click a binding, then press your combo.</div>
 
-<div class="nb-hotkeys-page__binding">
-    <div class="nb-hotkeys-page__binding-info">
-        <div class="nb-hotkeys-page__binding-name nb-hotkeys-page__binding-name--resting">Add focused app</div>
-        <div class="nb-hotkeys-page__status nb-hotkeys-page__status--@StatusClass(State.HotkeyAddStatusText)">
-            <span class="nb-hotkeys-page__status-dot"></span>
-            <span class="nb-mono">@State.HotkeyAddStatusText</span>
+<div class="nb-hotkeys-page__binding @(State.IsCapturingHotkeyAdd ? "nb-hotkeys-page__binding--capturing" : "")">
+    @if (State.IsCapturingHotkeyAdd)
+    {
+        <div class="nb-hotkeys-page__binding-info">
+            <div class="nb-hotkeys-page__binding-name">Add focused app</div>
+            <div class="nb-hotkeys-page__binding-sub">Listening… press a key combination. Esc to cancel.</div>
         </div>
-    </div>
-    <div class="nb-hotkeys-page__combo">
-        @foreach (var (part, isLast) in WithLast(ComboParts(State.HotkeyAddApp)))
-        {
-            <KeyCap>@part</KeyCap>
-            @if (!isLast)
+        <div class="nb-hotkeys-page__combo">
+            <div class="nb-hotkeys-page__capture-slot"></div>
+        </div>
+    }
+    else
+    {
+        <div class="nb-hotkeys-page__binding-info">
+            <div class="nb-hotkeys-page__binding-name nb-hotkeys-page__binding-name--resting">Add focused app</div>
+            <div class="nb-hotkeys-page__status nb-hotkeys-page__status--@StatusClass(State.HotkeyAddStatusText)">
+                <span class="nb-hotkeys-page__status-dot"></span>
+                <span class="nb-mono">@State.HotkeyAddStatusText</span>
+            </div>
+        </div>
+        <div class="nb-hotkeys-page__combo">
+            @foreach (var (part, isLast) in WithLast(ComboParts(State.HotkeyAddApp)))
             {
-                <span class="nb-hotkeys-page__plus">+</span>
+                <KeyCap>@part</KeyCap>
+                @if (!isLast)
+                {
+                    <span class="nb-hotkeys-page__plus">+</span>
+                }
             }
-        }
-    </div>
-    <button type="button" class="nb-hotkeys-page__rebind">Rebind</button>
+        </div>
+    }
+    <button type="button" class="nb-hotkeys-page__rebind" @onclick="() => State.ToggleHotkeyAddCapture()">
+        @(State.IsCapturingHotkeyAdd ? "Cancel" : "Rebind")
+    </button>
 </div>
 
-<div class="nb-hotkeys-page__binding">
-    <div class="nb-hotkeys-page__binding-info">
-        <div class="nb-hotkeys-page__binding-name nb-hotkeys-page__binding-name--resting">Re-apply / refresh displays</div>
-        <div class="nb-hotkeys-page__status nb-hotkeys-page__status--@StatusClass(State.HotkeyRefreshStatusText)">
-            <span class="nb-hotkeys-page__status-dot"></span>
-            <span class="nb-mono">@State.HotkeyRefreshStatusText</span>
+<div class="nb-hotkeys-page__binding @(State.IsCapturingHotkeyRefresh ? "nb-hotkeys-page__binding--capturing" : "")">
+    @if (State.IsCapturingHotkeyRefresh)
+    {
+        <div class="nb-hotkeys-page__binding-info">
+            <div class="nb-hotkeys-page__binding-name">Re-apply / refresh displays</div>
+            <div class="nb-hotkeys-page__binding-sub">Listening… press a key combination. Esc to cancel.</div>
         </div>
-    </div>
-    <div class="nb-hotkeys-page__combo">
-        @foreach (var (part, isLast) in WithLast(ComboParts(State.HotkeyRefreshApp)))
-        {
-            <KeyCap>@part</KeyCap>
-            @if (!isLast)
+        <div class="nb-hotkeys-page__combo">
+            <div class="nb-hotkeys-page__capture-slot"></div>
+        </div>
+    }
+    else
+    {
+        <div class="nb-hotkeys-page__binding-info">
+            <div class="nb-hotkeys-page__binding-name nb-hotkeys-page__binding-name--resting">Re-apply / refresh displays</div>
+            <div class="nb-hotkeys-page__status nb-hotkeys-page__status--@StatusClass(State.HotkeyRefreshStatusText)">
+                <span class="nb-hotkeys-page__status-dot"></span>
+                <span class="nb-mono">@State.HotkeyRefreshStatusText</span>
+            </div>
+        </div>
+        <div class="nb-hotkeys-page__combo">
+            @foreach (var (part, isLast) in WithLast(ComboParts(State.HotkeyRefreshApp)))
             {
-                <span class="nb-hotkeys-page__plus">+</span>
+                <KeyCap>@part</KeyCap>
+                @if (!isLast)
+                {
+                    <span class="nb-hotkeys-page__plus">+</span>
+                }
             }
-        }
-    </div>
-    <button type="button" class="nb-hotkeys-page__rebind">Rebind</button>
+        </div>
+    }
+    <button type="button" class="nb-hotkeys-page__rebind" @onclick="() => State.ToggleHotkeyRefreshCapture()">
+        @(State.IsCapturingHotkeyRefresh ? "Cancel" : "Rebind")
+    </button>
 </div>
 
 <div class="nb-hotkeys-page__divider"></div>
@@ -88,6 +134,10 @@
 </div>
 
 @code {
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+    public void Dispose() => State.Changed -= OnStateChanged;
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
     private static string[] ComboParts(HotkeyConfig cfg) => cfg.ToString().Split(" + ");
 
     private static IEnumerable<(string part, bool isLast)> WithLast(string[] parts)

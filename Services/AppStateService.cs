@@ -61,6 +61,10 @@ namespace NoBorders.Services
         private readonly Action<string> _selectMonitorDefaultScope;
         private readonly Action _saveMonitorDefault;
         private readonly Action<string> _deleteMonitorDefault;
+        private readonly Func<bool> _getIsCapturingHotkeyAdd;
+        private readonly Func<bool> _getIsCapturingHotkeyRefresh;
+        private readonly Action _toggleHotkeyAddCapture;
+        private readonly Action _toggleHotkeyRefreshCapture;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -87,6 +91,10 @@ namespace NoBorders.Services
             Action<string> selectMonitorDefaultScope,
             Action saveMonitorDefault,
             Action<string> deleteMonitorDefault,
+            Func<bool> getIsCapturingHotkeyAdd,
+            Func<bool> getIsCapturingHotkeyRefresh,
+            Action toggleHotkeyAddCapture,
+            Action toggleHotkeyRefreshCapture,
             Action queueSave,
             Action saveNow)
         {
@@ -110,6 +118,10 @@ namespace NoBorders.Services
             _selectMonitorDefaultScope    = selectMonitorDefaultScope;
             _saveMonitorDefault           = saveMonitorDefault;
             _deleteMonitorDefault         = deleteMonitorDefault;
+            _getIsCapturingHotkeyAdd      = getIsCapturingHotkeyAdd;
+            _getIsCapturingHotkeyRefresh  = getIsCapturingHotkeyRefresh;
+            _toggleHotkeyAddCapture       = toggleHotkeyAddCapture;
+            _toggleHotkeyRefreshCapture   = toggleHotkeyRefreshCapture;
             _selectMonitorScope       = selectMonitorScope;
             _toggleGameActive         = toggleGameActive;
             _queueSave                = queueSave;
@@ -307,6 +319,32 @@ namespace NoBorders.Services
         /// `MessageBox`es (refuses connected monitors, confirms before deleting).
         /// </summary>
         public void DeleteMonitorDefault(string scope) => _deleteMonitorDefault(scope);
+
+        /// <summary>
+        /// True while MainForm's `_capturingHotkeyId` state machine is actively
+        /// listening for a new "Add focused app" combination (Phase 4.11). The
+        /// capture logic itself — what counts as a valid key, when it commits —
+        /// lives entirely in MainForm's frozen hotkey system; this only reflects
+        /// its current phase for display.
+        /// </summary>
+        public bool IsCapturingHotkeyAdd => _getIsCapturingHotkeyAdd();
+
+        /// <summary>Same as <see cref="IsCapturingHotkeyAdd"/>, for "Re-apply / refresh displays".</summary>
+        public bool IsCapturingHotkeyRefresh => _getIsCapturingHotkeyRefresh();
+
+        /// <summary>
+        /// Starts or cancels capture for the "Add focused app" hotkey exactly as
+        /// clicking its WinForms "Set Hotkey" button would (Phase 4.11) —
+        /// forwards to MainForm's `ToggleHotkeyAddCapture`, so the real,
+        /// unchanged toggle logic runs. Once capture begins, the actual key
+        /// combination is captured by MainForm's frozen `CaptureHotkey`
+        /// (a `KeyDown` handler on the real, focused — if visually
+        /// Blazor-covered — WinForms textbox), not by anything in Razor.
+        /// </summary>
+        public void ToggleHotkeyAddCapture() => _toggleHotkeyAddCapture();
+
+        /// <summary>Same as <see cref="ToggleHotkeyAddCapture"/>, for "Re-apply / refresh displays".</summary>
+        public void ToggleHotkeyRefreshCapture() => _toggleHotkeyRefreshCapture();
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

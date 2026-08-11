@@ -746,6 +746,8 @@ namespace NoBorders
                 SaveGameChanges, RemoveSelectedGame, AddGameFromRunningWindow, BrowseForExe,
                 () => _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty, SelectMonitorDefaultScope,
                 SaveMonitorDefault, DeleteMonitorDefault,
+                () => _capturingHotkeyId == HOTKEY_ID_ADD, () => _capturingHotkeyId == HOTKEY_ID_REFRESH,
+                ToggleHotkeyAddCapture, ToggleHotkeyRefreshCapture,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -3098,6 +3100,27 @@ namespace NoBorders
         /// same combo — only feeds this capture UI and can never also fire the
         /// live Add/Refresh action underneath it.
         /// </summary>
+        /// <summary>
+        /// Blazor "Rebind" button's entry point for the "Add focused app" hotkey
+        /// (MIGRATION_PLAN.md Phase 4.11) — calls `PerformClick()`, so the real,
+        /// unchanged toggle logic in `_btnSetHotkeyAdd`'s `Click` handler runs
+        /// (begins or cancels capture depending on current state). Requires the
+        /// Settings tab active first, same `PerformClick()`/`Visible` gate found
+        /// in Phase 4.10.
+        /// </summary>
+        private void ToggleHotkeyAddCapture()
+        {
+            EnsureSettingsTabActive();
+            _btnSetHotkeyAdd.PerformClick();
+        }
+
+        /// <summary>Same as <see cref="ToggleHotkeyAddCapture"/>, for "Re-apply / refresh displays".</summary>
+        private void ToggleHotkeyRefreshCapture()
+        {
+            EnsureSettingsTabActive();
+            _btnSetHotkeyRefresh.PerformClick();
+        }
+
         private void BeginHotkeyCapture(int hotkeyId, HotkeyConfig config, TextBox display, Button button, string label)
         {
             if (_capturingHotkeyId != 0) CancelHotkeyCapture(); // only one capture session at a time
@@ -3112,7 +3135,27 @@ namespace NoBorders
 
             display.Text = "Press new key combo… (Esc to cancel)";
             button.Text  = "Listening… (click to cancel)";
-            display.Focus();
+
+            // Deferred, not a direct call (Phase 4.11 finding): when capture is
+            // started from a Blazor button, this runs inside a callback WebView2's
+            // Chromium widget originated for that click — a synchronous
+            // display.Focus() here is silently overridden when that widget
+            // re-asserts its own OS-level keyboard focus immediately afterward
+            // (confirmed live via GetGUIThreadInfo: focus stayed on
+            // Chrome_WidgetWin_1 despite Focus() having been called). Posting it
+            // via BeginInvoke runs it after the current call stack — including
+            // WebView2's own post-click focus handling — has fully unwound, so
+            // the real focus move actually sticks. Purely a timing fix for
+            // driving this frozen state machine from Blazor; doesn't change what
+            // it decides or when a WinForms-originated capture behaves (that
+            // path's call stack has no WebView2 involvement, so Focus() there
+            // already worked synchronously and still does).
+            BeginInvoke(new MethodInvoker(() => display.Focus()));
+
+            // Capture UI notification only (Phase 4.11) — the state machine's
+            // own decisions above are untouched, per MIGRATION_PLAN.md's frozen-
+            // systems note ("only the capture UI ... moves to Razor").
+            _appState.RaiseChanged();
         }
 
         /// <summary>
@@ -3134,6 +3177,7 @@ namespace NoBorders
             _capturingHotkeyLabel   = string.Empty;
 
             RegisterHotkeys(); // restores the binding that was unregistered for capture
+            _appState.RaiseChanged(); // capture UI notification only, see BeginHotkeyCapture
         }
 
         /// <summary>
@@ -3188,6 +3232,7 @@ namespace NoBorders
 
             RegisterHotkeys();
             ShowStatus($"{label} hotkey updated to {config}.");
+            _appState.RaiseChanged(); // capture UI notification only, see BeginHotkeyCapture
         }
 
         // ════════════════════════════════════════════════════════════════════════
