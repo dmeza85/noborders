@@ -1002,10 +1002,16 @@ namespace NoBorders
         private void BuildUI()
         {
             this.Text            = _isElevated ? "NoBorders (Administrator)" : "NoBorders";
-            this.Size            = new Size(800, 560);
-            // Fixed width: min and max width identical; height remains resizable.
-            this.MinimumSize     = new Size(800, 500);
-            this.MaximumSize     = new Size(800, 1400);
+            this.Size            = new Size(1200, 800);
+            // Was fixed-width (800/800) for the WinForms UI alone. Widened and made
+            // freely resizable so the window is comfortably large enough by default
+            // for both the current Settings tab content (previously needed a manual
+            // resize to see the Permissions section without scrolling) and the
+            // Blazor screens being built in MIGRATION_PLAN.md Phase 2, which are
+            // authored at 1120px wide per design-handoff/README.md and aren't
+            // responsive below that yet.
+            this.MinimumSize     = new Size(1150, 720);
+            this.MaximumSize     = Size.Empty; // no maximum — freely resizable/maximizable
             this.StartPosition   = FormStartPosition.CenterScreen;
             this.Font            = new Font("Segoe UI", 9f);
             this.Icon            = TryExtractIcon(Application.ExecutablePath);

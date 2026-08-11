@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 1120px; /* design-handoff/README.md: "authored at 1120px... below ~980px, stack the right column" — that responsive reflow isn't built yet, so hold the floor here rather than letting the layout silently break narrower than this. A host narrower than 1120px gets a horizontal scrollbar instead. */
   background: var(--nb-base);
 }
 
