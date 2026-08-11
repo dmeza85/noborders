@@ -25,4 +25,11 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.WindowsForms" Version="10.0.90" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- design-handoff/reference/program.cs is a reference copy for the design
+         bundle, not part of the build — without this it's picked up by the
+         default **/*.cs glob and collides with the real program.cs. -->
+    <Compile Remove="design-handoff\**\*.cs" />
+  </ItemGroup>
+
 </Project>

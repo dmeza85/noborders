@@ -22,8 +22,6 @@ namespace NoBorders
     // DATA MODELS
     // ══════════════════════════════════════════════════════════════════════════════
 
-    public enum ThemeMode { Light, Dark, FollowSystem }
-
     /// <summary>Per-monitor display profile for a single game.</summary>
     public class GameDisplayProfile
     {
@@ -108,7 +106,6 @@ namespace NoBorders
         public bool             MinimizeToTray     { get; set; } = true;
         public bool             StartWithWindows   { get; set; } = false;
         public bool             StartMinimized     { get; set; } = false;
-        public ThemeMode        ColorMode          { get; set; } = ThemeMode.FollowSystem;
         public HotkeyConfig     HotkeyAddApp       { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x0004 | 0x4000, Key = (uint)Keys.A };
         public HotkeyConfig     HotkeyRefreshApp   { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x0004 | 0x4000, Key = (uint)Keys.R };
     }
@@ -407,7 +404,6 @@ namespace NoBorders
         private const int    PBT_APMRESUMESUSPEND   = 0x0007; // woke from sleep
         private const int    PBT_APMRESUMEAUTOMATIC = 0x0012; // woke automatically (no user input yet)
         private const int    WM_DISPLAYCHANGE       = 0x007E;
-        private const int    WM_SETTINGCHANGE       = 0x001A;
         private const int    HSHELL_WINDOWCREATED   = 1;
         private const int    HOTKEY_ID_ADD          = 1001;
         private const int    HOTKEY_ID_REFRESH      = 1002;
@@ -419,7 +415,6 @@ namespace NoBorders
         // allows bare function-key hotkeys without requiring Ctrl/Shift/Alt.
         private const uint   MOD_NOREPEAT           = 0x4000;
         private const string REG_RUN_KEY            = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        private const string REG_THEME_KEY          = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         private const string APP_NAME               = "NoBordersManager";
 
         // ── P/Invoke ─────────────────────────────────────────────────────────────
@@ -688,9 +683,6 @@ namespace NoBorders
         private readonly CheckBox        _chkMinToTray    = new CheckBox();
         private readonly CheckBox        _chkStartWindows = new CheckBox();
         private readonly CheckBox        _chkStartMin     = new CheckBox();
-        private readonly RadioButton     _rbLight         = new RadioButton();
-        private readonly RadioButton     _rbDark          = new RadioButton();
-        private readonly RadioButton     _rbSystem        = new RadioButton();
         private readonly Label           _lblElevationStatus = new Label();
         private readonly Button          _btnRestartAdmin = new Button();
 
@@ -975,7 +967,9 @@ namespace NoBorders
         {
             try
             {
-                int useDark = IsDark ? 1 : 0;
+                // Single dark palette app-wide — always request the dark immersive
+                // title bar so the native chrome stays consistent with it.
+                int useDark = 1;
                 DwmSetWindowAttribute(this.Handle,
                     DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
             }
@@ -1047,21 +1041,18 @@ namespace NoBorders
         /// <summary>Restyles the nav buttons to reflect the selected tab.</summary>
         private void UpdateNavButtons()
         {
-            var t = _theme;
             bool gamesSel = _tabs.SelectedIndex == 0;
 
-            StyleNavButton(_btnNavGames,    gamesSel,  t);
-            StyleNavButton(_btnNavSettings, !gamesSel, t);
+            StyleNavButton(_btnNavGames,    gamesSel);
+            StyleNavButton(_btnNavSettings, !gamesSel);
         }
 
-        private void StyleNavButton(Button btn, bool selected, Theme t)
+        private void StyleNavButton(Button btn, bool selected)
         {
-            btn.BackColor = selected ? t.Surface : t.Base;
-            btn.ForeColor = selected ? t.TextPrimary : t.TextSecondary;
+            btn.BackColor = selected ? PaletteSurface : PaletteBase;
+            btn.ForeColor = selected ? PaletteTextPrimary : PaletteTextSecondary;
             btn.Font      = new Font("Segoe UI", 9f, selected ? FontStyle.Bold : FontStyle.Regular);
-            btn.FlatAppearance.MouseOverBackColor = t.Dark
-                ? Color.FromArgb(50, 50, 50)
-                : Color.FromArgb(225, 225, 230);
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
             btn.FlatAppearance.MouseDownBackColor = btn.BackColor;
         }
 
@@ -1079,8 +1070,7 @@ namespace NoBorders
             // Paint a right-side border on the left panel to act as a divider
             pnlLeft.Paint += (s, e) =>
             {
-                var t = _theme;
-                using var pen = new Pen(t.Border, 1);
+                using var pen = new Pen(PaletteBorder, 1);
                 e.Graphics.DrawLine(pen,
                     pnlLeft.Width - 1, 0,
                     pnlLeft.Width - 1, pnlLeft.Height);
@@ -1353,21 +1343,11 @@ namespace NoBorders
             else
             {
                 _chkActive.Text      = "○ Borderless OFF";
-                _chkActive.BackColor = _theme.Dark
-                    ? Color.FromArgb(60, 60, 60)
-                    : Color.FromArgb(190, 190, 190);
-                _chkActive.ForeColor = _theme.Dark
-                    ? Color.FromArgb(160, 160, 160)
-                    : Color.FromArgb(80, 80, 80);
-                _chkActive.FlatAppearance.BorderColor        = _theme.Dark
-                    ? Color.FromArgb(80, 80, 80)
-                    : Color.FromArgb(160, 160, 160);
-                _chkActive.FlatAppearance.MouseOverBackColor = _theme.Dark
-                    ? Color.FromArgb(75, 75, 75)
-                    : Color.FromArgb(200, 200, 200);
-                _chkActive.FlatAppearance.MouseDownBackColor = _theme.Dark
-                    ? Color.FromArgb(45, 45, 45)
-                    : Color.FromArgb(170, 170, 170);
+                _chkActive.BackColor = Color.FromArgb(60, 60, 60);
+                _chkActive.ForeColor = Color.FromArgb(160, 160, 160);
+                _chkActive.FlatAppearance.BorderColor        = Color.FromArgb(80, 80, 80);
+                _chkActive.FlatAppearance.MouseOverBackColor = Color.FromArgb(75, 75, 75);
+                _chkActive.FlatAppearance.MouseDownBackColor = Color.FromArgb(45, 45, 45);
             }
         }
 
@@ -1623,34 +1603,6 @@ namespace NoBorders
                 tbl.Controls.Add(pnlHint);
             }
 
-            tbl.Controls.Add(MakeSeparator());
-
-            // ── Theme section ────────────────────────────────────────────────────
-            tbl.Controls.Add(MakeSectionHeader("Theme"));
-
-            // RadioButtons render perfectly in dark mode without any custom drawing.
-            _rbLight.Text    = "Light";
-            _rbDark.Text     = "Dark";
-            _rbSystem.Text   = "Follow System";
-            _rbLight.AutoSize = _rbDark.AutoSize = _rbSystem.AutoSize = true;
-            _rbLight.Checked  = _settings.ColorMode == ThemeMode.Light;
-            _rbDark.Checked   = _settings.ColorMode == ThemeMode.Dark;
-            _rbSystem.Checked = _settings.ColorMode == ThemeMode.FollowSystem;
-
-            _rbLight.CheckedChanged  += (s, e) => { if (_rbLight.Checked)  SetTheme(ThemeMode.Light); };
-            _rbDark.CheckedChanged   += (s, e) => { if (_rbDark.Checked)   SetTheme(ThemeMode.Dark); };
-            _rbSystem.CheckedChanged += (s, e) => { if (_rbSystem.Checked) SetTheme(ThemeMode.FollowSystem); };
-
-            var pnlTheme = MakeSettingsRow("Color Mode:");
-            pnlTheme.Controls.Add(_rbLight);
-            var sp1 = new Panel { Width = 12 };
-            var sp2 = new Panel { Width = 12 };
-            pnlTheme.Controls.Add(sp1);
-            pnlTheme.Controls.Add(_rbDark);
-            pnlTheme.Controls.Add(sp2);
-            pnlTheme.Controls.Add(_rbSystem);
-            tbl.Controls.Add(pnlTheme);
-
             scrollPanel.Controls.Add(tbl);
             page.Controls.Add(scrollPanel);
         }
@@ -1664,7 +1616,7 @@ namespace NoBorders
             Width     = 20,
             Height    = 26,
             TextAlign = ContentAlignment.MiddleCenter,
-            ForeColor = _theme.TextMuted,
+            ForeColor = PaletteTextMuted,
             BackColor = Color.Transparent
         };
 
@@ -1746,7 +1698,7 @@ namespace NoBorders
                 Width     = 600,
                 Margin    = new Padding(0, 10, 0, 10),
                 Anchor    = AnchorStyles.Left | AnchorStyles.Right
-                // BackColor set by ThemeControls based on t.Border
+                // BackColor set by PaintControlsDark based on PaletteBorder
             };
         }
 
@@ -1810,132 +1762,75 @@ namespace NoBorders
         }
 
         // ════════════════════════════════════════════════════════════════════════
-        // THEME
+        // PALETTE — single fixed dark palette, applied once at startup. There is
+        // no light mode and no system-theme following; the design bundle is
+        // dark-only, so there's nothing to switch between.
         // ════════════════════════════════════════════════════════════════════════
 
-        private bool IsDark =>
-            _settings.ColorMode == ThemeMode.Dark ||
-            (_settings.ColorMode == ThemeMode.FollowSystem && SystemUsesLightTheme() == false);
-
-        private bool SystemUsesLightTheme()
-        {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(REG_THEME_KEY);
-                if (key?.GetValue("AppsUseLightTheme") is int v) return v != 0;
-            }
-            catch (Exception ex) { AppLogger.Log(ex, "SystemUsesLightTheme"); }
-            return true;
-        }
-
-        private void SetTheme(ThemeMode mode)
-        {
-            _settings.ColorMode = mode;
-            QueueSave();
-            ApplyTheme();
-        }
-
-        // ── Design tokens ────────────────────────────────────────────────────────
-        private struct Theme
-        {
-            public Color Base, Surface, Raised, Border, BorderStrong;
-            public Color TextPrimary, TextSecondary, TextMuted;
-            public Color Accent, AccentFg;
-            public bool  Dark;
-
-            public static Theme MakeDark() => new Theme
-            {
-                Dark          = true,
-                Base          = Color.FromArgb(18, 18, 18),
-                Surface       = Color.FromArgb(30, 30, 30),
-                Raised        = Color.FromArgb(42, 42, 42),
-                Border        = Color.FromArgb(48, 48, 48),
-                BorderStrong  = Color.FromArgb(72, 72, 72),
-                TextPrimary   = Color.FromArgb(222, 222, 222),
-                TextSecondary = Color.FromArgb(160, 160, 160),
-                TextMuted     = Color.FromArgb(90, 90, 90),
-                Accent        = Color.FromArgb(110, 88, 228),
-                AccentFg      = Color.White
-            };
-
-            public static Theme MakeLight() => new Theme
-            {
-                Dark          = false,
-                Base          = Color.FromArgb(242, 242, 242),
-                Surface       = Color.FromArgb(255, 255, 255),
-                Raised        = Color.FromArgb(228, 228, 230),
-                Border        = Color.FromArgb(210, 210, 212),
-                BorderStrong  = Color.FromArgb(160, 160, 165),
-                TextPrimary   = Color.FromArgb(22, 22, 22),
-                TextSecondary = Color.FromArgb(88, 88, 95),
-                TextMuted     = Color.FromArgb(165, 165, 170),
-                Accent        = Color.FromArgb(88, 60, 210),
-                AccentFg      = Color.White
-            };
-        }
-
-        private Theme _theme;
+        private static readonly Color PaletteBase         = Color.FromArgb(18, 18, 18);
+        private static readonly Color PaletteSurface      = Color.FromArgb(30, 30, 30);
+        private static readonly Color PaletteRaised       = Color.FromArgb(42, 42, 42);
+        private static readonly Color PaletteBorder       = Color.FromArgb(48, 48, 48);
+        private static readonly Color PaletteBorderStrong = Color.FromArgb(72, 72, 72);
+        private static readonly Color PaletteTextPrimary  = Color.FromArgb(222, 222, 222);
+        private static readonly Color PaletteTextSecondary = Color.FromArgb(160, 160, 160);
+        private static readonly Color PaletteTextMuted    = Color.FromArgb(90, 90, 90);
+        private static readonly Color PaletteAccent       = Color.FromArgb(110, 88, 228);
+        private static readonly Color PaletteAccentFg     = Color.White;
 
         private void ApplyTheme()
         {
-            _theme = IsDark ? Theme.MakeDark() : Theme.MakeLight();
-            var t  = _theme;
-
-            this.BackColor           = t.Base;
-            _lblStatus.BackColor     = t.Surface;
-            _lblStatus.ForeColor     = t.TextSecondary;
-            _lblDetailHint.BackColor = t.Base;
-            _lblDetailHint.ForeColor = t.TextMuted;
-            _lblGameTitle.ForeColor  = t.TextPrimary;
+            this.BackColor           = PaletteBase;
+            _lblStatus.BackColor     = PaletteSurface;
+            _lblStatus.ForeColor     = PaletteTextSecondary;
+            _lblDetailHint.BackColor = PaletteBase;
+            _lblDetailHint.ForeColor = PaletteTextMuted;
+            _lblGameTitle.ForeColor  = PaletteTextPrimary;
 
             // Nav bar
-            _pnlNav.BackColor = t.Base;
+            _pnlNav.BackColor = PaletteBase;
             UpdateNavButtons();
 
             // Advanced section header + content panel (special surfaces)
-            _lblAdvancedHdr.BackColor = t.Dark
-                ? Color.FromArgb(38, 38, 42)
-                : Color.FromArgb(230, 230, 236);
-            _lblAdvancedHdr.ForeColor = t.TextPrimary;
+            _lblAdvancedHdr.BackColor = Color.FromArgb(38, 38, 42);
+            _lblAdvancedHdr.ForeColor = PaletteTextPrimary;
             if (_grpAdvanced.Tag is Panel advContent)
-                advContent.BackColor = t.Surface;
+                advContent.BackColor = PaletteSurface;
 
-            ThemeControls(this.Controls, t);
+            PaintControlsDark(this.Controls);
 
-            // Re-apply the special colors that ThemeControls' generic cases
+            // Re-apply the special colors that PaintControlsDark's generic cases
             // would have overwritten (it sets all Labels/Panels to Base).
-            _lblAdvancedHdr.BackColor = t.Dark
-                ? Color.FromArgb(38, 38, 42)
-                : Color.FromArgb(230, 230, 236);
+            _lblAdvancedHdr.BackColor = Color.FromArgb(38, 38, 42);
             if (_grpAdvanced.Tag is Panel advContent2)
             {
-                advContent2.BackColor = t.Surface;
+                advContent2.BackColor = PaletteSurface;
                 foreach (Control child in advContent2.Controls)
                     if (child is TableLayoutPanel tblAdv2)
-                        tblAdv2.BackColor = t.Surface;
+                        tblAdv2.BackColor = PaletteSurface;
             }
-            _lblStatus.BackColor = t.Surface;
-            _lblStatus.ForeColor = t.TextSecondary;
-            _lblDetailHint.BackColor = t.Base;
-            _lblDetailHint.ForeColor = t.TextMuted;
+            _lblStatus.BackColor = PaletteSurface;
+            _lblStatus.ForeColor = PaletteTextSecondary;
+            _lblDetailHint.BackColor = PaletteBase;
+            _lblDetailHint.ForeColor = PaletteTextMuted;
 
             // Elevation status label — green when elevated, muted otherwise.
-            // Re-applied here since the generic Label case in ThemeControls
+            // Re-applied here since the generic Label case in PaintControlsDark
             // would otherwise reset it to plain TextSecondary/TextPrimary.
-            _lblElevationStatus.BackColor = t.Base;
+            _lblElevationStatus.BackColor = PaletteBase;
             _lblElevationStatus.ForeColor = _isElevated
                 ? Color.FromArgb(72, 199, 72)
-                : t.TextSecondary;
+                : PaletteTextSecondary;
 
             // Hotkey status labels — color reflects live registration state
             // (set by SetHotkeyStatusLabel), so only the background is reset
             // here; ForeColor is deliberately left alone.
-            _lblHotkeyAddStatus.BackColor     = t.Base;
-            _lblHotkeyRefreshStatus.BackColor = t.Base;
+            _lblHotkeyAddStatus.BackColor     = PaletteBase;
+            _lblHotkeyRefreshStatus.BackColor = PaletteBase;
 
             UpdateNavButtons();
 
-            // Dark/light native title bar (no-op before Windows 10 1809)
+            // Dark native title bar (no-op before Windows 10 1809)
             if (this.IsHandleCreated) ApplyTitleBarTheme();
 
             _lstGames.Invalidate();
@@ -1943,7 +1838,7 @@ namespace NoBorders
             UpdateActiveButton();
         }
 
-        private void ThemeControls(Control.ControlCollection controls, Theme t)
+        private void PaintControlsDark(Control.ControlCollection controls)
         {
             foreach (Control c in controls)
             {
@@ -1951,102 +1846,89 @@ namespace NoBorders
                 {
                     // ── Containers — recurse ──────────────────────────────────────
                     case TabControl tc:
-                        tc.BackColor  = t.Base;
-                        tc.ForeColor  = t.TextPrimary;
+                        tc.BackColor  = PaletteBase;
+                        tc.ForeColor  = PaletteTextPrimary;
                         // Force tab strip repaint by toggling Padding
                         tc.Padding = tc.Padding;
-                        ThemeControls(tc.Controls, t);
+                        PaintControlsDark(tc.Controls);
                         foreach (TabPage tp in tc.TabPages)
                         {
-                            tp.BackColor   = t.Base;
-                            tp.ForeColor   = t.TextPrimary;
+                            tp.BackColor   = PaletteBase;
+                            tp.ForeColor   = PaletteTextPrimary;
                             tp.BorderStyle = BorderStyle.None;
-                            ThemeControls(tp.Controls, t);
+                            PaintControlsDark(tp.Controls);
                         }
                         tc.Invalidate(true);
                         break;
 
                     case FlowLayoutPanel flp:
-                        flp.BackColor = t.Base;
-                        ThemeControls(flp.Controls, t);
+                        flp.BackColor = PaletteBase;
+                        PaintControlsDark(flp.Controls);
                         break;
 
                     case TableLayoutPanel tlp:
-                        tlp.BackColor = t.Base;
-                        ThemeControls(tlp.Controls, t);
+                        tlp.BackColor = PaletteBase;
+                        PaintControlsDark(tlp.Controls);
                         break;
 
                     case Panel pnl:
                         // 1px separator panels use border color
-                        pnl.BackColor = pnl.Height == 1 ? t.Border : t.Base;
+                        pnl.BackColor = pnl.Height == 1 ? PaletteBorder : PaletteBase;
                         pnl.Invalidate();
-                        ThemeControls(pnl.Controls, t);
+                        PaintControlsDark(pnl.Controls);
                         break;
 
                     // ── Interactive controls ──────────────────────────────────────
                     case ListBox lst:
-                        lst.BackColor  = t.Surface;
-                        lst.ForeColor  = t.TextPrimary;
+                        lst.BackColor  = PaletteSurface;
+                        lst.ForeColor  = PaletteTextPrimary;
                         lst.BorderStyle = BorderStyle.None; // border painted by parent panel
                         break;
 
                     case ComboBox cmb:
                         cmb.DrawMode  = DrawMode.Normal;
-                        cmb.BackColor = t.Surface;
-                        cmb.ForeColor = t.TextPrimary;
+                        cmb.BackColor = PaletteSurface;
+                        cmb.ForeColor = PaletteTextPrimary;
                         break;
 
                     case NumericTextBox ntb:
                         // Must precede the TextBox case below — NumericTextBox
                         // derives from TextBox and would otherwise be matched
                         // by that case first.
-                        ntb.BackColor   = t.Surface;
-                        ntb.ForeColor   = t.TextPrimary;
-                        ntb.BorderStyle = t.Dark ? BorderStyle.FixedSingle : BorderStyle.Fixed3D;
+                        ntb.BackColor   = PaletteSurface;
+                        ntb.ForeColor   = PaletteTextPrimary;
+                        ntb.BorderStyle = BorderStyle.FixedSingle;
                         break;
 
                     case TextBox txt:
-                        txt.BackColor   = t.Surface;
-                        txt.ForeColor   = t.TextPrimary;
-                        txt.BorderStyle = t.Dark ? BorderStyle.FixedSingle : BorderStyle.Fixed3D;
-                        if (t.Dark) txt.BorderStyle = BorderStyle.FixedSingle;
+                        txt.BackColor   = PaletteSurface;
+                        txt.ForeColor   = PaletteTextPrimary;
+                        txt.BorderStyle = BorderStyle.FixedSingle;
                         break;
 
                     case Button btn:
                         // All buttons use FlatStyle so we control every pixel
                         btn.FlatStyle  = FlatStyle.Flat;
-                        btn.BackColor  = t.Raised;
-                        btn.ForeColor  = t.TextPrimary;
-                        btn.FlatAppearance.BorderColor        = t.Border;
+                        btn.BackColor  = PaletteRaised;
+                        btn.ForeColor  = PaletteTextPrimary;
+                        btn.FlatAppearance.BorderColor        = PaletteBorder;
                         btn.FlatAppearance.BorderSize         = 1;
-                        btn.FlatAppearance.MouseOverBackColor = t.Dark
-                            ? Color.FromArgb(60, 60, 60)
-                            : Color.FromArgb(215, 215, 225);
-                        btn.FlatAppearance.MouseDownBackColor = t.Dark
-                            ? Color.FromArgb(30, 30, 30)
-                            : Color.FromArgb(195, 195, 210);
+                        btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(60, 60, 60);
+                        btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(30, 30, 30);
                         break;
 
                     case CheckBox chk:
-                        chk.BackColor = t.Base;
+                        chk.BackColor = PaletteBase;
                         chk.ForeColor = chk.Appearance == Appearance.Button
-                            ? t.AccentFg   // handled by UpdateActiveButton
-                            : t.TextPrimary;
+                            ? PaletteAccentFg   // handled by UpdateActiveButton
+                            : PaletteTextPrimary;
                         chk.FlatStyle = FlatStyle.Flat;
                         if (chk.Appearance == Appearance.Normal)
                         {
-                            chk.FlatAppearance.BorderColor        = t.BorderStrong;
-                            chk.FlatAppearance.CheckedBackColor   = t.Accent;
+                            chk.FlatAppearance.BorderColor        = PaletteBorderStrong;
+                            chk.FlatAppearance.CheckedBackColor   = PaletteAccent;
                             chk.FlatAppearance.MouseOverBackColor = Color.Transparent;
                         }
-                        break;
-
-                    case RadioButton rb:
-                        rb.BackColor  = t.Base;
-                        rb.ForeColor  = t.TextPrimary;
-                        rb.FlatStyle  = FlatStyle.Flat;
-                        rb.FlatAppearance.BorderColor        = t.BorderStrong;
-                        rb.FlatAppearance.MouseOverBackColor = Color.Transparent;
                         break;
 
                     // ── Labels ───────────────────────────────────────────────────
@@ -2054,8 +1936,8 @@ namespace NoBorders
                         if (lbl == _lblDetailHint || lbl == _lblGameTitle ||
                             lbl == _lblHotkeyAddStatus || lbl == _lblHotkeyRefreshStatus) break;
                         // Section headers (bold) use primary text; others secondary
-                        lbl.BackColor = t.Base;
-                        lbl.ForeColor = lbl.Font.Bold ? t.TextPrimary : t.TextSecondary;
+                        lbl.BackColor = PaletteBase;
+                        lbl.ForeColor = lbl.Font.Bold ? PaletteTextPrimary : PaletteTextSecondary;
                         break;
                 }
             }
@@ -2261,14 +2143,13 @@ namespace NoBorders
         {
             // With Padding(1) on the panel, docked children are inset by 1px,
             // so this border painted on the parent stays visible on all edges.
-            var t = _theme;
             var g = e.Graphics;
 
             // Fill any exposed background (the 1px frame + area below content)
-            using (var bgBrush = new SolidBrush(t.Surface))
+            using (var bgBrush = new SolidBrush(PaletteSurface))
                 g.FillRectangle(bgBrush, 0, 0, _grpAdvanced.Width, _grpAdvanced.Height);
 
-            using var borderPen = new Pen(t.BorderStrong, 1);
+            using var borderPen = new Pen(PaletteBorderStrong, 1);
             g.DrawRectangle(borderPen, 0, 0, _grpAdvanced.Width - 1, _grpAdvanced.Height - 1);
         }
 
@@ -2375,16 +2256,13 @@ namespace NoBorders
         {
             if (e.Index < 0 || e.Index >= _settings.Games.Count) return;
             var  game     = _settings.Games[e.Index];
-            var  t        = _theme;
             bool selected = (e.State & DrawItemState.Selected) != 0;
 
             // Row background — selected uses accent tint
             Color rowBg = selected
-                ? (t.Dark
-                    ? Color.FromArgb(60, 55, 100)   // dark accent tint
-                    : Color.FromArgb(220, 215, 245)) // light accent tint
-                : t.Surface;
-            Color rowFg = selected ? t.TextPrimary : t.TextPrimary;
+                ? Color.FromArgb(60, 55, 100)   // dark accent tint
+                : PaletteSurface;
+            Color rowFg = PaletteTextPrimary;
 
             using var bgBrush = new SolidBrush(rowBg);
             e.Graphics.FillRectangle(bgBrush, e.Bounds);
@@ -2392,7 +2270,7 @@ namespace NoBorders
             // Left accent bar for selected item
             if (selected)
             {
-                using var accentBrush = new SolidBrush(t.Accent);
+                using var accentBrush = new SolidBrush(PaletteAccent);
                 e.Graphics.FillRectangle(accentBrush, e.Bounds.X, e.Bounds.Y, 3, e.Bounds.Height);
             }
 
@@ -2424,7 +2302,7 @@ namespace NoBorders
             nameFont.Dispose();
 
             // Subtle bottom border between rows
-            using var borderPen = new Pen(t.Border, 1);
+            using var borderPen = new Pen(PaletteBorder, 1);
             e.Graphics.DrawLine(borderPen,
                 e.Bounds.X, e.Bounds.Bottom - 1,
                 e.Bounds.Right, e.Bounds.Bottom - 1);
@@ -3126,7 +3004,7 @@ namespace NoBorders
         {
             if (lbl == null) return;
             lbl.Text      = text;
-            lbl.ForeColor = muted ? _theme.TextMuted : color;
+            lbl.ForeColor = muted ? PaletteTextMuted : color;
         }
 
         /// <summary>
@@ -3585,13 +3463,12 @@ namespace NoBorders
                 return;
             }
 
-            // Toast uses the current theme palette for consistency
-            var  t        = _theme;
-            Color toastBg = t.Dark ? Color.FromArgb(28, 28, 32) : Color.FromArgb(248, 248, 252);
+            // Toast uses the app's single dark palette for consistency
+            Color toastBg = Color.FromArgb(28, 28, 32);
             Color accentColor = success
                 ? Color.FromArgb(34, 160, 74)
                 : Color.FromArgb(200, 55, 55);
-            Color msgFg = t.Dark ? Color.FromArgb(210, 210, 210) : Color.FromArgb(30, 30, 30);
+            Color msgFg = Color.FromArgb(210, 210, 210);
 
             var toast = new Form
             {
@@ -3848,9 +3725,6 @@ namespace NoBorders
 
             if (m.Msg == WM_DISPLAYCHANGE)
                 OnDisplayConfigChanged();
-
-            if (m.Msg == WM_SETTINGCHANGE && _settings.ColorMode == ThemeMode.FollowSystem)
-                ApplyTheme();
 
             if (m.Msg == WM_HOTKEY)
             {
