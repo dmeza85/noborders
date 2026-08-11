@@ -1,9 +1,24 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
 @* Screen 1d — Add Running App picker, design-handoff/README.md §"1d — Add
-   Running App picker". Static/hardcoded sample data — Phase 2 is visual
-   parity only; search, row selection, and Cancel/Add Game don't do
-   anything yet. Applying the existing `_systemProcessBlocklist` to the
-   real running-window list happens when this is wired to real data. *@
+   Running App picker".
+
+   Phase 4.8: rows come from AppStateService.GetOpenWindows() (the same
+   blocklist-respecting MainForm.GetOpenWindowEntries() the Matching tab's
+   live-test list uses, Phase 3.4). "TRACKED" reflects a real check —
+   whether any existing game's CompiledPattern already matches that
+   window's exe, the same predicate the enforcement/tray code uses
+   elsewhere. Row click sets a local pending selection (nothing is added
+   until "Add Game" — this modal's own selection is never written to
+   MainForm until confirmed, same non-mutating-until-confirmed shape as
+   every other Phase 4 pending-edit field). "Add Game" calls
+   AppStateService.AddGameFromRunningWindow, which forwards straight to
+   MainForm's AddGame — see that method's doc comment for why this is the
+   one Phase 4 sub-item that doesn't trigger a native WinForms control:
+   Phase 1/2 already replaced BtnAddRunning_Click's native dialog with this
+   in-app modal. Search stays static (real window count only) — filtering
+   isn't part of this sub-item's scope. *@
 
 <ModalOverlay Width="560">
     <div class="nb-add-app__header">
@@ -11,24 +26,26 @@
         <div class="nb-add-app__subline">System processes are hidden. Pick the window you want to go borderless.</div>
         <div class="nb-add-app__search">
             <span class="nb-add-app__search-ring"></span>
-            <span>Search 14 windows…</span>
+            <span>Search @(Rows.Count) window@(Rows.Count == 1 ? "" : "s")…</span>
         </div>
     </div>
 
     <div class="nb-add-app__rows">
         @foreach (var row in Rows)
         {
-            <div class="nb-add-app__row @(row.Selected ? "nb-add-app__row--selected" : "")">
-                <div class="nb-add-app__thumb @(row.Selected ? "nb-add-app__thumb--selected" : "")"></div>
+            bool selected = _selected.HasValue && _selected.Value.Equals(row);
+            bool tracked = IsTracked(row);
+            <div class="nb-add-app__row @(selected ? "nb-add-app__row--selected" : "")" @onclick="() => _selected = row">
+                <div class="nb-add-app__thumb @(selected ? "nb-add-app__thumb--selected" : "")"></div>
                 <div class="nb-add-app__info">
-                    <div class="nb-add-app__name @(row.Selected ? "nb-add-app__name--selected" : "")">@row.Name</div>
-                    <div class="nb-add-app__detail nb-mono">@row.Exe · PID @row.Pid · @row.Detail</div>
+                    <div class="nb-add-app__name @(selected ? "nb-add-app__name--selected" : "")">@row.WindowTitle</div>
+                    <div class="nb-add-app__detail nb-mono">@row.Exe · PID @row.Pid</div>
                 </div>
-                @if (row.Selected)
+                @if (selected)
                 {
                     <div class="nb-add-app__check">✓</div>
                 }
-                else if (row.Tracked)
+                else if (tracked)
                 {
                     <div class="nb-add-app__tracked nb-mono">TRACKED</div>
                 }
@@ -40,19 +57,26 @@
         <div class="nb-add-app__tip">
             Tip: press <span class="nb-mono nb-add-app__tip-key">Ctrl+Shift+A</span> in-game to add the focused window.
         </div>
-        <button type="button" class="nb-btn nb-btn--outline nb-add-app__cancel">Cancel</button>
-        <button type="button" class="nb-btn nb-btn--primary nb-add-app__add">Add Game</button>
+        <button type="button" class="nb-btn nb-btn--outline nb-add-app__cancel" @onclick="Cancel">Cancel</button>
+        <button type="button" class="nb-btn nb-btn--primary nb-add-app__add" disabled="@(_selected == null)" @onclick="AddSelected">Add Game</button>
     </div>
 </ModalOverlay>
 
 @code {
-    private sealed record RunningAppRow(string Name, string Exe, int Pid, string Detail, bool Selected = false, bool Tracked = false);
+    [Parameter] public EventCallback OnClose { get; set; }
 
-    private static readonly List<RunningAppRow> Rows = new()
+    private List<OpenWindowEntry> Rows => State.GetOpenWindows();
+
+    private OpenWindowEntry? _selected;
+
+    private bool IsTracked(OpenWindowEntry row) => State.Games.Any(g => g.CompiledPattern.IsMatch(row.Exe));
+
+    private async Task Cancel() => await OnClose.InvokeAsync();
+
+    private async Task AddSelected()
     {
-        new("Cyberpunk 2077",   "Cyberpunk2077.exe",     9114,  "1920×1080 windowed", Selected: true),
-        new("Elden Ring",       "eldenring.exe",         14822, "already tracked",    Tracked: true),
-        new("Factorio",         "factorio.exe",          7710,  "1600×900 windowed"),
-        new("Project Zomboid",  "ProjectZomboid64.exe",  3320,  "1280×720 windowed"),
-    };
+        if (_selected is not { } entry) return;
+        State.AddGameFromRunningWindow(entry);
+        await OnClose.InvokeAsync();
+    }
 }

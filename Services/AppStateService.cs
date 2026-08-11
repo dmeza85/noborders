@@ -55,6 +55,7 @@ namespace NoBorders.Services
         private readonly Action _fetchName;
         private readonly Action _saveGameChanges;
         private readonly Action _removeSelectedGame;
+        private readonly Action<OpenWindowEntry> _addGameFromRunningWindow;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -75,27 +76,29 @@ namespace NoBorders.Services
             Action fetchName,
             Action saveGameChanges,
             Action removeSelectedGame,
+            Action<OpenWindowEntry> addGameFromRunningWindow,
             Action queueSave,
             Action saveNow)
         {
-            _getSettings            = getSettings;
-            _getSelectedGame        = getSelectedGame;
-            _getOpenWindows         = getOpenWindows;
-            _getMonitors            = getMonitors;
-            _getHotkeyAddStatus     = getHotkeyAddStatus;
-            _getHotkeyRefreshStatus = getHotkeyRefreshStatus;
-            _selectGame             = selectGame;
-            _getMonitorOptions      = getMonitorOptions;
-            _getActiveScope         = getActiveScope;
-            _loadMonitorDefaults    = loadMonitorDefaults;
-            _getPendingDisplayName  = getPendingDisplayName;
-            _fetchName              = fetchName;
-            _saveGameChanges        = saveGameChanges;
-            _removeSelectedGame     = removeSelectedGame;
-            _selectMonitorScope     = selectMonitorScope;
-            _toggleGameActive       = toggleGameActive;
-            _queueSave              = queueSave;
-            _saveNow                = saveNow;
+            _getSettings              = getSettings;
+            _getSelectedGame          = getSelectedGame;
+            _getOpenWindows           = getOpenWindows;
+            _getMonitors              = getMonitors;
+            _getHotkeyAddStatus       = getHotkeyAddStatus;
+            _getHotkeyRefreshStatus   = getHotkeyRefreshStatus;
+            _selectGame               = selectGame;
+            _getMonitorOptions        = getMonitorOptions;
+            _getActiveScope           = getActiveScope;
+            _loadMonitorDefaults      = loadMonitorDefaults;
+            _getPendingDisplayName    = getPendingDisplayName;
+            _fetchName                = fetchName;
+            _saveGameChanges          = saveGameChanges;
+            _removeSelectedGame       = removeSelectedGame;
+            _addGameFromRunningWindow = addGameFromRunningWindow;
+            _selectMonitorScope       = selectMonitorScope;
+            _toggleGameActive         = toggleGameActive;
+            _queueSave                = queueSave;
+            _saveNow                  = saveNow;
         }
 
         /// <summary>
@@ -232,6 +235,18 @@ namespace NoBorders.Services
         /// this — see its doc comment in program.cs. No-op if no game is selected.
         /// </summary>
         public void RemoveSelectedGame() => _removeSelectedGame();
+
+        /// <summary>
+        /// Adds a new tracked game from a currently-running window — the Blazor
+        /// Add Running App modal's (screen 1d) "Add Game" action (Phase 4.8).
+        /// Unlike this class's other write methods, this does not simulate a
+        /// click on any native WinForms control: the native `BtnAddRunning_Click`
+        /// dialog was already replaced by this in-app modal per Phase 1/2's
+        /// adaptation decisions, so this forwards straight to MainForm's
+        /// `AddGame` — the real state-mutating method that dialog's OK-path (and
+        /// the Browse-for-EXE path) both already call.
+        /// </summary>
+        public void AddGameFromRunningWindow(OpenWindowEntry entry) => _addGameFromRunningWindow(entry);
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same

@@ -22,6 +22,10 @@
     _selectedGame itself, so the rail's "selected" highlight and the hero
     both stay honestly in sync with whatever's actually being shown.
 
+    Phase 4.8: the "+" rail button opens AddRunningAppModal (screen 1d) as an
+    in-app overlay — see that component's own doc comment for why this is
+    the one Phase 4 sub-item that doesn't trigger a native WinForms dialog.
+
     Adaptation Decision #1 (MIGRATION_PLAN.md "Resolved decisions"):
     MainForm keeps its native title bar, so the mock's window-control
     glyphs (— ▢ ✕) and the divider that separated them from the Settings
@@ -67,7 +71,7 @@
         <aside class="nb-shell__rail">
             <div class="nb-shell__rail-filter">
                 <div class="nb-shell__rail-filter-field">Filter…</div>
-                <button type="button" class="nb-shell__rail-add" aria-label="Add game">＋</button>
+                <button type="button" class="nb-shell__rail-add" aria-label="Add game" @onclick="() => _showAddModal = true">＋</button>
             </div>
             <div class="nb-text-label nb-shell__rail-heading">LIBRARY · @State.Games.Count</div>
             @foreach (var g in State.Games)
@@ -103,6 +107,11 @@
         <div class="nb-shell__statusbar-spacer"></div>
         <span>standard user</span>
     </footer>
+
+    @if (_showAddModal)
+    {
+        <AddRunningAppModal OnClose="() => _showAddModal = false" />
+    }
 </div>
 
 @code {
@@ -110,6 +119,13 @@
 
     [Parameter] public ShellTab ActiveTab { get; set; } = ShellTab.Display;
     [Parameter] public RenderFragment? RightPane { get; set; }
+
+    // Phase 4.8: local-only UI state — which native OS dialog the mock's "+"
+    // button used to open (BtnAddRunning_Click) is now an in-app modal
+    // (AddRunningAppModal, screen 1d) instead, per Phase 1/2's adaptation
+    // decisions, so opening/closing it is just this component's own state,
+    // not anything MainForm needs to know about.
+    private bool _showAddModal;
 
     protected override void OnInitialized() => State.Changed += OnStateChanged;
     public void Dispose() => State.Changed -= OnStateChanged;

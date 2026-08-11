@@ -743,7 +743,7 @@ namespace NoBorders
                 () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
                 ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
                 () => _txtGameName.Text, FetchNameForSelectedGame,
-                SaveGameChanges, RemoveSelectedGame,
+                SaveGameChanges, RemoveSelectedGame, AddGameFromRunningWindow,
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -2755,6 +2755,28 @@ namespace NoBorders
             if (dlg.ShowDialog(this) == DialogResult.OK && lst.SelectedIndex >= 0)
                 AddGame(entries[lst.SelectedIndex].Exe, false,
                         entries[lst.SelectedIndex].WindowTitle);
+        }
+
+        /// <summary>
+        /// Blazor Add Running App modal's entry point (MIGRATION_PLAN.md Phase
+        /// 4.8). Unlike every other Phase 4 sub-item, this does NOT trigger the
+        /// native `_btnAddRunning`/`ShowDialog()` path — Phase 1/2's adaptation
+        /// decisions already replaced that native modal dialog with an in-app
+        /// Blazor view (`AddRunningAppModal.razor`, screen 1d), the same way
+        /// Settings/Activity Log became in-app views instead of separate OS
+        /// windows. So this calls straight into `AddGame`, the actual
+        /// state-mutating method `BtnAddRunning_Click`'s dialog OK-path (and
+        /// `BtnAddBrowse_Click`'s OK-path) both already call — reusing the real
+        /// business logic at the right level, not the dialog-construction
+        /// wrapper around it. `AddGame` internally reassigns `_lstGames.SelectedIndex`,
+        /// which fires the existing `Changed`-raising subscriber (Phase 4.1) — the
+        /// explicit `RaiseChanged()` below is a defensive backstop for the (very
+        /// unlikely) case the new game isn't found in the rebuilt list.
+        /// </summary>
+        private void AddGameFromRunningWindow(OpenWindowEntry entry)
+        {
+            AddGame(entry.Exe, false, entry.WindowTitle);
+            _appState.RaiseChanged();
         }
 
         private void BtnAddBrowse_Click(object? sender, EventArgs e)
