@@ -15,6 +15,8 @@ using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using Microsoft.AspNetCore.Components.WebView.WindowsForms;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace NoBorders
 {
@@ -686,6 +688,25 @@ namespace NoBorders
         private readonly Label           _lblElevationStatus = new Label();
         private readonly Button          _btnRestartAdmin = new Button();
 
+        // ── Blazor ───────────────────────────────────────────────────────────────
+        // DI container for the BlazorWebView control. Built via a field initializer
+        // so it's ready before the constructor body runs, without inserting itself
+        // into (or reordering) the CheckElevation -> LoadConfig -> BuildUI ->
+        // SetupTrayIcon -> RefreshMonitors -> PopulateGamesList -> ApplyTheme flow
+        // below. Nothing consumes this yet — the BlazorWebView control itself is
+        // added in Phase 1.3.
+        private readonly ServiceProvider _blazorServices = CreateBlazorServices();
+
+        private static ServiceProvider CreateBlazorServices()
+        {
+            var services = new ServiceCollection();
+            services.AddWindowsFormsBlazorWebView();
+#if DEBUG
+            services.AddBlazorWebViewDeveloperTools();
+#endif
+            return services.BuildServiceProvider();
+        }
+
         // ════════════════════════════════════════════════════════════════════════
         // CONSTRUCTOR
         // ════════════════════════════════════════════════════════════════════════
@@ -770,6 +791,7 @@ namespace NoBorders
                 _saveDebounce.Dispose();
                 _trayIcon.Dispose();
                 _trayMenu.Dispose();
+                _blazorServices.Dispose();
             }
             base.Dispose(disposing);
         }
