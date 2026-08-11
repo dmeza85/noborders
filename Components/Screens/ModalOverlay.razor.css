@@ -1,0 +1,19 @@
+.nb-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 12, .7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.nb-modal-overlay__card {
+  border: 1px solid #2a2a36; /* one-off — the mock's modal-card border, distinct from --nb-border/--nb-border-strong */
+  border-radius: var(--nb-radius-window);
+  background: var(--nb-base);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}

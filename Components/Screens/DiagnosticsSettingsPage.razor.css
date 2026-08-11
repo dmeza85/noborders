@@ -26,7 +26,7 @@
 
 .nb-diagnostics-page__open-log {
   flex: none;
-  height: 32px;
+  height: var(--nb-control-height-compact-btn);
   padding: 0 14px;
   border-radius: var(--nb-radius-input);
   border: none;

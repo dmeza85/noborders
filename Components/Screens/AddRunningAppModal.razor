@@ -1,0 +1,58 @@
+@namespace NoBorders.Components.Screens
+@* Screen 1d — Add Running App picker, design-handoff/README.md §"1d — Add
+   Running App picker". Static/hardcoded sample data — Phase 2 is visual
+   parity only; search, row selection, and Cancel/Add Game don't do
+   anything yet. Applying the existing `_systemProcessBlocklist` to the
+   real running-window list happens when this is wired to real data. *@
+
+<ModalOverlay Width="560">
+    <div class="nb-add-app__header">
+        <div class="nb-add-app__title">Add a running app</div>
+        <div class="nb-add-app__subline">System processes are hidden. Pick the window you want to go borderless.</div>
+        <div class="nb-add-app__search">
+            <span class="nb-add-app__search-ring"></span>
+            <span>Search 14 windows…</span>
+        </div>
+    </div>
+
+    <div class="nb-add-app__rows">
+        @foreach (var row in Rows)
+        {
+            <div class="nb-add-app__row @(row.Selected ? "nb-add-app__row--selected" : "")">
+                <div class="nb-add-app__thumb @(row.Selected ? "nb-add-app__thumb--selected" : "")"></div>
+                <div class="nb-add-app__info">
+                    <div class="nb-add-app__name @(row.Selected ? "nb-add-app__name--selected" : "")">@row.Name</div>
+                    <div class="nb-add-app__detail nb-mono">@row.Exe · PID @row.Pid · @row.Detail</div>
+                </div>
+                @if (row.Selected)
+                {
+                    <div class="nb-add-app__check">✓</div>
+                }
+                else if (row.Tracked)
+                {
+                    <div class="nb-add-app__tracked nb-mono">TRACKED</div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="nb-add-app__footer">
+        <div class="nb-add-app__tip">
+            Tip: press <span class="nb-mono nb-add-app__tip-key">Ctrl+Shift+A</span> in-game to add the focused window.
+        </div>
+        <button type="button" class="nb-btn nb-btn--outline nb-add-app__cancel">Cancel</button>
+        <button type="button" class="nb-btn nb-btn--primary nb-add-app__add">Add Game</button>
+    </div>
+</ModalOverlay>
+
+@code {
+    private sealed record RunningAppRow(string Name, string Exe, int Pid, string Detail, bool Selected = false, bool Tracked = false);
+
+    private static readonly List<RunningAppRow> Rows = new()
+    {
+        new("Cyberpunk 2077",   "Cyberpunk2077.exe",     9114,  "1920×1080 windowed", Selected: true),
+        new("Elden Ring",       "eldenring.exe",         14822, "already tracked",    Tracked: true),
+        new("Factorio",         "factorio.exe",          7710,  "1600×900 windowed"),
+        new("Project Zomboid",  "ProjectZomboid64.exe",  3320,  "1280×720 windowed"),
+    };
+}

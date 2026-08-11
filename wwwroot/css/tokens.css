@@ -110,6 +110,7 @@
 
   --nb-control-height-chrome-btn:   26px;
   --nb-control-height-compact:      30px; /* compact button/field */
+  --nb-control-height-compact-btn:  32px; /* recurs on 4b's "Open Log" and 1d's Cancel/Add Game — a size between compact and standard */
   --nb-control-height-standard:     36px; /* documented range 34–36px — standard input fields, target-monitor dropdown */
   --nb-control-height-standard-btn: 34px; /* documented range 34–36px — standard action buttons (Save Changes / Undo / …) */
   --nb-control-height-hero-btn:     42px;
