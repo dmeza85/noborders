@@ -48,6 +48,14 @@ namespace NoBorders
         public Dictionary<string, GameDisplayProfile> Profiles { get; set; }
             = new Dictionary<string, GameDisplayProfile>(StringComparer.OrdinalIgnoreCase);
 
+        // Phase 8 (MIGRATION_PLAN.md): wwwroot-relative paths to locally cached
+        // artwork (e.g. "artwork-cache/valorant-hero.png"), empty until a real
+        // fetch (Services/ArtworkService.cs) succeeds — never a remote URL, so
+        // the hero/rail/toast art is never a broken image or a live network
+        // fetch on every render. Empty means "still the CSS placeholder."
+        public string HeroImagePath { get; set; } = string.Empty;
+        public string IconImagePath { get; set; } = string.Empty;
+
         // Compiled regex is built on first use and cached. [System.Text.Json.Serialization.JsonIgnore]
         // keeps it out of the saved config file.
         [System.Text.Json.Serialization.JsonIgnore]
@@ -111,6 +119,12 @@ namespace NoBorders
         public bool             StartMinimized     { get; set; } = false;
         public HotkeyConfig     HotkeyAddApp       { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x0004 | 0x4000, Key = (uint)Keys.A };
         public HotkeyConfig     HotkeyRefreshApp   { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x0004 | 0x4000, Key = (uint)Keys.R };
+
+        // Phase 8: user's own free SteamGridDB personal API key (obtained at
+        // steamgriddb.com/profile/preferences/api), pasted in Settings >
+        // Diagnostics. Empty means artwork fetch falls back to the game's own
+        // .exe icon only — never a hard requirement to use the app.
+        public string SteamGridDbApiKey { get; set; } = string.Empty;
     }
 
     public class MonitorItem
@@ -767,6 +781,12 @@ namespace NoBorders
             // instance for the process's lifetime — it owns its own polling timer
             // and in-memory buffer regardless of how many BlazorWebViews resolve it.
             services.AddSingleton(_ => new Services.LogTailService(AppLogger.LogPath));
+            // Phase 8: live accessor for the API key, same "read through a
+            // delegate" convention as AppStateService — a key pasted in
+            // Settings takes effect on the very next fetch, no restart needed.
+            services.AddSingleton(_ => new Services.ArtworkService(
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot"),
+                () => _settings.SteamGridDbApiKey));
             // Lazy factory — only runs whenever something first resolves
             // AppStateService, which happens long after LoadConfig() has already
             // run, and the Func<AppSettings>/Func<GameConfig?> accessors re-read
