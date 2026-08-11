@@ -765,6 +765,7 @@ namespace NoBorders
                 ToggleHotkeyAddCapture, ToggleHotkeyRefreshCapture,
                 ToggleMinimizeToTray, ToggleStartWithWindows, ToggleStartMinimized,
                 () => _undoTarget != null && _undoTarget == _selectedGame, UndoLastSave,
+                g => _runningGames.Contains(g),
                 QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
@@ -2321,6 +2322,16 @@ namespace NoBorders
             {
                 _runningGames = running;
                 RefreshGamesListOrder();
+
+                // Phase 4.14 — the only genuinely new state EnforceTimer_Tick
+                // produces that Blazor doesn't already reflect via some other
+                // already-wired path (see that method's own doc comment for
+                // why). RefreshGamesListOrder() sorts _settings.Games itself
+                // (not just the WinForms ListBox), and AppStateService.Games
+                // is a direct passthrough to that same list, so the Blazor
+                // rail's running-games-first order comes free from this one
+                // notification — no separate Razor sort logic needed.
+                _appState.RaiseChanged();
             }
         }
 
@@ -3645,6 +3656,23 @@ namespace NoBorders
             }
         }
 
+        /// <summary>
+        /// MIGRATION_PLAN.md Phase 4.14 — this method's own logic is completely
+        /// untouched, per the frozen-systems note; only <see cref="RefreshRunningGames"/>
+        /// (called from Step 0 below) gained one `_appState.RaiseChanged()` call,
+        /// at the one point it mutates state nothing else already notifies
+        /// Blazor about (<c>_runningGames</c>). The other two "observable
+        /// effects" the plan names — the hero's status dot and meta line —
+        /// read `GameConfig.IsActive`/`Profiles`, and this method never
+        /// mutates either: `IsActive` only ever changes via the user's
+        /// Enable/Disable Borderless click (already `RaiseChanged`-covered by
+        /// Phase 4.3), and `Profiles` only via Save Changes/Load Monitor
+        /// Defaults (4.4/4.6) or Undo (4.13) — all already covered. So this
+        /// tick can re-apply styles/positions to already-tracked windows
+        /// every second (Step 1) and scan for newly-launched untracked games
+        /// (Step 2) without ever needing to notify Blazor of anything beyond
+        /// the running-set change already handled above.
+        /// </summary>
         private void EnforceTimer_Tick(object? sender, EventArgs e)
         {
             // Step 0: refresh which games are currently running so the games
@@ -3810,6 +3838,14 @@ namespace NoBorders
             }
         }
 
+        /// <summary>
+        /// MIGRATION_PLAN.md Phase 4.14 — untouched, and needs no `RaiseChanged()`
+        /// hook at all: its only effect is the native `ClipCursor` Win32 call,
+        /// which confines the OS cursor and mutates no field any Razor
+        /// component reads (not `GameConfig`, not `AppSettings`, nothing in
+        /// `AppStateService`). There is no "observable effect" here for Blazor
+        /// to reflect.
+        /// </summary>
         private void ClipTimer_Tick(object? sender, EventArgs e)
         {
             IntPtr hwnd = GetForegroundWindow();

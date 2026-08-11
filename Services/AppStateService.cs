@@ -70,6 +70,7 @@ namespace NoBorders.Services
         private readonly Action _toggleStartMinimized;
         private readonly Func<bool> _getCanUndo;
         private readonly Action _undo;
+        private readonly Func<GameConfig, bool> _isGameRunning;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
@@ -105,6 +106,7 @@ namespace NoBorders.Services
             Action toggleStartMinimized,
             Func<bool> getCanUndo,
             Action undo,
+            Func<GameConfig, bool> isGameRunning,
             Action queueSave,
             Action saveNow)
         {
@@ -137,6 +139,7 @@ namespace NoBorders.Services
             _toggleStartMinimized         = toggleStartMinimized;
             _getCanUndo               = getCanUndo;
             _undo                     = undo;
+            _isGameRunning            = isGameRunning;
             _selectMonitorScope       = selectMonitorScope;
             _toggleGameActive         = toggleGameActive;
             _queueSave                = queueSave;
@@ -408,6 +411,19 @@ namespace NoBorders.Services
         /// left to revert to until another Save Changes happens.
         /// </summary>
         public void Undo() => _undo();
+
+        /// <summary>
+        /// True if a real process matching <paramref name="game"/>'s pattern is
+        /// currently running, independent of whether Borderless is toggled on
+        /// for it (Phase 4.14) — same `_runningGames` set `EnforceTimer_Tick`
+        /// refreshes every second (via `RefreshRunningGames`) purely to sort
+        /// running games to the top of the real games list; `AppStateService.Games`
+        /// already reflects that same order for free, since it's a direct
+        /// passthrough to the same `List&lt;GameConfig&gt;` `RefreshGamesListOrder()`
+        /// sorts in place. This getter exists for anything that wants the raw
+        /// running/not-running fact itself, not just the ordering it produces.
+        /// </summary>
+        public bool IsGameRunning(GameConfig game) => _isGameRunning(game);
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same
