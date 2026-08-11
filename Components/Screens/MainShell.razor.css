@@ -119,9 +119,20 @@
   display: block;
 }
 
+/* Not from the mock (it only shows the ON state) — inferred from the
+   README's interaction note: "status dot and label follow (BORDERLESS
+   APPLIED <-> muted INACTIVE)". */
+.nb-shell__hero-status-dot--inactive {
+  background: var(--nb-text-muted);
+}
+
 .nb-shell__hero-status-text {
   color: var(--nb-success);
   font-size: 10.5px; /* literal mock value — slightly above the 9.5-10px label range in tokens.css */
+}
+
+.nb-shell__hero-status-text--inactive {
+  color: var(--nb-text-muted);
 }
 
 .nb-shell__hero-title {
@@ -147,6 +158,11 @@
   white-space: nowrap;
   border: none;
   cursor: pointer;
+}
+
+.nb-shell__hero-btn:disabled {
+  opacity: .5;
+  cursor: default;
 }
 
 .nb-shell__hero-btn--primary {

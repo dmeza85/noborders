@@ -1,10 +1,20 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
 @*
     Shared shell for screens 2a (Display tab) and 5a (Matching tab) — title
     strip, hero, and library rail are identical between the two per
     design-handoff/README.md ("5a — Same shell as 2a; only the right pane
-    differs."). Static/hardcoded sample data — Phase 2 is visual parity
-    only, no bindings, nothing here is interactive yet.
+    differs.").
+
+    Phase 3.3: rail + hero are wired to the real AppStateService.Games list
+    and AppStateService.SelectedGame — read-only, no click-to-select yet
+    (that's Phase 4.1). When nothing is selected (SelectedGame is null,
+    which it is until something sets MainForm's _selectedGame), this falls
+    back to Games.FirstOrDefault() purely for *display* — it never writes
+    _selectedGame itself, so the rail's "selected" highlight and the hero
+    both stay honestly in sync with whatever's actually being shown, without
+    the service silently picking a selection on the app's behalf.
 
     Adaptation Decision #1 (MIGRATION_PLAN.md "Resolved decisions"):
     MainForm keeps its native title bar, so the mock's window-control
@@ -30,15 +40,19 @@
         <div class="nb-shell__hero-content">
             <div class="nb-shell__hero-status-block">
                 <div class="nb-shell__hero-status">
-                    <span class="nb-shell__hero-status-dot"></span>
-                    <span class="nb-text-label nb-shell__hero-status-text">BORDERLESS APPLIED</span>
+                    <span class="nb-shell__hero-status-dot @(IsDisplayedActive ? "" : "nb-shell__hero-status-dot--inactive")"></span>
+                    <span class="nb-text-label nb-shell__hero-status-text @(IsDisplayedActive ? "" : "nb-shell__hero-status-text--inactive")">
+                        @(IsDisplayedActive ? "BORDERLESS APPLIED" : "INACTIVE")
+                    </span>
                 </div>
-                <div class="nb-text-hero nb-shell__hero-title">@HeroGameName</div>
-                <div class="nb-shell__hero-meta nb-mono">@HeroMetaLine</div>
+                <div class="nb-text-hero nb-shell__hero-title">@(DisplayedGame?.GameName ?? "No games yet")</div>
+                <div class="nb-shell__hero-meta nb-mono">@HeroMetaLine(DisplayedGame)</div>
             </div>
             <div class="nb-shell__hero-actions">
-                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--primary">Disable Borderless</button>
-                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--secondary">Re-Apply</button>
+                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--primary" disabled="@(DisplayedGame == null)">
+                    @(IsDisplayedActive ? "Disable Borderless" : "Enable Borderless")
+                </button>
+                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--secondary" disabled="@(DisplayedGame == null)">Re-Apply</button>
             </div>
         </div>
     </section>
@@ -49,15 +63,16 @@
                 <div class="nb-shell__rail-filter-field">Filter…</div>
                 <button type="button" class="nb-shell__rail-add" aria-label="Add game">＋</button>
             </div>
-            <div class="nb-text-label nb-shell__rail-heading">LIBRARY · 9</div>
-            @foreach (var g in Games)
+            <div class="nb-text-label nb-shell__rail-heading">LIBRARY · @State.Games.Count</div>
+            @foreach (var g in State.Games)
             {
-                var tier = RowTier(g);
-                <div class="nb-shell__rail-row @(g.Selected ? "nb-shell__rail-row--selected" : "")">
-                    <div class="nb-shell__rail-thumb @(g.Selected ? "nb-shell__rail-thumb--selected" : "")"></div>
+                var selected = g == DisplayedGame;
+                var tier = RowTier(g, selected);
+                <div class="nb-shell__rail-row @(selected ? "nb-shell__rail-row--selected" : "")">
+                    <div class="nb-shell__rail-thumb @(selected ? "nb-shell__rail-thumb--selected" : "")"></div>
                     <div class="nb-shell__rail-info">
-                        <div class="nb-shell__rail-name nb-shell__rail-name--@tier">@g.Name</div>
-                        <div class="nb-shell__rail-res nb-shell__rail-res--@tier nb-mono">@g.Resolution</div>
+                        <div class="nb-shell__rail-name nb-shell__rail-name--@tier">@g.GameName</div>
+                        <div class="nb-shell__rail-res nb-shell__rail-res--@tier nb-mono">@RailResolution(g)</div>
                     </div>
                     @if (g.IsActive)
                     {
@@ -90,28 +105,39 @@
     [Parameter] public ShellTab ActiveTab { get; set; } = ShellTab.Display;
     [Parameter] public RenderFragment? RightPane { get; set; }
 
-    private sealed record SampleGame(string Name, string Resolution, bool IsActive, bool Selected);
+    // Display-only fallback: never writes MainForm's real _selectedGame, just
+    // picks something sensible to show/highlight when nothing is selected yet.
+    private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
-    private const string HeroGameName = "Helldivers 2";
-    private const string HeroMetaLine = "2560×1440 · +0,+0 · LG 27GP850 · cursor locked";
+    private bool IsDisplayedActive => DisplayedGame?.IsActive == true;
 
-    // Sample library — design-handoff's own mock only shows 6 of the "9"
-    // its LIBRARY heading claims, implying a scrollable list; reproduced
-    // here exactly as given rather than deriving the heading from this
-    // list's length.
-    private static readonly List<SampleGame> Games = new()
+    // A GameConfig's Profiles dictionary is keyed by monitor friendly-name, so
+    // "the" resolution/offset/monitor isn't well-defined without a selected
+    // scope — that's the Target Monitor dropdown's job (DisplayDetailPane),
+    // not wired until later. Until then, this shows the first saved profile,
+    // if any, which is honest about being a placeholder pick rather than a
+    // resolved "current" one.
+    private static string RailResolution(GameConfig g)
     {
-        new("Helldivers 2",       "2560×1440", IsActive: true,  Selected: true),
-        new("Elden Ring",         "3440×1440", IsActive: true,  Selected: false),
-        new("Baldur's Gate 3",    "1920×1080", IsActive: false, Selected: false),
-        new("Deep Rock Galactic", "3440×1440", IsActive: false, Selected: false),
-        new("Satisfactory",       "2560×1440", IsActive: false, Selected: false),
-        new("Cyberpunk 2077",     "3440×1440", IsActive: false, Selected: false),
-    };
+        var p = g.Profiles.Values.FirstOrDefault();
+        return p == null ? "no profile saved" : $"{p.Width}×{p.Height}";
+    }
+
+    private static string HeroMetaLine(GameConfig? g)
+    {
+        if (g == null) return string.Empty;
+        var monitor = g.Profiles.Keys.FirstOrDefault();
+        if (monitor == null || !g.Profiles.TryGetValue(monitor, out var p))
+            return "no display profile saved yet";
+        string offsetX = p.OffsetX >= 0 ? $"+{p.OffsetX}" : p.OffsetX.ToString();
+        string offsetY = p.OffsetY >= 0 ? $"+{p.OffsetY}" : p.OffsetY.ToString();
+        string cursor  = p.ConstrainMouse ? "cursor locked" : "cursor free";
+        return $"{p.Width}×{p.Height} · {offsetX},{offsetY} · {monitor} · {cursor}";
+    }
 
     // Text color tier follows (selected, active) exactly as the mock's
     // literal per-row colors do: selected+ON is brightest, ON-but-unselected
     // is next, and rows with no ON pill are dimmest.
-    private static string RowTier(SampleGame g) =>
-        g.Selected ? "selected" : g.IsActive ? "active" : "inactive";
+    private static string RowTier(GameConfig g, bool selected) =>
+        selected ? "selected" : g.IsActive ? "active" : "inactive";
 }

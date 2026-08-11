@@ -15,7 +15,8 @@ namespace NoBorders.Services
     /// is registered (though before it's ever resolved — DI singletons are
     /// constructed lazily on first use). Reading through a delegate rather than
     /// a snapshot means this always reflects whatever LoadConfig produced,
-    /// regardless of exactly when either runs.
+    /// regardless of exactly when either runs. <see cref="SelectedGame"/> uses
+    /// the same pattern against MainForm's <c>_selectedGame</c> field (Phase 3.3).
     ///
     /// <see cref="QueueSave"/>/<see cref="SaveNow"/> forward to MainForm's
     /// existing QueueSave()/SaveConfig() — this service never writes the config
@@ -25,14 +26,20 @@ namespace NoBorders.Services
     public sealed class AppStateService
     {
         private readonly Func<AppSettings> _getSettings;
+        private readonly Func<GameConfig?> _getSelectedGame;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
 
-        public AppStateService(Func<AppSettings> getSettings, Action queueSave, Action saveNow)
+        public AppStateService(
+            Func<AppSettings> getSettings,
+            Func<GameConfig?> getSelectedGame,
+            Action queueSave,
+            Action saveNow)
         {
-            _getSettings = getSettings;
-            _queueSave   = queueSave;
-            _saveNow     = saveNow;
+            _getSettings     = getSettings;
+            _getSelectedGame = getSelectedGame;
+            _queueSave       = queueSave;
+            _saveNow         = saveNow;
         }
 
         /// <summary>The live AppSettings instance — same object MainForm reads/writes.</summary>
@@ -46,6 +53,16 @@ namespace NoBorders.Services
         public bool StartMinimized => Settings.StartMinimized;
         public HotkeyConfig HotkeyAddApp => Settings.HotkeyAddApp;
         public HotkeyConfig HotkeyRefreshApp => Settings.HotkeyRefreshApp;
+
+        /// <summary>
+        /// MainForm's <c>_selectedGame</c> — null until the user has clicked a
+        /// rail row in the (still-live) WinForms UI or, once Phase 4.1 wires rail
+        /// clicks, in the Razor UI. Components that need *something* to display
+        /// before a selection exists fall back to <c>Games.FirstOrDefault()</c>
+        /// themselves (see MainShell.razor) rather than this service silently
+        /// picking one — selection state should read exactly as it is.
+        /// </summary>
+        public GameConfig? SelectedGame => _getSelectedGame();
 
         /// <summary>Debounced save, same as MainForm's QueueSave() (600ms via _saveDebounce).</summary>
         public void QueueSave() => _queueSave();

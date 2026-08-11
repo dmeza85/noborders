@@ -710,10 +710,11 @@ namespace NoBorders
 #endif
             // Lazy factory — only runs whenever something first resolves
             // AppStateService, which happens long after LoadConfig() has already
-            // run, and the Func<AppSettings> accessor re-reads _settings on every
-            // access rather than capturing a snapshot, so this is correct
-            // regardless of exact timing.
-            services.AddSingleton(_ => new AppStateService(() => _settings, QueueSave, SaveConfig));
+            // run, and the Func<AppSettings>/Func<GameConfig?> accessors re-read
+            // _settings/_selectedGame on every access rather than capturing a
+            // snapshot, so this is correct regardless of exact timing.
+            services.AddSingleton(_ => new AppStateService(
+                () => _settings, () => _selectedGame, QueueSave, SaveConfig));
             return services.BuildServiceProvider();
         }
 
