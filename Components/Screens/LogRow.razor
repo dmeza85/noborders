@@ -1,10 +1,14 @@
 @namespace NoBorders.Components.Screens
 @* Activity log list row, screen 4a. WARN/ERROR get a distinct row
    background/text treatment; INFO/OK share the neutral treatment (only
-   the LEVEL cell's color differs between those two). Static — clicking a
-   row doesn't select it into the detail pane yet. *@
+   the LEVEL cell's color differs between those two).
 
-<div class="nb-log-row nb-log-row--@LevelClass nb-mono">
+   Phase 6.4: clicking a row selects it into the detail pane
+   (ActivityLogWindow's OnRowSelected) — Selected adds the same violet
+   left-border treatment used for the rail's selected row (MainShell),
+   the only "this is the active one" precedent in the design bundle. *@
+
+<div class="nb-log-row nb-log-row--@LevelClass nb-mono @(Selected ? "nb-log-row--selected" : "")" @onclick="() => OnSelect.InvokeAsync()">
     <div class="nb-log-row__time">@Time</div>
     <div class="nb-log-row__level">@LevelText</div>
     <div class="nb-log-row__source">@Source</div>
@@ -18,6 +22,8 @@
     [Parameter] public LogLevel Level { get; set; }
     [Parameter] public string Source { get; set; } = "";
     [Parameter] public string Message { get; set; } = "";
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback OnSelect { get; set; }
 
     private string LevelText => Level switch
     {

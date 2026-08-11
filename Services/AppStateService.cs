@@ -73,6 +73,7 @@ namespace NoBorders.Services
         private readonly Func<GameConfig, bool> _isGameRunning;
         private readonly Action _queueSave;
         private readonly Action _saveNow;
+        private readonly Action _restartAsAdmin;
 
         public AppStateService(
             Func<AppSettings> getSettings,
@@ -108,7 +109,8 @@ namespace NoBorders.Services
             Action undo,
             Func<GameConfig, bool> isGameRunning,
             Action queueSave,
-            Action saveNow)
+            Action saveNow,
+            Action restartAsAdmin)
         {
             _getSettings              = getSettings;
             _getSelectedGame          = getSelectedGame;
@@ -144,6 +146,7 @@ namespace NoBorders.Services
             _toggleGameActive         = toggleGameActive;
             _queueSave                = queueSave;
             _saveNow                  = saveNow;
+            _restartAsAdmin           = restartAsAdmin;
         }
 
         /// <summary>
@@ -460,5 +463,15 @@ namespace NoBorders.Services
 
         /// <summary>Immediate save, same as MainForm's SaveConfig().</summary>
         public void SaveNow() => _saveNow();
+
+        /// <summary>
+        /// Phase 6.4: the Activity Log detail pane's "Restart As Admin" action
+        /// (shown for Warn/Error entries) forwards to MainForm's real
+        /// `RestartAsAdmin()` — the same relaunch-elevated flow the elevation
+        /// dialog already uses, not a reimplementation. Real and irreversible
+        /// (closes this instance and launches an elevated one via UAC), so it's
+        /// only ever invoked on an explicit user click, never automatically.
+        /// </summary>
+        public void RestartAsAdmin() => _restartAsAdmin();
     }
 }

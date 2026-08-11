@@ -4,17 +4,20 @@
    selected. No other selected-state example exists, so Selected="true"
    uses the same violet/accent treatment the rest of the design uses for
    "this is the active choice" (rail selection, active tab, active nav
-   item) — a reasonable inference, not a transcribed value. Static — not
-   clickable yet. *@
+   item) — a reasonable inference, not a transcribed value.
 
-<div class="nb-log-chip @(Selected ? "nb-log-chip--selected" : LevelClass)">@Label</div>
+   Phase 6.4: clickable — ActivityLogWindow owns which one is selected
+   (single-select, like the mock's tabs) and passes Selected/OnClick down. *@
+
+<div class="nb-log-chip @(Selected ? "nb-log-chip--selected" : LevelClass)" @onclick="() => OnClick.InvokeAsync()">@Label</div>
 
 @code {
-    public enum ChipLevel { Info, Warn, Error }
+    public enum ChipLevel { All, Info, Warn, Error }
 
     [Parameter] public string Label { get; set; } = "";
     [Parameter] public ChipLevel Level { get; set; }
     [Parameter] public bool Selected { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
 
     private string LevelClass => Level switch
     {

@@ -1,4 +1,11 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders
+@using NoBorders.Services
+@using System.IO
+@inject LogTailService Log
+@inject AppStateService State
+@inject IJSRuntime JS
+@implements IDisposable
 @*
     Screen 4a — Activity Log. design-handoff/README.md frames this as "a
     separate top-level window", but per Adaptation Decision #2
@@ -6,14 +13,28 @@
     BlazorWebView like Settings — opened from Settings → Diagnostics'
     "Open Log" button — so the mock's window-control glyphs are dropped
     here for the same reason as SettingsShell, with the same "← Back"
-    substitute.
+    substitute. (That Diagnostics → Open Log navigation link itself is
+    still a separate, not-yet-itemized concern — DiagnosticsSettingsPage's
+    button remains inert; this component doesn't depend on it to be real.)
 
-    This is the one Phase 2 screen that's genuinely net-new UI rather
-    than a redesign of something that already exists in program.cs — the
-    real feature is just the AppLogger log file today. Static/hardcoded
-    sample data — Phase 2 is visual parity only; level filters, the
-    search field, Auto-Scroll/Pause, row selection, and Clear Log don't
-    do anything yet.
+    Phase 6.4 (MIGRATION_PLAN.md): wired to Services/LogTailService.cs,
+    which tails the real noborders.log — see that file's doc comment for
+    the tailing/parsing design (polling, multi-line entries, the Source
+    heuristic). This is the one Phase 2 screen that was genuinely net-new
+    UI rather than a redesign of something pre-existing in program.cs —
+    "the real feature is just the AppLogger log file" (original Phase 2
+    doc comment) is now actually true rather than aspirational.
+
+    Level chips: "All" isn't a real LogLevel — it means no filter. Its
+    count and Info's count differ (All includes Warn/Error too) per the
+    mock's own worked example (All 248 = Info 231 + Warn 14 + Error 3).
+    OK-level entries count toward "Info" for filtering (LogLevelChip has
+    no fourth bucket — see that component's doc comment) while still
+    rendering with their own green LEVEL text via LogRow.
+
+    Auto-Scroll/Pause/detail-pane Copy use the one bit of JS interop in
+    this app (wwwroot/js/logScroll.js + the browser's own
+    navigator.clipboard) — everything else here is plain Blazor state.
 *@
 
 <div class="nb-log-window">
@@ -26,21 +47,23 @@
 
     <div class="nb-log-window__toolbar">
         <div class="nb-log-window__chips">
-            <LogLevelChip Label="All 248" Selected="true" />
-            <LogLevelChip Label="Info 231" Level="LogLevelChip.ChipLevel.Info" />
-            <LogLevelChip Label="Warn 14" Level="LogLevelChip.ChipLevel.Warn" />
-            <LogLevelChip Label="Error 3" Level="LogLevelChip.ChipLevel.Error" />
+            <LogLevelChip Label="@($"All {Counts.all}")" Level="LogLevelChip.ChipLevel.All" Selected="_filterLevel == LogLevelChip.ChipLevel.All" OnClick="() => SetFilter(LogLevelChip.ChipLevel.All)" />
+            <LogLevelChip Label="@($"Info {Counts.info}")" Level="LogLevelChip.ChipLevel.Info" Selected="_filterLevel == LogLevelChip.ChipLevel.Info" OnClick="() => SetFilter(LogLevelChip.ChipLevel.Info)" />
+            <LogLevelChip Label="@($"Warn {Counts.warn}")" Level="LogLevelChip.ChipLevel.Warn" Selected="_filterLevel == LogLevelChip.ChipLevel.Warn" OnClick="() => SetFilter(LogLevelChip.ChipLevel.Warn)" />
+            <LogLevelChip Label="@($"Error {Counts.error}")" Level="LogLevelChip.ChipLevel.Error" Selected="_filterLevel == LogLevelChip.ChipLevel.Error" OnClick="() => SetFilter(LogLevelChip.ChipLevel.Error)" />
         </div>
         <div class="nb-log-window__filter">
             <span class="nb-log-window__filter-ring"></span>
-            <span>Filter lines…</span>
+            <input class="nb-log-window__filter-input" placeholder="Filter lines…" value="@_filterText" @oninput="OnFilterInput" />
         </div>
         <div class="nb-log-window__autoscroll">
-            <ToggleSwitch On="true" Small="true" />
+            <ToggleSwitch On="_autoScroll" Small="true" OnToggle="OnToggleAutoScroll" />
             <span>Auto-Scroll</span>
         </div>
-        <button type="button" class="nb-log-window__toolbtn">Pause</button>
-        <button type="button" class="nb-log-window__toolbtn">Open Folder</button>
+        <button type="button" class="nb-log-window__toolbtn" @onclick="OnTogglePause">
+            @(Log.Paused ? $"Resume ({Log.PendingCount} new)" : "Pause")
+        </button>
+        <button type="button" class="nb-log-window__toolbtn" @onclick="OnOpenFolder">Open Folder</button>
     </div>
 
     <div class="nb-log-window__body">
@@ -48,57 +71,190 @@
             <div class="nb-log-window__list-header nb-mono">
                 <div>TIME</div><div>LEVEL</div><div>SOURCE</div><div>MESSAGE</div>
             </div>
-            <div class="nb-log-window__rows">
-                @foreach (var entry in Entries)
+            <div class="nb-log-window__rows" @ref="_rowsRef" @onscroll="OnRowsScroll">
+                @foreach (var entry in FilteredEntries)
                 {
-                    <LogRow Time="@entry.Time" Level="@entry.Level" Source="@entry.Source" Message="@entry.Message" />
+                    <LogRow Time="@entry.Time.ToString("HH:mm:ss")" Level="@MapLevel(entry.Level)"
+                            Source="@entry.Source" Message="@FirstLine(entry.Message)"
+                            Selected="@(ReferenceEquals(entry, _selectedEntry))"
+                            OnSelect="() => _selectedEntry = entry" />
                 }
             </div>
             <div class="nb-log-window__tailing nb-mono">
-                <span class="nb-log-window__tailing-dot"></span>tailing — new lines appear here
+                <span class="nb-log-window__tailing-dot"></span>@(Log.Paused ? "paused" : "tailing — new lines appear here")
             </div>
         </div>
 
         <div class="nb-log-window__detail">
             <div class="nb-text-label nb-log-window__detail-label">SELECTED ENTRY</div>
-            <div class="nb-log-window__detail-pill nb-mono">ERROR</div>
-            <div class="nb-log-window__detail-message">SetWindowLong failed — ACCESS_DENIED (5)</div>
-            <div class="nb-log-window__detail-kv nb-mono">
-                <div>time&nbsp;&nbsp;14:33:19.482</div>
-                <div>game&nbsp;&nbsp;Valorant</div>
-                <div>hwnd&nbsp;&nbsp;0x000407AE</div>
-                <div>pid&nbsp;&nbsp;&nbsp;&nbsp;11204</div>
-            </div>
-            <div class="nb-log-window__detail-explain">The game runs elevated. Restart NoBorders as administrator to let it modify this window.</div>
-            <div class="nb-log-window__detail-actions">
-                <button type="button" class="nb-btn nb-btn--warning nb-log-window__restart">Restart As Admin</button>
-                <button type="button" class="nb-btn nb-btn--outline nb-log-window__copy">Copy</button>
-            </div>
+            @if (_selectedEntry is { } sel)
+            {
+                <div class="nb-log-window__detail-pill nb-log-window__detail-pill--@MapLevel(sel.Level).ToString().ToLowerInvariant() nb-mono">@MapLevel(sel.Level).ToString().ToUpperInvariant()</div>
+                <div class="nb-log-window__detail-message">@sel.Message</div>
+                <div class="nb-log-window__detail-kv nb-mono">
+                    <div>time&nbsp;&nbsp;@sel.Time.ToString("HH:mm:ss.fff")</div>
+                    <div>source&nbsp;@sel.Source</div>
+                </div>
+                <div class="nb-log-window__detail-actions">
+                    @if (sel.Level is LogLevel.Warn or LogLevel.Error)
+                    {
+                        <button type="button" class="nb-btn nb-btn--warning nb-log-window__restart" @onclick="OnRestartAsAdmin">Restart As Admin</button>
+                    }
+                    <button type="button" class="nb-btn nb-btn--outline nb-log-window__copy" @onclick="OnCopy">Copy</button>
+                </div>
+            }
+            else
+            {
+                <div class="nb-text-subline">Click a row to see its full detail here.</div>
+            }
         </div>
     </div>
 
     <footer class="nb-log-window__statusbar nb-text-statusbar">
-        <span>%LOCALAPPDATA%\NoBorders\noborders.log</span>
-        <span>248 lines · 61 KB</span>
+        <span class="nb-mono">@AppLogger.LogPath</span>
+        <span>@Log.Entries.Count lines · @FileSizeText</span>
         <div class="nb-log-window__statusbar-spacer"></div>
-        <span class="nb-log-window__clear">Clear Log</span>
+        <span class="nb-log-window__clear" @onclick="OnClearLog">Clear Log</span>
     </footer>
 </div>
 
 @code {
-    private sealed record LogEntry(string Time, LogRow.LogLevel Level, string Source, string Message);
+    private LogLevelChip.ChipLevel _filterLevel = LogLevelChip.ChipLevel.All;
+    private string _filterText = "";
+    private bool _autoScroll = true;
+    private LogEntry? _selectedEntry;
+    private ElementReference _rowsRef;
 
-    private static readonly List<LogEntry> Entries = new()
+    protected override void OnInitialized() => Log.Changed += OnLogChanged;
+    public void Dispose() => Log.Changed -= OnLogChanged;
+    private void OnLogChanged() => InvokeAsync(StateHasChanged);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        new("14:22:07", LogRow.LogLevel.Info,  "ShellHook", "window created — eldenring.exe"),
-        new("14:22:07", LogRow.LogLevel.Info,  "Match",     "pattern \"elden.?ring\" matched title \"ELDEN RING™\""),
-        new("14:22:08", LogRow.LogLevel.Info,  "Style",     "removed WS_CAPTION | WS_THICKFRAME"),
-        new("14:22:08", LogRow.LogLevel.Ok,    "Position",  "3440×1440 @ 0,0 on Samsung S34J55x"),
-        new("14:24:51", LogRow.LogLevel.Warn,  "Cursor",    "ClipCursor released by foreground change"),
-        new("14:31:02", LogRow.LogLevel.Info,  "Display",   "WM_DISPLAYCHANGE — re-applying 2 rules"),
-        new("14:33:19", LogRow.LogLevel.Error, "Style",     "SetWindowLong failed — ACCESS_DENIED (5) · vgc-protected"),
-        new("14:33:20", LogRow.LogLevel.Info,  "Elevation", "prompted user to restart as administrator"),
-        new("14:40:44", LogRow.LogLevel.Info,  "Hotkey",    "Ctrl+Shift+R → refresh requested"),
-        new("14:40:44", LogRow.LogLevel.Ok,    "Position",  "2560×1440 @ 0,0 on LG 27GP850"),
+        if (_autoScroll)
+        {
+            try { await JS.InvokeVoidAsync("nbLogScroll.toBottom", _rowsRef); }
+            catch (JSDisconnectedException) { /* window closing */ }
+        }
+    }
+
+    private void SetFilter(LogLevelChip.ChipLevel level) => _filterLevel = level;
+
+    private void OnFilterInput(ChangeEventArgs e) => _filterText = e.Value?.ToString() ?? "";
+
+    private async Task OnToggleAutoScroll()
+    {
+        _autoScroll = !_autoScroll;
+        if (_autoScroll)
+            try { await JS.InvokeVoidAsync("nbLogScroll.toBottom", _rowsRef); } catch (JSDisconnectedException) { }
+    }
+
+    // README: "Auto-Scroll pins to bottom and disengages if the user scrolls up."
+    private async Task OnRowsScroll()
+    {
+        if (!_autoScroll) return;
+        bool near;
+        try { near = await JS.InvokeAsync<bool>("nbLogScroll.isNearBottom", _rowsRef); }
+        catch (JSDisconnectedException) { return; }
+        if (!near) _autoScroll = false;
+    }
+
+    private void OnTogglePause() => Log.TogglePause();
+
+    private void OnClearLog()
+    {
+        Log.ClearLog();
+        _selectedEntry = null;
+    }
+
+    private void OnOpenFolder()
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(AppLogger.LogPath);
+            if (dir != null) System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{AppLogger.LogPath}\"");
+        }
+        catch { /* best-effort, same tolerance as AppLogger.Log's own try/catch */ }
+    }
+
+    private async Task OnCopy()
+    {
+        if (_selectedEntry is not { } sel) return;
+        string text = $"[{sel.Time:yyyy-MM-dd HH:mm:ss}] [{sel.Level}] {sel.Source}: {sel.Message}";
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private void OnRestartAsAdmin() => State.RestartAsAdmin();
+
+    // Level chips: "All" = no filter. Warn/Error are exact; Info's bucket
+    // also covers Ok (LogLevelChip has no fourth bucket — see its own doc
+    // comment), matching the mock's worked example (All 248 = Info 231 +
+    // Warn 14 + Error 3).
+    private IEnumerable<LogEntry> LevelFiltered => _filterLevel switch
+    {
+        LogLevelChip.ChipLevel.Info  => Log.Entries.Where(e => e.Level is LogLevel.Info or LogLevel.Ok),
+        LogLevelChip.ChipLevel.Warn  => Log.Entries.Where(e => e.Level == LogLevel.Warn),
+        LogLevelChip.ChipLevel.Error => Log.Entries.Where(e => e.Level == LogLevel.Error),
+        _                            => Log.Entries,
     };
+
+    // README: "the filter field matches source + message."
+    private IEnumerable<LogEntry> FilteredEntries =>
+        string.IsNullOrWhiteSpace(_filterText)
+            ? LevelFiltered
+            : LevelFiltered.Where(e =>
+                e.Source.Contains(_filterText, StringComparison.OrdinalIgnoreCase) ||
+                e.Message.Contains(_filterText, StringComparison.OrdinalIgnoreCase));
+
+    // Chip counts are totals across all tailed entries, independent of the
+    // text filter — a stable "how much of each kind exists" readout, not a
+    // live match count (the mock's own numbers work the same way: fixed
+    // regardless of what's typed in the filter field).
+    private (int all, int info, int warn, int error) Counts
+    {
+        get
+        {
+            var entries = Log.Entries;
+            int warn = 0, error = 0, infoOrOk = 0;
+            foreach (var e in entries)
+            {
+                if (e.Level == LogLevel.Warn) warn++;
+                else if (e.Level == LogLevel.Error) error++;
+                else infoOrOk++;
+            }
+            return (entries.Count, infoOrOk, warn, error);
+        }
+    }
+
+    private static LogRow.LogLevel MapLevel(LogLevel level) => level switch
+    {
+        LogLevel.Ok    => LogRow.LogLevel.Ok,
+        LogLevel.Warn  => LogRow.LogLevel.Warn,
+        LogLevel.Error => LogRow.LogLevel.Error,
+        _              => LogRow.LogLevel.Info,
+    };
+
+    // Message can be multi-line (e.g. an exception's stack trace, appended
+    // by LogTailService's continuation-line handling) — the row shows only
+    // the first line; the full text is in the detail pane.
+    private static string FirstLine(string message)
+    {
+        int nl = message.IndexOf('\n');
+        return nl >= 0 ? message[..nl] + " …" : message;
+    }
+
+    private static string FileSizeText
+    {
+        get
+        {
+            try
+            {
+                if (!File.Exists(AppLogger.LogPath)) return "0 KB";
+                long bytes = new FileInfo(AppLogger.LogPath).Length;
+                return bytes < 1024 ? $"{bytes} B" : $"{bytes / 1024.0:0.#} KB";
+            }
+            catch { return "—"; }
+        }
+    }
 }

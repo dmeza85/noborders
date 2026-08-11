@@ -138,19 +138,36 @@ namespace NoBorders
     // LOGGER
     // ══════════════════════════════════════════════════════════════════════════════
 
+    /// <summary>
+    /// Phase 6.4 (MIGRATION_PLAN.md): real level metadata for the Activity Log's
+    /// level chips/row coloring. Added additively — every pre-existing call site
+    /// (~80, plain prose trace statements) keeps compiling unchanged and defaults
+    /// to Info, since <see cref="AppLogger.Log(string, LogLevel)"/>'s new parameter
+    /// is optional. Only a small, specifically-justified set of call sites (those
+    /// paired with a real <c>ShowToast</c> success/failure, i.e. an event a user
+    /// actually sees) were upgraded to Ok/Warn — see MIGRATION_PLAN.md's 6.4
+    /// write-up for the exact list and reasoning. Everything else stays Info by
+    /// default rather than guessing intent from message prose.
+    /// </summary>
+    public enum LogLevel { Info, Ok, Warn, Error }
+
     internal static class AppLogger
     {
         private static readonly string _path = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "noborders.log");
 
-        public static void Log(string message)
+        /// <summary>Real file path, exposed for Services/LogTailService.cs to tail
+        /// — was private until Phase 6.4 needed a reader.</summary>
+        public static string LogPath => _path;
+
+        public static void Log(string message, LogLevel level = LogLevel.Info)
         {
-            try { File.AppendAllText(_path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n"); }
+            try { File.AppendAllText(_path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level.ToString().ToUpperInvariant()}] {message}\n"); }
             catch { }
         }
 
         public static void Log(Exception ex, string context)
-            => Log($"ERROR in {context}: {ex.Message}\n{ex.StackTrace}");
+            => Log($"ERROR in {context}: {ex.Message}\n{ex.StackTrace}", LogLevel.Error);
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -746,6 +763,10 @@ namespace NoBorders
 #if DEBUG
             services.AddBlazorWebViewDeveloperTools();
 #endif
+            // Phase 6.4: tails AppLogger.LogPath for the Activity Log view. One
+            // instance for the process's lifetime — it owns its own polling timer
+            // and in-memory buffer regardless of how many BlazorWebViews resolve it.
+            services.AddSingleton(_ => new Services.LogTailService(AppLogger.LogPath));
             // Lazy factory — only runs whenever something first resolves
             // AppStateService, which happens long after LoadConfig() has already
             // run, and the Func<AppSettings>/Func<GameConfig?> accessors re-read
@@ -766,7 +787,8 @@ namespace NoBorders
                 ToggleMinimizeToTray, ToggleStartWithWindows, ToggleStartMinimized,
                 () => _undoTarget != null && _undoTarget == _selectedGame, UndoLastSave,
                 g => _runningGames.Contains(g),
-                QueueSave, SaveConfig));
+                QueueSave, SaveConfig,
+                RestartAsAdmin));
             return services.BuildServiceProvider();
         }
 
@@ -3402,7 +3424,7 @@ namespace NoBorders
                         $"{label} hotkey ({config}) is blocked by Windows.\n"
                         + "Try adding Shift or Ctrl in Settings.",
                         success: false);
-                AppLogger.Log($"  Bare key blocked — user should add Ctrl/Shift/Alt modifier.");
+                AppLogger.Log($"  Bare key blocked — user should add Ctrl/Shift/Alt modifier.", LogLevel.Warn);
             }
             else if (err == 1409)
             {
@@ -3413,6 +3435,7 @@ namespace NoBorders
                         $"{label} hotkey ({config}) conflicts with another app.\n"
                         + "Change it in Settings.",
                         success: false);
+                AppLogger.Log($"{label} hotkey ({config}) conflicts with another app.", LogLevel.Warn);
             }
             else
             {
@@ -3515,7 +3538,10 @@ namespace NoBorders
                         // otherwise the user would see "applied" right next to a
                         // dialog saying it wasn't.
                         if (AddGame(exeName, false, nameToUse))
+                        {
                             ShowToast($"Added & borderless applied\n{nameToUse}", success: true);
+                            AppLogger.Log($"Added & borderless applied to '{nameToUse}'.", LogLevel.Ok);
+                        }
                     }));
                 }
                 else if (alreadyTracked)
@@ -3526,6 +3552,7 @@ namespace NoBorders
                     _trackedWindows[hwnd] = match;
                     ApplyBorderless(hwnd, match);
                     ShowToast($"Borderless applied\n{match.GameName}", success: true);
+                    AppLogger.Log($"Borderless applied to '{match.GameName}'.", LogLevel.Ok);
                 }
             }
             catch (Exception ex) { AppLogger.Log(ex, "HotkeyAdd"); }
@@ -3550,6 +3577,7 @@ namespace NoBorders
                 if (match == null)
                 {
                     ShowToast("Foreground app is not in the game list.", success: false);
+                    AppLogger.Log("HotkeyRefresh: foreground app is not in the game list.", LogLevel.Warn);
                     return;
                 }
 
@@ -3562,6 +3590,7 @@ namespace NoBorders
                 _trackedWindows[hwnd] = match;
                 ApplyBorderless(hwnd, match);
                 ShowToast($"Borderless re-applied\n{match.GameName}", success: true);
+                AppLogger.Log($"Borderless re-applied to '{match.GameName}'.", LogLevel.Ok);
             }
             catch (Exception ex) { AppLogger.Log(ex, "HotkeyRefresh"); }
         }
@@ -3805,7 +3834,7 @@ namespace NoBorders
                     if (err != 0)
                     {
                         styleCallFailed = true;
-                        AppLogger.Log($"SetWindowLong failed for '{g.GameName}' (hwnd={hwnd}), Win32={err}");
+                        AppLogger.Log($"SetWindowLong failed for '{g.GameName}' (hwnd={hwnd}), Win32={err}", LogLevel.Warn);
                     }
                 }
             }
@@ -3818,7 +3847,7 @@ namespace NoBorders
                 {
                     int err = Marshal.GetLastWin32Error();
                     posCallFailed = true;
-                    AppLogger.Log($"SetWindowPos failed for '{g.GameName}' (hwnd={hwnd}), Win32={err}");
+                    AppLogger.Log($"SetWindowPos failed for '{g.GameName}' (hwnd={hwnd}), Win32={err}", LogLevel.Warn);
                 }
             }
 

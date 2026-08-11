@@ -6,6 +6,11 @@
   line-height: 1.4;
   border-bottom: 1px solid #101015; /* one-off — subtle separator distinct from any base/chrome token */
   border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.nb-log-row:hover {
+  background: var(--nb-raised);
 }
 
 .nb-log-row__time,
@@ -55,4 +60,12 @@
 
 .nb-log-row--error .nb-log-row__level {
   color: var(--nb-danger);
+}
+
+/* Selection marker — same violet left-border language as the rail's
+   selected row (MainShell) — deliberately only touches border-left-color,
+   not background, so a selected WARN/ERROR row keeps its own level tint
+   visible underneath. */
+.nb-log-row--selected {
+  border-left-color: var(--nb-accent);
 }

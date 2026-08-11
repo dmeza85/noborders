@@ -5,6 +5,7 @@
   font: 500 11.5px/1 var(--nb-font-ui);
   white-space: nowrap;
   flex: none;
+  cursor: pointer;
 }
 
 .nb-log-chip--info {

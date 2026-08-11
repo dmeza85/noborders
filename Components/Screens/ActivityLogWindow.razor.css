@@ -78,6 +78,20 @@
   overflow: hidden;
 }
 
+.nb-log-window__filter-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--nb-text-body);
+  font: inherit;
+}
+
+.nb-log-window__filter-input::placeholder {
+  color: var(--nb-text-muted);
+}
+
 .nb-log-window__filter-ring {
   width: 10px;
   height: 10px;
@@ -181,17 +195,40 @@
   display: inline-block;
   padding: 4px 9px;
   border-radius: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.nb-log-window__detail-pill--error {
   background: rgba(255, 107, 116, .14);
   border: 1px solid var(--nb-danger-border);
   color: var(--nb-danger);
-  font-size: 9.5px;
-  font-weight: 700;
+}
+
+.nb-log-window__detail-pill--warn {
+  background: rgba(240, 180, 41, .14);
+  border: 1px solid var(--nb-warning-border);
+  color: var(--nb-warning);
+}
+
+.nb-log-window__detail-pill--ok {
+  background: rgba(61, 220, 132, .14);
+  border: 1px solid var(--nb-border);
+  color: var(--nb-success);
+}
+
+.nb-log-window__detail-pill--info {
+  background: var(--nb-raised);
+  border: 1px solid var(--nb-border);
+  color: var(--nb-text-secondary);
 }
 
 .nb-log-window__detail-message {
   font: 400 12.5px/1.5 var(--nb-font-ui);
   color: var(--nb-text-bright);
   margin-top: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .nb-log-window__detail-kv {
@@ -199,16 +236,6 @@
   line-height: 1.9;
   color: #7a7a8a; /* one-off — doesn't match any named text token */
   margin-top: 12px;
-}
-
-.nb-log-window__detail-explain {
-  margin-top: 14px;
-  padding: 11px 12px;
-  border-radius: var(--nb-radius-input);
-  background: var(--nb-chrome);
-  border: 1px solid var(--nb-border-subtle);
-  font: 400 11.5px/1.5 var(--nb-font-ui);
-  color: #9a9aa8; /* one-off — doesn't match any named text token */
 }
 
 .nb-log-window__detail-actions {
