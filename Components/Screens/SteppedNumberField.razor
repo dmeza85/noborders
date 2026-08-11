@@ -1,0 +1,21 @@
+@namespace NoBorders.Components.Screens
+@* Static visual only — Phase 2. Stepper buttons don't do anything yet;
+   the ▲/▼ step-by-1/Shift=10/Ctrl=100 behavior described in
+   design-handoff/README.md is wired up in a later phase. *@
+
+<div class="nb-numfield @(BorderSubtle ? "nb-numfield--subtle" : "")">
+    <div class="nb-numfield__value nb-text-field-value">@Value</div>
+    <div class="nb-numfield__stepper">
+        <button type="button" class="nb-numfield__btn" aria-label="Increase">▲</button>
+        <button type="button" class="nb-numfield__btn" aria-label="Decrease">▼</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int Value { get; set; }
+
+    /// <summary>Offset X/Y fields use the subtler --nb-border instead of
+    /// --nb-border-strong-alt that Width/Height use — matches the literal
+    /// mock, not an arbitrary choice.</summary>
+    [Parameter] public bool BorderSubtle { get; set; }
+}

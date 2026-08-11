@@ -1,0 +1,36 @@
+/*
+ * Shared button styles reused across screens — the "standard" 34px/radius-8
+ * action button pattern (Save Changes / Undo / Load Monitor Defaults on
+ * screen 2a, reused verbatim on 5a per design-handoff/README.md: "both
+ * covered by Save Changes / Undo"). Hero-sized buttons and other one-off
+ * button treatments stay local to their own component's scoped CSS.
+ */
+
+.nb-btn {
+  flex: none;
+  white-space: nowrap;
+  height: var(--nb-control-height-standard-btn);
+  padding: 0 16px;
+  border-radius: var(--nb-radius-input);
+  font: 600 12.5px/34px var(--nb-font-ui);
+  border: none;
+  cursor: pointer;
+}
+
+.nb-btn--primary {
+  background: var(--nb-accent);
+  color: var(--nb-on-accent-fg);
+}
+
+.nb-btn--outline {
+  background: transparent;
+  border: 1px solid var(--nb-border-strong);
+  color: var(--nb-text-body);
+  font-weight: 500;
+}
+
+/* Undo is visually more compact than its siblings even though it shares the
+   outline style — matches the literal padding in the mock (13px vs 16px). */
+.nb-btn--compact {
+  padding: 0 13px;
+}

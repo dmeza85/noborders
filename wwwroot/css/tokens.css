@@ -107,10 +107,11 @@
   --nb-radius-window:     12px;
   --nb-radius-full:       999px; /* filter chips and toggles */
 
-  --nb-control-height-chrome-btn: 26px;
-  --nb-control-height-compact:    30px; /* compact button/field */
-  --nb-control-height-standard:   36px; /* documented range 34–36px */
-  --nb-control-height-hero-btn:   42px;
+  --nb-control-height-chrome-btn:   26px;
+  --nb-control-height-compact:      30px; /* compact button/field */
+  --nb-control-height-standard:     36px; /* documented range 34–36px — standard input fields, target-monitor dropdown */
+  --nb-control-height-standard-btn: 34px; /* documented range 34–36px — standard action buttons (Save Changes / Undo / …) */
+  --nb-control-height-hero-btn:     42px;
 
   --nb-gap-button-group: 8px;
   --nb-gap-fields:       10px;
@@ -120,9 +121,13 @@
   --nb-divider-width: 1px;
   --nb-divider-color: var(--nb-border-subtle);
 
-  /* ── Placeholder art (cover/hero striped fill — swap for real art) ── */
+  /* ── Placeholder art (cover/hero striped fill — swap for real art) ──
+     Stripe widths/colors below were corrected against the literal markup in
+     design-handoff/NoBorders UI.dc.html (screen 2a) while building that
+     screen's shell — the README's prose summary rounds/generalizes these
+     slightly differently than the actual mock. */
   --nb-placeholder-art: repeating-linear-gradient(135deg, #1b1b23 0 8px, #16161d 8px 16px);
-  --nb-placeholder-art-hero: repeating-linear-gradient(115deg, #1b1b23 0 10px, #16161d 10px 20px);
-  --nb-placeholder-thumb-selected: repeating-linear-gradient(135deg, #22222c 0 8px, #1a1a22 8px 16px);
-  --nb-placeholder-thumb: repeating-linear-gradient(135deg, #1c1c24 0 8px, #16161d 8px 16px);
+  --nb-placeholder-art-hero: repeating-linear-gradient(115deg, #1b1b23 0 10px, #141419 10px 20px);
+  --nb-placeholder-thumb-selected: repeating-linear-gradient(135deg, #22222c 0 6px, #1a1a22 6px 12px);
+  --nb-placeholder-thumb: repeating-linear-gradient(135deg, #1c1c24 0 6px, #16161d 6px 12px);
 }

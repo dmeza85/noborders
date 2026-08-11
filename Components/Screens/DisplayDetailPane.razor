@@ -1,0 +1,67 @@
+@namespace NoBorders.Components.Screens
+@* Screen 2a's right-pane content (Display tab), design-handoff/README.md
+   §"2a — Main window, Display tab". Static/hardcoded sample data — Phase 2
+   is visual parity only, no bindings, nothing here is interactive yet. *@
+
+<div class="nb-display-pane">
+    <div class="nb-display-pane__left">
+        <div class="nb-text-label nb-display-pane__label">TARGET MONITOR</div>
+        <div class="nb-display-pane__select">
+            <span>@TargetMonitor</span>
+            <span class="nb-display-pane__select-caret">▾</span>
+        </div>
+
+        <div class="nb-display-pane__row">
+            <div class="nb-display-pane__field">
+                <div class="nb-text-label nb-display-pane__field-label">WIDTH</div>
+                <SteppedNumberField Value="@Width" />
+            </div>
+            <div class="nb-display-pane__field">
+                <div class="nb-text-label nb-display-pane__field-label">HEIGHT</div>
+                <SteppedNumberField Value="@Height" />
+            </div>
+        </div>
+
+        <div class="nb-display-pane__row nb-display-pane__row--offsets">
+            <div class="nb-display-pane__field">
+                <div class="nb-text-label nb-display-pane__field-label">OFFSET X</div>
+                <SteppedNumberField Value="@OffsetX" BorderSubtle="true" />
+            </div>
+            <div class="nb-display-pane__field">
+                <div class="nb-text-label nb-display-pane__field-label">OFFSET Y</div>
+                <SteppedNumberField Value="@OffsetY" BorderSubtle="true" />
+            </div>
+        </div>
+
+        <div class="nb-text-subline nb-display-pane__hint">Arrows step by 1 px · hold Shift for 10 · Ctrl for 100</div>
+
+        <label class="nb-display-pane__check">
+            <span class="nb-display-pane__check-box">✓</span>
+            <span>Lock cursor to window bounds</span>
+        </label>
+    </div>
+
+    <div class="nb-display-pane__right">
+        <div class="nb-text-label nb-display-pane__label">RESULT PREVIEW</div>
+        <div class="nb-display-pane__preview-well">
+            <div class="nb-display-pane__preview-monitor">
+                <div class="nb-display-pane__preview-window"></div>
+                <div class="nb-display-pane__preview-caption nb-mono">@PreviewCaption</div>
+            </div>
+        </div>
+        <div class="nb-display-pane__actions">
+            <button type="button" class="nb-btn nb-btn--primary">Save Changes</button>
+            <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change">↶ Undo</button>
+            <button type="button" class="nb-btn nb-btn--outline">Load Monitor Defaults</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly string TargetMonitor = "LG 27GP850";
+    private readonly int Width = 2560;
+    private readonly int Height = 1440;
+    private readonly int OffsetX = 0;
+    private readonly int OffsetY = 0;
+    private readonly string PreviewCaption = "2560×1440 @ 0,0 — full coverage";
+}

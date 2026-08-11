@@ -1,0 +1,128 @@
+.nb-display-pane {
+  display: flex;
+  gap: 26px;
+}
+
+.nb-display-pane__left {
+  width: 300px;
+  flex: none;
+}
+
+.nb-display-pane__label {
+  margin-bottom: 10px;
+}
+
+.nb-display-pane__select {
+  height: var(--nb-control-height-standard);
+  border-radius: var(--nb-radius-input);
+  border: 1px solid var(--nb-border);
+  background: var(--nb-field-alt);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  margin-bottom: 18px;
+  font: 500 13px/1 var(--nb-font-ui);
+  color: var(--nb-text-bright);
+}
+
+.nb-display-pane__select-caret {
+  color: var(--nb-text-muted);
+}
+
+.nb-display-pane__row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.nb-display-pane__row--offsets {
+  margin-bottom: 10px;
+}
+
+.nb-display-pane__field {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-display-pane__field-label {
+  letter-spacing: .12em;
+  margin-bottom: 7px;
+}
+
+.nb-display-pane__hint {
+  color: var(--nb-text-secondary);
+  margin-bottom: 16px;
+}
+
+.nb-display-pane__check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: default;
+}
+
+.nb-display-pane__check-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--nb-accent);
+  color: var(--nb-on-accent-fg);
+  font: 700 11px/18px var(--nb-font-ui);
+  text-align: center;
+  flex: none;
+}
+
+.nb-display-pane__check > span:last-child {
+  font: 400 12.5px/1 var(--nb-font-ui);
+  color: var(--nb-text-body);
+}
+
+.nb-display-pane__right {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-display-pane__preview-well {
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-chrome);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 168px;
+}
+
+.nb-display-pane__preview-monitor {
+  width: 290px;
+  height: 132px;
+  border: 1px dashed #33333f;
+  border-radius: 4px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nb-display-pane__preview-window {
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--nb-accent-rgb), .14);
+  border: 1.5px solid var(--nb-accent);
+  border-radius: 3px;
+}
+
+.nb-display-pane__preview-caption {
+  position: relative;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--nb-accent-text);
+  white-space: nowrap;
+}
+
+.nb-display-pane__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}

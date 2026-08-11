@@ -1,0 +1,337 @@
+.nb-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--nb-base);
+}
+
+/* ── Title strip ──────────────────────────────────────────────────────
+   Native MainForm title bar already provides minimize/maximize/close —
+   see the doc comment at the top of MainShell.razor. */
+.nb-shell__titlebar {
+  display: flex;
+  align-items: center;
+  height: var(--nb-titlebar-height);
+  background: var(--nb-chrome);
+  border-bottom: var(--nb-divider-width) solid var(--nb-divider-color);
+  padding: 0 12px;
+  gap: 12px;
+  flex: none;
+}
+
+.nb-shell__mark {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--nb-radius-chrome-btn);
+  background: var(--nb-accent);
+  flex: none;
+}
+
+.nb-shell__wordmark {
+  color: var(--nb-text-bright);
+}
+
+.nb-shell__version {
+  color: var(--nb-text-faint);
+  padding: 3px 6px;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-chrome-btn);
+}
+
+.nb-shell__spacer {
+  flex: 1;
+}
+
+.nb-shell__settings-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--nb-control-height-chrome-btn);
+  padding: 0 11px;
+  border-radius: var(--nb-radius-pill);
+  border: 1px solid var(--nb-border-alt);
+  background: var(--nb-field);
+  color: var(--nb-text-body);
+  font: 600 11.5px/1 var(--nb-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.nb-shell__settings-ring {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--nb-accent);
+  display: block;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────── */
+.nb-shell__hero {
+  height: 260px;
+  position: relative;
+  background-image: var(--nb-placeholder-art-hero);
+  flex: none;
+}
+
+.nb-shell__hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(10, 10, 12, 0) 0%, rgba(10, 10, 12, .45) 52%, rgba(10, 10, 12, .94) 100%);
+}
+
+.nb-shell__hero-caption {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  font-size: 9.5px;
+  color: var(--nb-text-secondary);
+}
+
+.nb-shell__hero-content {
+  position: absolute;
+  left: 36px;
+  right: 36px;
+  bottom: 26px;
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+}
+
+.nb-shell__hero-status-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-shell__hero-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.nb-shell__hero-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--nb-success);
+  display: block;
+}
+
+.nb-shell__hero-status-text {
+  color: var(--nb-success);
+  font-size: 10.5px; /* literal mock value — slightly above the 9.5-10px label range in tokens.css */
+}
+
+.nb-shell__hero-title {
+  color: #fff;
+}
+
+.nb-shell__hero-meta {
+  font-size: 12px;
+  color: #9a9aa8; /* one-off — doesn't match any named text token */
+  margin-top: 12px;
+}
+
+.nb-shell__hero-actions {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+
+.nb-shell__hero-btn {
+  height: var(--nb-control-height-hero-btn);
+  border-radius: 9px;
+  font: 700 13.5px/42px var(--nb-font-ui);
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+}
+
+.nb-shell__hero-btn--primary {
+  padding: 0 20px;
+  background: var(--nb-accent);
+  color: var(--nb-on-accent-fg);
+}
+
+.nb-shell__hero-btn--secondary {
+  padding: 0 18px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .14);
+  color: var(--nb-text-bright);
+  font-weight: 600;
+}
+
+/* ── Body ─────────────────────────────────────────────────────────── */
+.nb-shell__body {
+  display: flex;
+  background: var(--nb-surface);
+  flex: 1;
+  min-height: 0; /* lets the rail/right-pane scroll internally instead of overflowing — the mock's own min-height:430px was a fixed-size design-canvas card, not meaningful once this fills the real window */
+}
+
+/* Library rail */
+.nb-shell__rail {
+  width: 300px;
+  border-right: var(--nb-divider-width) solid var(--nb-divider-color);
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  overflow-y: auto;
+}
+
+.nb-shell__rail-filter {
+  padding: 14px 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nb-shell__rail-filter-field {
+  flex: 1;
+  height: var(--nb-control-height-compact);
+  border-radius: var(--nb-radius-pill);
+  background: var(--nb-field-alt);
+  border: 1px solid var(--nb-border);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font: 400 12px/1 var(--nb-font-ui);
+  color: var(--nb-text-muted);
+}
+
+.nb-shell__rail-add {
+  width: var(--nb-control-height-compact);
+  height: var(--nb-control-height-compact);
+  border-radius: var(--nb-radius-pill);
+  background: var(--nb-accent);
+  color: var(--nb-on-accent-fg);
+  font: 700 15px/30px var(--nb-font-ui);
+  text-align: center;
+  flex: none;
+  border: none;
+  cursor: pointer;
+}
+
+.nb-shell__rail-heading {
+  padding: 8px 16px;
+  color: var(--nb-text-faint);
+  letter-spacing: .16em;
+}
+
+.nb-shell__rail-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 16px;
+  border-left: 2px solid transparent;
+}
+
+.nb-shell__rail-row--selected {
+  background: var(--nb-accent-tint);
+  border-left-color: var(--nb-accent);
+}
+
+.nb-shell__rail-thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--nb-radius-pill);
+  background-image: var(--nb-placeholder-thumb);
+  flex: none;
+}
+
+.nb-shell__rail-thumb--selected {
+  background-image: var(--nb-placeholder-thumb-selected);
+}
+
+.nb-shell__rail-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-shell__rail-name {
+  font: 600 13px/1.2 var(--nb-font-ui);
+}
+
+.nb-shell__rail-name--selected {
+  color: var(--nb-text-primary);
+}
+
+.nb-shell__rail-name--active {
+  color: var(--nb-text-body);
+}
+
+.nb-shell__rail-name--inactive {
+  color: var(--nb-text-secondary);
+}
+
+.nb-shell__rail-res {
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.nb-shell__rail-res--selected,
+.nb-shell__rail-res--active {
+  color: #7a7a8a; /* one-off — doesn't match any named text token */
+}
+
+.nb-shell__rail-res--inactive {
+  color: var(--nb-text-faint);
+}
+
+.nb-shell__rail-on {
+  padding: 3px 7px;
+  border-radius: var(--nb-radius-chrome-btn);
+  background: var(--nb-success);
+  color: var(--nb-success-on-fill);
+  font-size: 9px;
+  font-weight: 700;
+  flex: none;
+}
+
+/* Right pane + tab strip */
+.nb-shell__right {
+  flex: 1;
+  min-width: 0;
+  padding: var(--nb-pane-padding) 26px 24px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.nb-shell__tabs {
+  display: flex;
+  gap: 26px;
+  border-bottom: var(--nb-divider-width) solid var(--nb-divider-color);
+  margin-bottom: 20px;
+}
+
+.nb-shell__tab {
+  padding-bottom: 10px;
+  font: 500 13px/1 var(--nb-font-ui);
+  color: #7a7a8a; /* one-off — doesn't match any named text token */
+  cursor: default;
+}
+
+.nb-shell__tab--active {
+  font-weight: 600;
+  color: var(--nb-text-primary);
+  border-bottom: 2px solid var(--nb-accent);
+}
+
+/* Status bar */
+.nb-shell__statusbar {
+  height: var(--nb-statusbar-height);
+  background: var(--nb-chrome);
+  border-top: var(--nb-divider-width) solid var(--nb-divider-color);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 14px;
+  color: var(--nb-text-muted);
+  flex: none;
+}
+
+.nb-shell__statusbar-spacer {
+  flex: 1;
+}

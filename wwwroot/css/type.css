@@ -52,11 +52,21 @@
 
 /* ── Base ─────────────────────────────────────────────────────────────── */
 html, body {
+  height: 100%;
+  margin: 0;
   font-family: var(--nb-font-ui);
   font-size: var(--nb-text-body-size);
   font-weight: 400;
   color: var(--nb-text-body);
   background: var(--nb-base);
+}
+
+#app {
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 .nb-mono { font-family: var(--nb-font-mono); }

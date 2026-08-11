@@ -1,0 +1,39 @@
+.nb-numfield {
+  height: var(--nb-control-height-standard);
+  border-radius: var(--nb-radius-input);
+  border: 1px solid var(--nb-border-strong-alt);
+  background: var(--nb-field-alt);
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 12px;
+}
+
+.nb-numfield--subtle {
+  border-color: var(--nb-border);
+}
+
+.nb-numfield__value {
+  flex: 1;
+  color: var(--nb-text-primary);
+}
+
+.nb-numfield__stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: none;
+}
+
+.nb-numfield__btn {
+  width: 20px;
+  height: 14px;
+  border-radius: var(--nb-radius-chrome-btn);
+  background: var(--nb-raised-alt);
+  color: var(--nb-text-body);
+  font: 700 7px/14px var(--nb-font-ui);
+  text-align: center;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: block;
+}

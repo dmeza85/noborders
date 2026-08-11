@@ -1,0 +1,117 @@
+@namespace NoBorders.Components.Screens
+@*
+    Shared shell for screens 2a (Display tab) and 5a (Matching tab) — title
+    strip, hero, and library rail are identical between the two per
+    design-handoff/README.md ("5a — Same shell as 2a; only the right pane
+    differs."). Static/hardcoded sample data — Phase 2 is visual parity
+    only, no bindings, nothing here is interactive yet.
+
+    Adaptation Decision #1 (MIGRATION_PLAN.md "Resolved decisions"):
+    MainForm keeps its native title bar, so the mock's window-control
+    glyphs (— ▢ ✕) and the divider that separated them from the Settings
+    button are intentionally dropped here — only the wordmark/version
+    chip/Settings button remain as a thin in-content header row.
+*@
+
+<div class="nb-shell">
+    <header class="nb-shell__titlebar">
+        <div class="nb-shell__mark"></div>
+        <div class="nb-text-wordmark nb-shell__wordmark">NOBORDERS</div>
+        <div class="nb-text-data nb-shell__version">v2.4</div>
+        <div class="nb-shell__spacer"></div>
+        <button type="button" class="nb-shell__settings-btn">
+            <span class="nb-shell__settings-ring"></span>Settings
+        </button>
+    </header>
+
+    <section class="nb-shell__hero">
+        <div class="nb-shell__hero-scrim"></div>
+        <div class="nb-shell__hero-caption nb-mono">hero art 16:5</div>
+        <div class="nb-shell__hero-content">
+            <div class="nb-shell__hero-status-block">
+                <div class="nb-shell__hero-status">
+                    <span class="nb-shell__hero-status-dot"></span>
+                    <span class="nb-text-label nb-shell__hero-status-text">BORDERLESS APPLIED</span>
+                </div>
+                <div class="nb-text-hero nb-shell__hero-title">@HeroGameName</div>
+                <div class="nb-shell__hero-meta nb-mono">@HeroMetaLine</div>
+            </div>
+            <div class="nb-shell__hero-actions">
+                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--primary">Disable Borderless</button>
+                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--secondary">Re-Apply</button>
+            </div>
+        </div>
+    </section>
+
+    <div class="nb-shell__body">
+        <aside class="nb-shell__rail">
+            <div class="nb-shell__rail-filter">
+                <div class="nb-shell__rail-filter-field">Filter…</div>
+                <button type="button" class="nb-shell__rail-add" aria-label="Add game">＋</button>
+            </div>
+            <div class="nb-text-label nb-shell__rail-heading">LIBRARY · 9</div>
+            @foreach (var g in Games)
+            {
+                var tier = RowTier(g);
+                <div class="nb-shell__rail-row @(g.Selected ? "nb-shell__rail-row--selected" : "")">
+                    <div class="nb-shell__rail-thumb @(g.Selected ? "nb-shell__rail-thumb--selected" : "")"></div>
+                    <div class="nb-shell__rail-info">
+                        <div class="nb-shell__rail-name nb-shell__rail-name--@tier">@g.Name</div>
+                        <div class="nb-shell__rail-res nb-shell__rail-res--@tier nb-mono">@g.Resolution</div>
+                    </div>
+                    @if (g.IsActive)
+                    {
+                        <div class="nb-shell__rail-on nb-mono">ON</div>
+                    }
+                </div>
+            }
+        </aside>
+
+        <div class="nb-shell__right">
+            <div class="nb-shell__tabs">
+                <div class="nb-shell__tab @(ActiveTab == ShellTab.Display ? "nb-shell__tab--active" : "")">Display</div>
+                <div class="nb-shell__tab @(ActiveTab == ShellTab.Matching ? "nb-shell__tab--active" : "")">Matching</div>
+            </div>
+            @RightPane
+        </div>
+    </div>
+
+    <footer class="nb-shell__statusbar nb-text-statusbar">
+        <span>Ctrl+Shift+A add</span>
+        <span>Ctrl+Shift+R refresh</span>
+        <div class="nb-shell__statusbar-spacer"></div>
+        <span>standard user</span>
+    </footer>
+</div>
+
+@code {
+    public enum ShellTab { Display, Matching }
+
+    [Parameter] public ShellTab ActiveTab { get; set; } = ShellTab.Display;
+    [Parameter] public RenderFragment? RightPane { get; set; }
+
+    private sealed record SampleGame(string Name, string Resolution, bool IsActive, bool Selected);
+
+    private const string HeroGameName = "Helldivers 2";
+    private const string HeroMetaLine = "2560×1440 · +0,+0 · LG 27GP850 · cursor locked";
+
+    // Sample library — design-handoff's own mock only shows 6 of the "9"
+    // its LIBRARY heading claims, implying a scrollable list; reproduced
+    // here exactly as given rather than deriving the heading from this
+    // list's length.
+    private static readonly List<SampleGame> Games = new()
+    {
+        new("Helldivers 2",       "2560×1440", IsActive: true,  Selected: true),
+        new("Elden Ring",         "3440×1440", IsActive: true,  Selected: false),
+        new("Baldur's Gate 3",    "1920×1080", IsActive: false, Selected: false),
+        new("Deep Rock Galactic", "3440×1440", IsActive: false, Selected: false),
+        new("Satisfactory",       "2560×1440", IsActive: false, Selected: false),
+        new("Cyberpunk 2077",     "3440×1440", IsActive: false, Selected: false),
+    };
+
+    // Text color tier follows (selected, active) exactly as the mock's
+    // literal per-row colors do: selected+ON is brightest, ON-but-unselected
+    // is next, and rows with no ON pill are dimmest.
+    private static string RowTier(SampleGame g) =>
+        g.Selected ? "selected" : g.IsActive ? "active" : "inactive";
+}
