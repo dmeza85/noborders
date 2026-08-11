@@ -1,0 +1,129 @@
+/*
+ * Typography — vendored Barlow + JetBrains Mono (fonts/ below), per the
+ * design-handoff README: "Ship them with the app rather than loading
+ * remotely." Font-face declarations plus one utility class per typographic
+ * "Role" from the README's Design Tokens table. Depends on tokens.css
+ * (--nb-font-ui / --nb-font-mono / --nb-text-* custom properties) being
+ * loaded first.
+ *
+ * Barlow ships as four static weights (400/500/600/700 — that's what
+ * Google Fonts serves for this family). JetBrains Mono ships as a single
+ * variable-font file covering the whole 400–700 weight axis used here.
+ */
+
+/* ── Barlow (UI / display) — static weights ─────────────────────────── */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/barlow/Barlow-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/barlow/Barlow-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/barlow/Barlow-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/barlow/Barlow-700.woff2') format('woff2');
+}
+
+/* ── JetBrains Mono (data / technical) — variable font, weight axis ──── */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono/JetBrainsMono-Variable.woff2') format('woff2');
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+html, body {
+  font-family: var(--nb-font-ui);
+  font-size: var(--nb-text-body-size);
+  font-weight: 400;
+  color: var(--nb-text-body);
+  background: var(--nb-base);
+}
+
+.nb-mono { font-family: var(--nb-font-mono); }
+
+/* ── Typographic roles (design-handoff README "Typography" table) ──── */
+
+.nb-text-hero {
+  font-family: var(--nb-font-ui);
+  font-size: var(--nb-text-hero-size);
+  font-weight: var(--nb-text-hero-weight);
+  line-height: var(--nb-text-hero-line-height);
+  letter-spacing: var(--nb-text-hero-letter-spacing);
+}
+
+.nb-text-screen-title {
+  font-family: var(--nb-font-ui);
+  font-size: var(--nb-text-screen-title-size);
+  font-weight: var(--nb-text-screen-title-weight);
+}
+
+/* All-caps mono section label, e.g. "TARGET MONITOR". Apply text-transform
+   at the call site if the source text isn't already upper case. */
+.nb-text-label {
+  font-family: var(--nb-font-mono);
+  font-size: var(--nb-text-label-size);
+  font-weight: var(--nb-text-label-weight);
+  letter-spacing: var(--nb-text-label-letter-spacing);
+}
+
+.nb-text-body {
+  font-family: var(--nb-font-ui);
+  font-size: var(--nb-text-body-size);
+  font-weight: var(--nb-text-body-weight);
+}
+
+.nb-text-subline {
+  font-family: var(--nb-font-ui);
+  font-size: var(--nb-text-subline-size);
+  font-weight: 400;
+  line-height: var(--nb-text-subline-line-height);
+}
+
+/* W/H, offsets, regex — mono field values */
+.nb-text-field-value {
+  font-family: var(--nb-font-mono);
+  font-size: var(--nb-text-field-value-size);
+  font-weight: var(--nb-text-field-value-weight);
+}
+
+/* Log lines / data rows */
+.nb-text-data {
+  font-family: var(--nb-font-mono);
+  font-size: var(--nb-text-data-size);
+  font-weight: var(--nb-text-data-weight);
+  line-height: var(--nb-text-data-line-height);
+}
+
+/* Chrome wordmark, "NOBORDERS" */
+.nb-text-wordmark {
+  font-family: var(--nb-font-ui);
+  font-size: var(--nb-text-wordmark-size);
+  font-weight: var(--nb-text-wordmark-weight);
+  letter-spacing: var(--nb-text-wordmark-letter-spacing);
+}
+
+.nb-text-statusbar {
+  font-family: var(--nb-font-mono);
+  font-size: var(--nb-text-statusbar-size);
+  font-weight: 400;
+}
