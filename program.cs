@@ -731,6 +731,13 @@ namespace NoBorders
             this.Resize      += OnResize;
             this.FormClosing += OnFormClosing;
             this.Load        += OnLoad;
+
+            // Phase 1.3 scaffolding — temporary 3rd tab proving the BlazorWebView
+            // control mounts and renders alongside the still-fully-functional
+            // Games/Settings tabs. Appended after the rest of the constructor so it
+            // can't perturb the flow above. Remove this call (and the method below)
+            // in Phase 1.5.
+            AddBlazorTestTab();
         }
 
         /// <summary>
@@ -1076,6 +1083,43 @@ namespace NoBorders
             btn.Font      = new Font("Segoe UI", 9f, selected ? FontStyle.Bold : FontStyle.Regular);
             btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
             btn.FlatAppearance.MouseDownBackColor = btn.BackColor;
+        }
+
+        // ── Phase 1 scaffolding (temporary — removed in Phase 1.5) ─────────────────
+
+        /// <summary>
+        /// Adds a throwaway 3rd tab hosting a BlazorWebView pointed at the Phase 1.1
+        /// placeholder page, reachable via its own temporary nav button, so the
+        /// BlazorWebView plumbing (DI services from Phase 1.2, host page, root
+        /// component) can be smoke-tested without touching BuildGamesTab/
+        /// BuildSettingsTab or anything the existing Games/Settings tabs depend on.
+        /// </summary>
+        private void AddBlazorTestTab()
+        {
+            var tabBlazorTest = new TabPage("Blazor Test");
+            int blazorTabIndex = _tabs.TabPages.Count;
+            _tabs.TabPages.Add(tabBlazorTest);
+
+            var blazorWebView = new BlazorWebView
+            {
+                Dock     = DockStyle.Fill,
+                HostPage = "wwwroot\\index.html",
+                Services = _blazorServices,
+            };
+            blazorWebView.RootComponents.Add<App>("#app");
+            tabBlazorTest.Controls.Add(blazorWebView);
+
+            var btnNavBlazorTest = new Button();
+            ConfigureNavButton(btnNavBlazorTest, "Blazor Test", blazorTabIndex);
+            btnNavBlazorTest.Location = new Point(198, 8);
+            StyleNavButton(btnNavBlazorTest, false);
+            _pnlNav.Controls.Add(btnNavBlazorTest);
+
+            // UpdateNavButtons() (already wired to this event) only knows about the
+            // two permanent nav buttons, so restyle this temporary one separately
+            // rather than touching that method.
+            _tabs.SelectedIndexChanged += (s, e) =>
+                StyleNavButton(btnNavBlazorTest, _tabs.SelectedIndex == blazorTabIndex);
         }
 
         // ── Games tab ────────────────────────────────────────────────────────────
