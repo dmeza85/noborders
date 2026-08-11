@@ -3896,8 +3896,18 @@ namespace NoBorders
 
         /// <summary>
         /// Shows a small non-stealing toast notification in the bottom-right corner
-        /// of the primary screen. Fades in, holds, then fades out automatically.
-        /// Safe to call from background threads — marshals to the UI thread.
+        /// of the primary screen, auto-dismissing after ~6s. Safe to call from
+        /// background threads — marshals to the UI thread.
+        ///
+        /// Phase 6.2 (MIGRATION_PLAN.md): reimplemented on top of a dedicated,
+        /// always-on-top BlazorWebView window hosting Components/Screens/Toast.razor
+        /// (screen 1g) instead of the original hand-drawn GDI popup — the
+        /// Adaptation Decision made for this item, since the toast's screen-corner
+        /// position is independent of MainForm (visible even if MainForm is
+        /// minimized/covered), which a docked overlay inside MainForm's own
+        /// BlazorWebView couldn't reproduce. `message` keeps its original shape
+        /// (an optional `\n`-separated "Title\nDetail", as every existing call site
+        /// already passes) so none of the seven call sites needed to change.
         /// </summary>
         private void ShowToast(string message, bool success = true)
         {
@@ -3910,125 +3920,65 @@ namespace NoBorders
                 return;
             }
 
-            // Toast uses the app's single dark palette for consistency
-            Color toastBg = Color.FromArgb(28, 28, 32);
-            Color accentColor = success
-                ? Color.FromArgb(34, 160, 74)
-                : Color.FromArgb(200, 55, 55);
-            Color msgFg = Color.FromArgb(210, 210, 210);
+            int nl = message.IndexOf('\n');
+            string title  = nl >= 0 ? message[..nl] : (success ? "NoBorders" : "Action failed");
+            string detail = nl >= 0 ? message[(nl + 1)..] : message;
+
+            const int toastWidth  = 330;
+            const int toastHeight = 100; // fits title + 2-line detail, same fixed-size simplification the GDI popup used
+            const int cornerGap   = 18;
+            const int holdMs      = 6200; // README: "auto-dismisses ~6s along the progress bar" + a small buffer past the CSS animation's 6s
+
+            var toastView = new BlazorWebView
+            {
+                HostPage = "wwwroot\\index.html",
+                Dock     = DockStyle.Fill,
+                Services = _blazorServices // same DI container as the main window; Toast.razor needs none of AppStateService's capabilities
+            };
+            var parameters = new Dictionary<string, object?>
+            {
+                [nameof(Components.Screens.Toast.Title)]   = title,
+                [nameof(Components.Screens.Toast.Detail)]  = detail,
+                [nameof(Components.Screens.Toast.Success)] = success
+            };
+            toastView.RootComponents.Add<Components.Screens.Toast>("#app", parameters);
 
             var toast = new Form
             {
                 FormBorderStyle = FormBorderStyle.None,
                 ShowInTaskbar   = false,
                 TopMost         = true,
-                Opacity         = 0,
-                Size            = new Size(300, 62),
+                Size            = new Size(toastWidth, toastHeight),
                 StartPosition   = FormStartPosition.Manual,
-                BackColor       = toastBg
+                BackColor       = Color.FromArgb(0x11, 0x11, 0x16) // matches Toast.razor.css's own background; only visible at the rounded-corner seam
             };
 
             var screen = Screen.PrimaryScreen?.WorkingArea ?? Screen.AllScreens[0].WorkingArea;
             toast.Location = new Point(
-                screen.Right  - toast.Width  - 18,
-                screen.Bottom - toast.Height - 18);
+                screen.Right  - toast.Width  - cornerGap,
+                screen.Bottom - toast.Height - cornerGap);
 
-            // Left accent bar
-            var accent = new Panel
-            {
-                Dock      = DockStyle.Left,
-                Width     = 4,
-                BackColor = accentColor
-            };
+            toast.Controls.Add(toastView);
 
-            // "NoBorders" app label
-            var lblApp = new Label
-            {
-                Text      = "NoBorders",
-                Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-                ForeColor = accentColor,
-                BackColor = Color.Transparent,
-                AutoSize  = false,
-                Bounds    = new Rectangle(12, 5, 276, 16),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            // Message text
-            var lblMsg = new Label
-            {
-                Text      = message,
-                Font      = new Font("Segoe UI", 9f),
-                ForeColor = msgFg,
-                BackColor = Color.Transparent,
-                AutoSize  = false,
-                Bounds    = new Rectangle(12, 22, 276, 34),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            toast.Controls.Add(lblApp);
-            toast.Controls.Add(lblMsg);
-            toast.Controls.Add(accent);
-
-            // Rounded-corner region (Windows 10/11 style).
-            toast.Region = new Region(new System.Drawing.Drawing2D.GraphicsPath());
-            toast.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                using var path = RoundedRect(new Rectangle(0, 0, toast.Width - 1, toast.Height - 1), 8);
-                using var bg   = new SolidBrush(toast.BackColor);
-                e.Graphics.FillPath(bg, path);
+            // Rounded-corner region — same technique and radius (8px, matching
+            // --nb-radius-input) as the old GDI popup's RoundedRect helper, just
+            // clipping the whole host window instead of hand-painting a fill.
+            using (var path = RoundedRect(new Rectangle(0, 0, toast.Width, toast.Height), 8))
                 toast.Region = new Region(path);
-            };
 
-            // Fade-in → hold → fade-out timer sequence.
-            const int fadeSteps    = 12;   // steps for fade in and out
-            const int fadeInterval = 20;   // ms per step
-            const int holdMs       = 2200; // ms to hold at full opacity
-            int step = 0;
-            bool holding = false;
-            bool fadingOut = false;
-
-            var fadeTimer = new System.Windows.Forms.Timer { Interval = fadeInterval };
-            fadeTimer.Tick += (s, e) =>
+            var closeTimer = new System.Windows.Forms.Timer { Interval = holdMs };
+            closeTimer.Tick += (s, e) =>
             {
-                if (!fadingOut && !holding)
-                {
-                    // Fade in
-                    step++;
-                    toast.Opacity = Math.Min(1.0, step / (double)fadeSteps);
-                    if (step >= fadeSteps)
-                    {
-                        holding = true;
-                        fadeTimer.Interval = holdMs;
-                    }
-                }
-                else if (holding)
-                {
-                    // Hold complete — start fade out
-                    holding  = false;
-                    fadingOut = true;
-                    step     = fadeSteps;
-                    fadeTimer.Interval = fadeInterval;
-                }
-                else
-                {
-                    // Fade out
-                    step--;
-                    toast.Opacity = Math.Max(0.0, step / (double)fadeSteps);
-                    if (step <= 0)
-                    {
-                        fadeTimer.Stop();
-                        fadeTimer.Dispose();
-                        toast.Close();
-                        toast.Dispose();
-                    }
-                }
+                closeTimer.Stop();
+                closeTimer.Dispose();
+                toast.Close();
+                toast.Dispose();
             };
 
             // Show without stealing focus.
             toast.Show();
             NativeMethods.ShowWindowNoActivate(toast.Handle);
-            fadeTimer.Start();
+            closeTimer.Start();
         }
 
         /// <summary>Helper to build a rounded-rectangle GraphicsPath.</summary>

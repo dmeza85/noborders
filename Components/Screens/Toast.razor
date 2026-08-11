@@ -1,11 +1,32 @@
 @namespace NoBorders.Components.Screens
-@* Screen 1g's toast, design-handoff/README.md §"1g". Static visual only —
-   Phase 2. Corner positioning here approximates ShowToast's existing GDI
-   placement (18px from the bottom-right corner) for a representative
-   screenshot; the actual auto-dismiss/fade/progress animation is
-   Phase 6.2's job when this replaces that GDI implementation. *@
+@* Screen 1g's toast, design-handoff/README.md §"1g".
+   Phase 6.2: this is now the live root component of a small, dedicated,
+   always-on-top BlazorWebView window (see MainForm.ShowToast) — the
+   Adaptation Decision made for this item was a separate host window
+   matching the old GDI ShowToast's independent screen-corner positioning,
+   not a docked overlay inside MainForm's own BlazorWebView. This window
+   IS the toast (no page chrome around it), so — unlike other screens —
+   there's no outer positioning here; the host Form is sized/placed by
+   WinForms exactly as the old GDI popup was, and this component just
+   fills it.
 
-<div class="nb-toast">
+   Progress bar: a single CSS animation (nb-toast-countdown, 6s linear)
+   rather than a C#-driven percentage, since "auto-dismiss ~6s along the
+   progress bar" (README, Interactions & Behavior) is a fixed duration,
+   not live data — no need for repeated Blazor re-renders just to tick a
+   number down. MainForm's own auto-close timer uses a matching duration
+   so the window disappears right as the bar visually empties.
+
+   Undo intentionally omitted (ShowUndo defaults false, and MainForm never
+   passes true): the README's Interactions text describes toast Undo as
+   reverting "the applied bounds," but none of ShowToast's real call sites
+   (add/refresh/elevation-warning) capture an undo snapshot the way
+   BtnSaveGame_Click does (Phase 4.13) — wiring a live "Undo" link to
+   nothing would be a dead click target on a real, user-facing popup,
+   worse than the mock's static screenshot. Left in the markup, gated
+   behind the parameter, for whenever a real snapshot exists to revert to. *@
+
+<div class="nb-toast @(Success ? "" : "nb-toast--danger")">
     <div class="nb-toast__row">
         <div class="nb-toast__thumb"></div>
         <div class="nb-toast__body">
@@ -14,16 +35,20 @@
                 <span class="nb-toast__title">@Title</span>
             </div>
             <div class="nb-toast__detail">@Detail</div>
-            <div class="nb-toast__undo nb-mono">Undo · Ctrl+Shift+Z</div>
+            @if (ShowUndo)
+            {
+                <div class="nb-toast__undo nb-mono">Undo · Ctrl+Shift+Z</div>
+            }
         </div>
     </div>
     <div class="nb-toast__progress-track">
-        <div class="nb-toast__progress-fill" style="width:@(Progress)%"></div>
+        <div class="nb-toast__progress-fill"></div>
     </div>
 </div>
 
 @code {
     [Parameter] public string Title { get; set; } = "Borderless applied";
     [Parameter] public string Detail { get; set; } = "Helldivers 2 → 2560×1440 on LG 27GP850";
-    [Parameter] public int Progress { get; set; } = 62;
+    [Parameter] public bool Success { get; set; } = true;
+    [Parameter] public bool ShowUndo { get; set; } = false;
 }

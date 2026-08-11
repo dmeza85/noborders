@@ -1,13 +1,13 @@
+/* Phase 6.2: no outer position:fixed/right/bottom anymore — this div now
+   fills its own dedicated host window one-to-one (MainForm.ShowToast sizes
+   and positions that window in the bottom-right corner the same way the
+   old GDI popup did), so screen placement is WinForms' job, not CSS's. */
 .nb-toast {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
   width: 330px;
   border: 1px solid var(--nb-border);
   border-radius: var(--nb-radius-input); /* matches the existing GDI ShowToast's RoundedRect(..., 8) */
   background: #111116; /* one-off — doesn't match any named surface token */
   padding: 14px 15px;
-  z-index: 200;
 }
 
 .nb-toast__row {
@@ -43,6 +43,10 @@
   flex: none;
 }
 
+.nb-toast--danger .nb-toast__dot {
+  background: var(--nb-danger);
+}
+
 .nb-toast__title {
   font: 600 12.5px/1 var(--nb-font-ui);
   color: var(--nb-text-primary);
@@ -70,5 +74,14 @@
 
 .nb-toast__progress-fill {
   height: 2px;
+  width: 100%;
   background: var(--nb-accent);
+  animation: nb-toast-countdown 6s linear forwards;
+}
+
+/* README, "Interactions & Behavior": "Toast: auto-dismisses ~6s along the
+   progress bar." MainForm's host-window close timer is set to match. */
+@keyframes nb-toast-countdown {
+  from { width: 100%; }
+  to   { width: 0%; }
 }
