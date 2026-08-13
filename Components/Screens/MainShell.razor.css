@@ -20,11 +20,14 @@
   flex: none;
 }
 
+/* Borderless Gaming App UI/icon_export (README.md there): the pixel-grid
+   16-viewBox violet mark, same #8b6cff as --nb-accent — matches what used
+   to be a flat color square here, just with the real brand mark now. SVG,
+   not a raster PNG, so it stays crisp at any Windows DPI scale. */
 .nb-shell__mark {
   width: 16px;
   height: 16px;
-  border-radius: var(--nb-radius-chrome-btn);
-  background: var(--nb-accent);
+  background: url('img/noborders-mark.svg') no-repeat center / contain;
   flex: none;
 }
 
@@ -285,20 +288,6 @@
 
 .nb-shell__rail-name--inactive {
   color: var(--nb-text-secondary);
-}
-
-.nb-shell__rail-res {
-  font-size: 10px;
-  margin-top: 4px;
-}
-
-.nb-shell__rail-res--selected,
-.nb-shell__rail-res--active {
-  color: #7a7a8a; /* one-off — doesn't match any named text token */
-}
-
-.nb-shell__rail-res--inactive {
-  color: var(--nb-text-faint);
 }
 
 .nb-shell__rail-on {

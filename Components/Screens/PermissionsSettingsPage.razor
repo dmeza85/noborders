@@ -1,22 +1,35 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
 @* Stub per Phase 2.6's scope ("stub views for Permissions/About") — the
    design bundle has no dedicated mockup for this nav item, but the
    underlying feature is real and already shown in the current WinForms
    Settings tab (CheckElevation/RestartAsAdmin), so this reuses that exact
    content restyled with the new tokens rather than a blank placeholder.
    design-handoff's 1g elevation-dialog icon treatment (amber warning
-   square) is reused here for the same "needs elevation" concept. Static —
-   Restart As Administrator doesn't do anything yet. *@
+   square) is reused here for the same "needs elevation" concept.
+
+   Phase 8.4 bugfix: wired to real data — State.IsElevated (MainForm's
+   `_isElevated`, set once by CheckElevation() at startup) drives the status
+   line and whether the button/hint show at all (nothing to do if already
+   elevated, mirroring the WinForms tab's own `_btnRestartAdmin.Visible =
+   !_isElevated`). The button previously had no @onclick at all — clicking
+   it silently did nothing. It now calls State.ConfirmAndRestartAsAdmin(),
+   which shows the same native confirmation MessageBox the WinForms tab's
+   button always has before actually restarting. *@
 
 <div class="nb-permissions-page__title">Permissions</div>
 
 <div class="nb-permissions-page__status">
-    <span class="nb-permissions-page__status-ring"></span>
-    <span>Running as Standard User</span>
+    <span class="nb-permissions-page__status-ring @(State.IsElevated ? "nb-permissions-page__status-ring--elevated" : "")"></span>
+    <span>@(State.IsElevated ? "Running as Administrator" : "Running as Standard User")</span>
 </div>
 
-<button type="button" class="nb-btn nb-btn--outline nb-permissions-page__restart">Restart as Administrator</button>
+@if (!State.IsElevated)
+{
+    <button type="button" class="nb-btn nb-btn--outline nb-permissions-page__restart" @onclick="() => State.ConfirmAndRestartAsAdmin()">Restart as Administrator</button>
 
-<div class="nb-permissions-page__hint">
-    Only needed if a tracked game isn't going borderless and you see an elevation warning.
-</div>
+    <div class="nb-permissions-page__hint">
+        Only needed if a tracked game isn't going borderless and you see an elevation warning.
+    </div>
+}

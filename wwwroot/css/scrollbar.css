@@ -1,0 +1,43 @@
+/*
+ * Scrollbar — thin, dark, token-driven scrollbars for every scrollable
+ * surface in the app (games rail, right pane, settings nav, activity log,
+ * modals, …), replacing WebView2/Chromium's default OS-chrome scrollbar,
+ * which stood out against the app's dark palette. Global, not per-component
+ * scoped CSS — nothing about scrollbar styling is specific to any one
+ * screen, so one rule set covers every `overflow: auto/scroll` container
+ * app-wide rather than repeating it per component.
+ *
+ * WebView2 is Chromium-based, so the `::-webkit-scrollbar` family is what
+ * actually renders; `scrollbar-width`/`scrollbar-color` are the standard
+ * fallback (also honored by recent Chromium/Edge builds) for anything the
+ * vendor-prefixed rules miss.
+ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nb-raised-alt) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--nb-raised-alt);
+  border-radius: var(--nb-radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--nb-border-strong-alt);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

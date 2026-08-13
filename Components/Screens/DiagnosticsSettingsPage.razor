@@ -1,6 +1,4 @@
 @namespace NoBorders.Components.Screens
-@using NoBorders.Services
-@inject AppStateService State
 @* Screen 4b — Settings: Diagnostics. The mock frames this as an isolated
    520px card with its own "SETTINGS · DIAGNOSTICS" title bar, but 1e/1f
    both show the full shell-with-nav treatment and the README says every
@@ -19,14 +17,11 @@
    Export Log/the Verbose logging toggle don't do anything yet. Open Log
    is real as of Phase 7.0 (navigates to the Activity Log screen).
 
-   Phase 8.3: added a real "Game artwork" row — the SteamGridDB API key
-   field, bound to AppStateService.ArtworkApiKey/SetArtworkApiKey. This has
-   no mock precedent at all (the design bundle predates Phase 8), so its
-   visual language is deliberately borrowed wholesale from this page's own
-   existing toggle-row, not invented from scratch. type="password" hides
-   the key from casual over-the-shoulder viewing, same reasoning as any
-   credential field — nothing about SteamGridDB's own key format requires
-   it, it's just good practice for a field that gets pasted once and left. *@
+   Phase 8.3 added a real "Game artwork" row here — the SteamGridDB API key
+   field. It's since moved to its own Settings > Artwork page/nav entry
+   (see ArtworkSettingsPage.razor), alongside the Hotkeys/Behaviour split,
+   so this page is back to being purely the static log/verbose-logging
+   stub described above. *@
 
 <div class="nb-diagnostics-page__log-row">
     <div class="nb-diagnostics-page__log-info">
@@ -44,14 +39,6 @@
     <ToggleSwitch On="false" />
 </div>
 
-<div class="nb-diagnostics-page__toggle-row">
-    <div class="nb-diagnostics-page__toggle-info">
-        <div class="nb-diagnostics-page__toggle-title">Game artwork (SteamGridDB)</div>
-        <div class="nb-diagnostics-page__toggle-sub">Personal API key for fetching hero banners and rail icons — free at steamgriddb.com/profile/preferences/api. Leave blank to use each game's own .exe icon only.</div>
-    </div>
-    <input type="password" class="nb-diagnostics-page__artwork-input nb-mono" placeholder="Paste API key…" value="@State.ArtworkApiKey" @oninput="OnApiKeyInput" />
-</div>
-
 <div class="nb-diagnostics-page__footer">
     <div class="nb-diagnostics-page__footer-text nb-mono">3 errors in the last session</div>
     <button type="button" class="nb-diagnostics-page__export">Export Log</button>
@@ -60,6 +47,4 @@
 @code {
     // Phase 7.0: real navigation to the Activity Log screen.
     [Parameter] public EventCallback OnOpenLog { get; set; }
-
-    private void OnApiKeyInput(ChangeEventArgs e) => State.SetArtworkApiKey(e.Value?.ToString() ?? "");
 }

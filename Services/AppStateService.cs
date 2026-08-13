@@ -36,126 +36,24 @@ namespace NoBorders.Services
     /// into a MainForm method that both performs the mutation and raises
     /// `Changed` itself, once, after — the DI/service layer doesn't duplicate
     /// that decision.
+    ///
+    /// review.md §4.1: this used to take 75 positional Func/Action constructor
+    /// parameters, nearly all the same shape — a future edit inserting or
+    /// reordering one was a silent, compiler-invisible risk. It now takes a
+    /// single <see cref="IMainFormBridge"/> instead; every member below reads
+    /// through it by name (<c>_bridge.Settings</c>, <c>_bridge.SelectGame(...)</c>,
+    /// etc.) rather than through a positionally-bound delegate field. See
+    /// IMainFormBridge's own doc comment (program.cs, just above MainForm) for
+    /// the full rationale — this class's public API is unchanged by that
+    /// refactor, only what's behind it.
     /// </summary>
     public sealed class AppStateService
     {
-        private readonly Func<AppSettings> _getSettings;
-        private readonly Func<GameConfig?> _getSelectedGame;
-        private readonly Func<List<OpenWindowEntry>> _getOpenWindows;
-        private readonly Func<List<MonitorItem>> _getMonitors;
-        private readonly Func<string> _getHotkeyAddStatus;
-        private readonly Func<string> _getHotkeyRefreshStatus;
-        private readonly Action<GameConfig> _selectGame;
-        private readonly Func<List<string>> _getMonitorOptions;
-        private readonly Func<string> _getActiveScope;
-        private readonly Action<string> _selectMonitorScope;
-        private readonly Action _toggleGameActive;
-        private readonly Action _loadMonitorDefaults;
-        private readonly Func<string> _getPendingDisplayName;
-        private readonly Action _fetchName;
-        private readonly Action _saveGameChanges;
-        private readonly Action _removeSelectedGame;
-        private readonly Action<OpenWindowEntry> _addGameFromRunningWindow;
-        private readonly Action _browseForExe;
-        private readonly Func<string> _getActiveMonitorDefaultScope;
-        private readonly Action<string> _selectMonitorDefaultScope;
-        private readonly Action _saveMonitorDefault;
-        private readonly Action<string> _deleteMonitorDefault;
-        private readonly Func<bool> _getIsCapturingHotkeyAdd;
-        private readonly Func<bool> _getIsCapturingHotkeyRefresh;
-        private readonly Action _toggleHotkeyAddCapture;
-        private readonly Action _toggleHotkeyRefreshCapture;
-        private readonly Action _toggleMinimizeToTray;
-        private readonly Action _toggleStartWithWindows;
-        private readonly Action _toggleStartMinimized;
-        private readonly Func<bool> _getCanUndo;
-        private readonly Action _undo;
-        private readonly Func<GameConfig, bool> _isGameRunning;
-        private readonly Action _queueSave;
-        private readonly Action _saveNow;
-        private readonly Action _restartAsAdmin;
-        private readonly Func<string> _getArtworkApiKey;
-        private readonly Action<string> _setArtworkApiKey;
-        private readonly Action<string, string> _applyArtwork;
+        private readonly IMainFormBridge _bridge;
 
-        public AppStateService(
-            Func<AppSettings> getSettings,
-            Func<GameConfig?> getSelectedGame,
-            Func<List<OpenWindowEntry>> getOpenWindows,
-            Func<List<MonitorItem>> getMonitors,
-            Func<string> getHotkeyAddStatus,
-            Func<string> getHotkeyRefreshStatus,
-            Action<GameConfig> selectGame,
-            Func<List<string>> getMonitorOptions,
-            Func<string> getActiveScope,
-            Action<string> selectMonitorScope,
-            Action toggleGameActive,
-            Action loadMonitorDefaults,
-            Func<string> getPendingDisplayName,
-            Action fetchName,
-            Action saveGameChanges,
-            Action removeSelectedGame,
-            Action<OpenWindowEntry> addGameFromRunningWindow,
-            Action browseForExe,
-            Func<string> getActiveMonitorDefaultScope,
-            Action<string> selectMonitorDefaultScope,
-            Action saveMonitorDefault,
-            Action<string> deleteMonitorDefault,
-            Func<bool> getIsCapturingHotkeyAdd,
-            Func<bool> getIsCapturingHotkeyRefresh,
-            Action toggleHotkeyAddCapture,
-            Action toggleHotkeyRefreshCapture,
-            Action toggleMinimizeToTray,
-            Action toggleStartWithWindows,
-            Action toggleStartMinimized,
-            Func<bool> getCanUndo,
-            Action undo,
-            Func<GameConfig, bool> isGameRunning,
-            Action queueSave,
-            Action saveNow,
-            Action restartAsAdmin,
-            Func<string> getArtworkApiKey,
-            Action<string> setArtworkApiKey,
-            Action<string, string> applyArtwork)
+        internal AppStateService(IMainFormBridge bridge)
         {
-            _getSettings              = getSettings;
-            _getSelectedGame          = getSelectedGame;
-            _getOpenWindows           = getOpenWindows;
-            _getMonitors              = getMonitors;
-            _getHotkeyAddStatus       = getHotkeyAddStatus;
-            _getHotkeyRefreshStatus   = getHotkeyRefreshStatus;
-            _selectGame               = selectGame;
-            _getMonitorOptions        = getMonitorOptions;
-            _getActiveScope           = getActiveScope;
-            _loadMonitorDefaults      = loadMonitorDefaults;
-            _getPendingDisplayName    = getPendingDisplayName;
-            _fetchName                = fetchName;
-            _saveGameChanges          = saveGameChanges;
-            _removeSelectedGame       = removeSelectedGame;
-            _addGameFromRunningWindow = addGameFromRunningWindow;
-            _browseForExe             = browseForExe;
-            _getActiveMonitorDefaultScope = getActiveMonitorDefaultScope;
-            _selectMonitorDefaultScope    = selectMonitorDefaultScope;
-            _saveMonitorDefault           = saveMonitorDefault;
-            _deleteMonitorDefault         = deleteMonitorDefault;
-            _getIsCapturingHotkeyAdd      = getIsCapturingHotkeyAdd;
-            _getIsCapturingHotkeyRefresh  = getIsCapturingHotkeyRefresh;
-            _toggleHotkeyAddCapture       = toggleHotkeyAddCapture;
-            _toggleHotkeyRefreshCapture   = toggleHotkeyRefreshCapture;
-            _toggleMinimizeToTray         = toggleMinimizeToTray;
-            _toggleStartWithWindows       = toggleStartWithWindows;
-            _toggleStartMinimized         = toggleStartMinimized;
-            _getCanUndo               = getCanUndo;
-            _undo                     = undo;
-            _isGameRunning            = isGameRunning;
-            _selectMonitorScope       = selectMonitorScope;
-            _toggleGameActive         = toggleGameActive;
-            _queueSave                = queueSave;
-            _saveNow                  = saveNow;
-            _restartAsAdmin           = restartAsAdmin;
-            _getArtworkApiKey         = getArtworkApiKey;
-            _setArtworkApiKey         = setArtworkApiKey;
-            _applyArtwork             = applyArtwork;
+            _bridge = bridge;
         }
 
         /// <summary>
@@ -169,7 +67,7 @@ namespace NoBorders.Services
         public void RaiseChanged() => Changed?.Invoke();
 
         /// <summary>The live AppSettings instance — same object MainForm reads/writes.</summary>
-        public AppSettings Settings => _getSettings();
+        public AppSettings Settings => _bridge.Settings;
 
         public List<GameConfig> Games => Settings.Games;
         public HashSet<string> KnownMonitors => Settings.KnownMonitors;
@@ -188,7 +86,7 @@ namespace NoBorders.Services
         /// MainShell.razor) rather than this service silently picking one —
         /// selection state should read exactly as it is.
         /// </summary>
-        public GameConfig? SelectedGame => _getSelectedGame();
+        public GameConfig? SelectedGame => _bridge.SelectedGame;
 
         /// <summary>
         /// Selects a game exactly as clicking its row in the WinForms games list
@@ -199,7 +97,7 @@ namespace NoBorders.Services
         /// etc.) stays in sync even though those controls aren't the visible UI
         /// anymore — MainForm remains the single source of truth for selection.
         /// </summary>
-        public void SelectGame(GameConfig game) => _selectGame(game);
+        public void SelectGame(GameConfig game) => _bridge.SelectGame(game);
 
         /// <summary>
         /// Options for the target-monitor dropdown — same list `_cmbMonitor.Items`
@@ -208,7 +106,7 @@ namespace NoBorders.Services
         /// Read directly off the WinForms control rather than recomputed here, so
         /// there's exactly one place that decides this list's contents/order.
         /// </summary>
-        public List<string> MonitorOptions => _getMonitorOptions();
+        public List<string> MonitorOptions => _bridge.MonitorOptions;
 
         /// <summary>
         /// MainForm's `_activeScope` — which monitor's profile is currently being
@@ -218,7 +116,7 @@ namespace NoBorders.Services
         /// set fall back to their own display-only pick (see DisplayDetailPane's
         /// `TargetMonitorName`), same rationale as `SelectedGame`.
         /// </summary>
-        public string ActiveMonitorScope => _getActiveScope();
+        public string ActiveMonitorScope => _bridge.ActiveMonitorScope;
 
         /// <summary>
         /// Selects a monitor scope exactly as picking it in the WinForms combo
@@ -227,7 +125,7 @@ namespace NoBorders.Services
         /// (which also persists the previous scope's edited fields via
         /// `SaveUIToProfile` before switching).
         /// </summary>
-        public void SelectMonitorScope(string scope) => _selectMonitorScope(scope);
+        public void SelectMonitorScope(string scope) => _bridge.SelectMonitorScope(scope);
 
         /// <summary>
         /// Flips the selected game's `IsActive` exactly as clicking the WinForms
@@ -236,7 +134,7 @@ namespace NoBorders.Services
         /// handler runs (which also saves the config and immediately
         /// enforces/un-enforces the window). No-op if no game is selected.
         /// </summary>
-        public void ToggleActive() => _toggleGameActive();
+        public void ToggleActive() => _bridge.ToggleGameActive();
 
         /// <summary>
         /// Loads the current monitor scope's saved default profile onto the
@@ -246,7 +144,7 @@ namespace NoBorders.Services
         /// `BtnLoadDefaults_Click` runs. No-op (with a status message) if there's
         /// no saved default for the active scope.
         /// </summary>
-        public void LoadMonitorDefaults() => _loadMonitorDefaults();
+        public void LoadMonitorDefaults() => _bridge.LoadMonitorDefaultsForSelectedGame();
 
         /// <summary>
         /// MainForm's `_txtGameName.Text` — the pending display-name edit buffer,
@@ -258,7 +156,7 @@ namespace NoBorders.Services
         /// `SelectedGame.GameName` once a game is actually selected, so a fetch
         /// is visible before it's saved.
         /// </summary>
-        public string PendingDisplayName => _getPendingDisplayName();
+        public string PendingDisplayName => _bridge.PendingDisplayName;
 
         /// <summary>
         /// Fetches the display name from the selected game's currently-running
@@ -269,7 +167,27 @@ namespace NoBorders.Services
         /// Save Changes' job). No-op (with a status message) if the game isn't
         /// currently running.
         /// </summary>
-        public void FetchName() => _fetchName();
+        public void FetchName() => _bridge.FetchNameForSelectedGame();
+
+        /// <summary>
+        /// MainForm's `_txtRegex.Text` — the pending match-pattern edit buffer,
+        /// mirroring <see cref="PendingDisplayName"/>'s relationship to
+        /// `GameConfig.GameName`. Kept in sync with the selected game's real
+        /// pattern on selection, but can diverge once <see
+        /// cref="SetPendingRegexPattern"/> writes into it; only committed to
+        /// `GameConfig.RegexPattern` by Save Changes (Phase 4.6 — this buffer
+        /// already existed on the WinForms side; Blazor just never read it).
+        /// </summary>
+        public string PendingRegexPattern => _bridge.PendingRegexPattern;
+
+        /// <summary>
+        /// review.md §3: backs "Use Title Of Selected" on the Matching tab,
+        /// previously dead. Not routed through a hidden WinForms button, so
+        /// RaiseChanged is MainForm's job here (same shape as AdjustWidth).
+        /// Writes only the pending buffer, same as <see cref="FetchName"/> —
+        /// Save Changes still owns actually persisting it.
+        /// </summary>
+        public void SetPendingRegexPattern(string pattern) => _bridge.SetPendingRegexPattern(pattern);
 
         /// <summary>
         /// Commits the pending edits — <see cref="PendingDisplayName"/>, the
@@ -281,7 +199,7 @@ namespace NoBorders.Services
         /// `BtnSaveGame_Click` is wired to — the same handler the WinForms UI's
         /// *other* Save Changes button (`_btnSaveAdvanced`) already shared.
         /// </summary>
-        public void SaveGameChanges() => _saveGameChanges();
+        public void SaveGameChanges() => _bridge.SaveGameChanges();
 
         /// <summary>
         /// Removes the selected game entirely, exactly as clicking "Remove Game"
@@ -291,7 +209,7 @@ namespace NoBorders.Services
         /// persists). That handler has no confirmation prompt, and neither does
         /// this — see its doc comment in program.cs. No-op if no game is selected.
         /// </summary>
-        public void RemoveSelectedGame() => _removeSelectedGame();
+        public void RemoveSelectedGame() => _bridge.RemoveSelectedGame();
 
         /// <summary>
         /// Adds a new tracked game from a currently-running window — the Blazor
@@ -302,8 +220,13 @@ namespace NoBorders.Services
         /// adaptation decisions, so this forwards straight to MainForm's
         /// `AddGame` — the real state-mutating method that dialog's OK-path (and
         /// the Browse-for-EXE path) both already call.
+        ///
+        /// Returns true if a game was genuinely added (false on a duplicate,
+        /// empty input, etc.) — Phase 8.4's auto-fetch-artwork-on-add feature
+        /// uses this to know whether <see cref="SelectedGame"/> is now the new
+        /// game before trying to fetch its art.
         /// </summary>
-        public void AddGameFromRunningWindow(OpenWindowEntry entry) => _addGameFromRunningWindow(entry);
+        public bool AddGameFromRunningWindow(OpenWindowEntry entry) => _bridge.AddGameFromRunningWindow(entry);
 
         /// <summary>
         /// Opens the native "Select Game Executable" file picker exactly as
@@ -311,8 +234,12 @@ namespace NoBorders.Services
         /// MainForm's `PerformClick()` on `_btnAddBrowse`, so the real,
         /// unchanged `BtnAddBrowse_Click` runs (a genuine OS common dialog,
         /// blocking until dismissed — not something the design mock replaces).
+        ///
+        /// Returns true if a game was genuinely added (false if the user
+        /// cancelled the dialog, or the pick was a duplicate) — same reason as
+        /// <see cref="AddGameFromRunningWindow"/>'s return value.
         /// </summary>
-        public void BrowseForExe() => _browseForExe();
+        public bool BrowseForExe() => _bridge.BrowseForExe();
 
         /// <summary>
         /// MainForm's `_cmbSetMonitor.SelectedItem` — which monitor's baseline
@@ -322,7 +249,7 @@ namespace NoBorders.Services
         /// display-only-fallback rationale as <see cref="ActiveMonitorScope"/>
         /// for components that need something to show before then.
         /// </summary>
-        public string ActiveMonitorDefaultScope => _getActiveMonitorDefaultScope();
+        public string ActiveMonitorDefaultScope => _bridge.ActiveMonitorDefaultScope;
 
         /// <summary>
         /// Selects a monitor as the Settings > Monitors baseline-default target
@@ -330,7 +257,7 @@ namespace NoBorders.Services
         /// forwards to MainForm's `SelectMonitorDefaultScope`, firing the real,
         /// unchanged `CmbSetMonitor_SelectedIndexChanged`.
         /// </summary>
-        public void SelectMonitorDefaultScope(string scope) => _selectMonitorDefaultScope(scope);
+        public void SelectMonitorDefaultScope(string scope) => _bridge.SelectMonitorDefaultScope(scope);
 
         /// <summary>
         /// Saves the active monitor default scope's current fields, exactly as
@@ -338,7 +265,7 @@ namespace NoBorders.Services
         /// MainForm's `PerformClick()` on `_btnSaveDefault`, so the real,
         /// unchanged `BtnSaveDefault_Click` runs.
         /// </summary>
-        public void SaveMonitorDefault() => _saveMonitorDefault();
+        public void SaveMonitorDefault() => _bridge.SaveMonitorDefault();
 
         /// <summary>
         /// Deletes a monitor's saved default profile exactly as selecting it and
@@ -348,7 +275,22 @@ namespace NoBorders.Services
         /// `BtnDeleteMonitor_Click` runs — including its native confirmation
         /// `MessageBox`es (refuses connected monitors, confirms before deleting).
         /// </summary>
-        public void DeleteMonitorDefault(string scope) => _deleteMonitorDefault(scope);
+        public void DeleteMonitorDefault(string scope) => _bridge.DeleteMonitorDefault(scope);
+
+        /// <summary>
+        /// Re-enumerates connected monitors on demand, exactly as MainForm's
+        /// own OnDisplayConfigChanged does automatically (review.md §3 —
+        /// "Detect Displays" previously had no backing handler at all).
+        /// </summary>
+        public void DetectDisplays() => _bridge.DetectDisplays();
+
+        /// <summary>
+        /// Deletes every saved-but-not-connected monitor at once, exactly as
+        /// clicking "Remove All" would (review.md §3 — previously had no
+        /// backing handler at all). Native confirmation MessageBox and all,
+        /// same as DeleteMonitorDefault.
+        /// </summary>
+        public void RemoveAllSavedMonitors() => _bridge.RemoveAllSavedMonitors();
 
         /// <summary>
         /// True while MainForm's `_capturingHotkeyId` state machine is actively
@@ -357,10 +299,10 @@ namespace NoBorders.Services
         /// lives entirely in MainForm's frozen hotkey system; this only reflects
         /// its current phase for display.
         /// </summary>
-        public bool IsCapturingHotkeyAdd => _getIsCapturingHotkeyAdd();
+        public bool IsCapturingHotkeyAdd => _bridge.IsCapturingHotkeyAdd;
 
         /// <summary>Same as <see cref="IsCapturingHotkeyAdd"/>, for "Re-apply / refresh displays".</summary>
-        public bool IsCapturingHotkeyRefresh => _getIsCapturingHotkeyRefresh();
+        public bool IsCapturingHotkeyRefresh => _bridge.IsCapturingHotkeyRefresh;
 
         /// <summary>
         /// Starts or cancels capture for the "Add focused app" hotkey exactly as
@@ -371,10 +313,10 @@ namespace NoBorders.Services
         /// (a `KeyDown` handler on the real, focused — if visually
         /// Blazor-covered — WinForms textbox), not by anything in Razor.
         /// </summary>
-        public void ToggleHotkeyAddCapture() => _toggleHotkeyAddCapture();
+        public void ToggleHotkeyAddCapture() => _bridge.ToggleHotkeyAddCapture();
 
         /// <summary>Same as <see cref="ToggleHotkeyAddCapture"/>, for "Re-apply / refresh displays".</summary>
-        public void ToggleHotkeyRefreshCapture() => _toggleHotkeyRefreshCapture();
+        public void ToggleHotkeyRefreshCapture() => _bridge.ToggleHotkeyRefreshCapture();
 
         /// <summary>
         /// Flips "Minimize to system tray" exactly as clicking its WinForms
@@ -382,7 +324,7 @@ namespace NoBorders.Services
         /// `ToggleMinimizeToTray`, which flips `_chkMinToTray.Checked`, firing
         /// the real, unchanged `CheckedChanged` lambda (saves via `QueueSave`).
         /// </summary>
-        public void ToggleMinimizeToTray() => _toggleMinimizeToTray();
+        public void ToggleMinimizeToTray() => _bridge.ToggleMinimizeToTray();
 
         /// <summary>
         /// Flips "Start with Windows" exactly as clicking its WinForms checkbox
@@ -391,7 +333,7 @@ namespace NoBorders.Services
         /// registry startup entry and cascades `StartMinimized` off if this is
         /// being turned off, same as the WinForms UI always has).
         /// </summary>
-        public void ToggleStartWithWindows() => _toggleStartWithWindows();
+        public void ToggleStartWithWindows() => _bridge.ToggleStartWithWindows();
 
         /// <summary>
         /// Flips "Start minimized to tray" exactly as clicking its WinForms
@@ -400,7 +342,7 @@ namespace NoBorders.Services
         /// (mirroring the real checkbox's `Enabled` gating) or otherwise fires
         /// the real, unchanged `CheckedChanged` lambda.
         /// </summary>
-        public void ToggleStartMinimized() => _toggleStartMinimized();
+        public void ToggleStartMinimized() => _bridge.ToggleStartMinimized();
 
         /// <summary>
         /// True when there is a Save Changes snapshot to revert for the
@@ -411,7 +353,7 @@ namespace NoBorders.Services
         /// change to the current game's config", per the README, never a
         /// stale snapshot for whatever used to be selected.
         /// </summary>
-        public bool CanUndo => _getCanUndo();
+        public bool CanUndo => _bridge.CanUndo;
 
         /// <summary>
         /// Reverts the selected game to its state immediately before the last
@@ -422,7 +364,7 @@ namespace NoBorders.Services
         /// Single-level: consumes the snapshot, so a second call has nothing
         /// left to revert to until another Save Changes happens.
         /// </summary>
-        public void Undo() => _undo();
+        public void Undo() => _bridge.UndoLastSave();
 
         /// <summary>
         /// True if a real process matching <paramref name="game"/>'s pattern is
@@ -435,7 +377,7 @@ namespace NoBorders.Services
         /// sorts in place. This getter exists for anything that wants the raw
         /// running/not-running fact itself, not just the ordering it produces.
         /// </summary>
-        public bool IsGameRunning(GameConfig game) => _isGameRunning(game);
+        public bool IsGameRunning(GameConfig game) => _bridge.IsGameRunning(game);
 
         /// <summary>
         /// Re-enumerates currently open, blocklist-filtered windows — same
@@ -444,7 +386,7 @@ namespace NoBorders.Services
         /// every running process, so callers should call it once per render
         /// rather than in a loop.
         /// </summary>
-        public List<OpenWindowEntry> GetOpenWindows() => _getOpenWindows();
+        public List<OpenWindowEntry> GetOpenWindows() => _bridge.GetOpenWindows();
 
         /// <summary>
         /// Currently connected monitors — same `MainForm._monitors` list built by
@@ -453,7 +395,7 @@ namespace NoBorders.Services
         /// is a `readonly` list that RefreshMonitors clears and repopulates in place,
         /// so the same instance is always current.
         /// </summary>
-        public List<MonitorItem> Monitors => _getMonitors();
+        public List<MonitorItem> Monitors => _bridge.Monitors;
 
         /// <summary>
         /// Real registration-outcome text for the "Add focused app" hotkey, as last
@@ -462,16 +404,16 @@ namespace NoBorders.Services
         /// `Text`, not a reimplementation — the hotkey system itself is frozen
         /// (MIGRATION_PLAN.md), so this only observes its existing output.
         /// </summary>
-        public string HotkeyAddStatusText => _getHotkeyAddStatus();
+        public string HotkeyAddStatusText => _bridge.HotkeyAddStatusText;
 
         /// <summary>Same as <see cref="HotkeyAddStatusText"/>, for the "Re-apply / refresh displays" hotkey.</summary>
-        public string HotkeyRefreshStatusText => _getHotkeyRefreshStatus();
+        public string HotkeyRefreshStatusText => _bridge.HotkeyRefreshStatusText;
 
         /// <summary>Debounced save, same as MainForm's QueueSave() (600ms via _saveDebounce).</summary>
-        public void QueueSave() => _queueSave();
+        public void QueueSave() => _bridge.QueueSave();
 
         /// <summary>Immediate save, same as MainForm's SaveConfig().</summary>
-        public void SaveNow() => _saveNow();
+        public void SaveNow() => _bridge.SaveConfig();
 
         /// <summary>
         /// Phase 6.4: the Activity Log detail pane's "Restart As Admin" action
@@ -481,19 +423,38 @@ namespace NoBorders.Services
         /// (closes this instance and launches an elevated one via UAC), so it's
         /// only ever invoked on an explicit user click, never automatically.
         /// </summary>
-        public void RestartAsAdmin() => _restartAsAdmin();
+        public void RestartAsAdmin() => _bridge.RestartAsAdmin();
+
+        /// <summary>MainForm's `_isElevated` — set once by `CheckElevation()` at
+        /// startup, before BuildUI runs. Drives Settings &gt; Permissions'
+        /// status line and whether its "Restart as Administrator" button/hint
+        /// show at all (nothing to do if already elevated).</summary>
+        public bool IsElevated => _bridge.IsElevated;
+
+        /// <summary>
+        /// Settings &gt; Permissions' "Restart as Administrator" button —
+        /// unlike <see cref="RestartAsAdmin"/> above (the Activity Log's
+        /// entry point, which restarts immediately with no prompt), this
+        /// shows the same native confirmation `MessageBox` the WinForms
+        /// Settings tab's own button always has before actually restarting,
+        /// since this entry point is reached by casually browsing Settings
+        /// rather than reacting to a specific warn/error log entry.
+        /// </summary>
+        public void ConfirmAndRestartAsAdmin() => _bridge.ConfirmRestartAsAdmin();
 
         /// <summary>
         /// Phase 8.3: SteamGridDB personal API key, pasted in Settings >
-        /// Diagnostics. Unlike most of this service's write methods, there's no
+        /// Artwork (originally landed in Settings > Diagnostics; moved to its
+        /// own nav entry once Hotkeys/Behaviour were split the same way).
+        /// Unlike most of this service's write methods, there's no
         /// pre-existing WinForms control to trigger — this setting never existed
         /// before this migration — so <see cref="SetArtworkApiKey"/> forwards to
         /// a MainForm method that mutates `_settings.SteamGridDbApiKey` and
         /// persists directly (same shape as `AddGameFromRunningWindow`, Phase
         /// 4.8, the other case with no real control to reuse).
         /// </summary>
-        public string ArtworkApiKey => _getArtworkApiKey();
-        public void SetArtworkApiKey(string key) => _setArtworkApiKey(key);
+        public string ArtworkApiKey => _bridge.ArtworkApiKey;
+        public void SetArtworkApiKey(string key) => _bridge.SetSteamGridDbApiKey(key);
 
         /// <summary>
         /// Phase 8.3: commits fetched artwork paths onto MainForm's real
@@ -505,6 +466,131 @@ namespace NoBorders.Services
         /// same division as everywhere else in Phase 4). Same "no pre-existing
         /// control to reuse" shape as SetArtworkApiKey.
         /// </summary>
-        public void ApplyArtwork(string heroPath, string iconPath) => _applyArtwork(heroPath, iconPath);
+        public void ApplyArtwork(string heroPath, string iconPath) => _bridge.ApplyArtwork(heroPath, iconPath);
+
+        /// <summary>
+        /// Settings &gt; Ignore List (Phase 8.4): live, sorted contents of the
+        /// user's own additions to MainForm's _settings.IgnoredProcesses — NOT
+        /// the built-in system-process list (_systemProcessBlocklist), which
+        /// stays internal/never shown here so this page only ever lists what
+        /// the user actually chose to add. Both sets are checked together by
+        /// GetOpenWindowEntries/TryGetHotkeyTargetExe, so adding/removing here
+        /// immediately changes what shows up in every open-windows picker and
+        /// the Matching tab's live-test list.
+        /// </summary>
+        public List<string> IgnoredProcesses => _bridge.GetIgnoredProcesses();
+
+        /// <summary>Adds an exe name to the ignore list, e.g. from the "Add Program" picker (reuses the same GetOpenWindows rows the game picker does).</summary>
+        public void AddIgnoredProcess(string exeName) => _bridge.AddIgnoredProcess(exeName);
+
+        /// <summary>Removes a single entry from the ignore list.</summary>
+        public void RemoveIgnoredProcess(string exeName) => _bridge.RemoveIgnoredProcess(exeName);
+
+        /// <summary>
+        /// "Clear All" — shows a native confirmation before discarding every
+        /// program the user has added to the ignore list. MainForm's own
+        /// built-in system-process filtering (_systemProcessBlocklist) isn't
+        /// part of this set and is unaffected either way.
+        /// </summary>
+        public void ConfirmClearIgnoredProcesses() => _bridge.ConfirmClearIgnoredProcesses();
+
+        /// <summary>
+        /// Phase 8.4: the Display tab's Width/Height/Offset X/Y stepper
+        /// fields — live reads of MainForm's real `_numWidth`/`_numHeight`/
+        /// `_numOffsetX`/`_numOffsetY` (NumericTextBox shadow controls, same
+        /// pattern as ConstrainMouse/`_chkConstrain`). Adjust* applies a
+        /// signed delta (from SteppedNumberField's ▲/▼, ×10 Shift/×100 Ctrl)
+        /// directly to the shadow control's own Value, which self-clamps to
+        /// its configured Minimum/Maximum (0..16384 for Width/Height,
+        /// -16384..16384 for Offset) rather than throwing. Committed onto the
+        /// selected game's actual profile the same way it always has been —
+        /// by SaveUIToProfile, on Save Changes or a monitor-scope switch —
+        /// this only makes the live value itself editable from Blazor.
+        /// </summary>
+        public int Width => _bridge.Width;
+        public void AdjustWidth(int delta) => _bridge.AdjustWidth(delta);
+        public int Height => _bridge.Height;
+        public void AdjustHeight(int delta) => _bridge.AdjustHeight(delta);
+        public int OffsetX => _bridge.OffsetX;
+        public void AdjustOffsetX(int delta) => _bridge.AdjustOffsetX(delta);
+        public int OffsetY => _bridge.OffsetY;
+        public void AdjustOffsetY(int delta) => _bridge.AdjustOffsetY(delta);
+
+        /// <summary>Same shape as Width/Height/OffsetX/OffsetY above, for
+        /// Settings &gt; Monitors' default-profile stepper fields
+        /// (`_numSetWidth`/`_numSetHeight`/`_numSetOffsetX`/`_numSetOffsetY`),
+        /// committed by "Save Monitor Default" (BtnSaveDefault_Click).</summary>
+        public int MonitorDefaultWidth => _bridge.MonitorDefaultWidth;
+        public void AdjustMonitorDefaultWidth(int delta) => _bridge.AdjustMonitorDefaultWidth(delta);
+        public int MonitorDefaultHeight => _bridge.MonitorDefaultHeight;
+        public void AdjustMonitorDefaultHeight(int delta) => _bridge.AdjustMonitorDefaultHeight(delta);
+        public int MonitorDefaultOffsetX => _bridge.MonitorDefaultOffsetX;
+        public void AdjustMonitorDefaultOffsetX(int delta) => _bridge.AdjustMonitorDefaultOffsetX(delta);
+        public int MonitorDefaultOffsetY => _bridge.MonitorDefaultOffsetY;
+        public void AdjustMonitorDefaultOffsetY(int delta) => _bridge.AdjustMonitorDefaultOffsetY(delta);
+
+        /// <summary>
+        /// The four alignment buttons (Phase 8.6, replacing the old single
+        /// "Center On Monitor" link) — sets the active scope's Offset X/Y per
+        /// <paramref name="mode"/> against that monitor's real connected
+        /// resolution. No-ops (with a status message) if the target monitor
+        /// isn't currently connected, since alignment needs its real
+        /// physical size.
+        /// </summary>
+        public void AlignOnMonitor(MonitorAlignMode mode) => _bridge.AlignOnMonitor(mode);
+
+        /// <summary>Same as <see cref="AlignOnMonitor"/>, for Settings &gt; Monitors' default-profile fields.</summary>
+        public void AlignOnMonitorDefault(MonitorAlignMode mode) => _bridge.AlignOnMonitorDefault(mode);
+
+        /// <summary>
+        /// The Display tab's "Lock cursor to window bounds" checkbox for the
+        /// selected game/scope — a live read of MainForm's `_chkConstrain.Checked`
+        /// (same shadow-control pattern as <see cref="HotkeyAddStatusText"/>),
+        /// not the selected game's saved profile: like the WinForms UI it
+        /// mirrors, toggling this only takes effect on the in-memory profile
+        /// (and is only persisted) via Save Changes or a monitor-scope switch —
+        /// see `SaveUIToProfile` in program.cs.
+        /// </summary>
+        public bool ConstrainMouse => _bridge.ConstrainMouse;
+
+        /// <summary>Flips <see cref="ConstrainMouse"/> exactly as clicking the real checkbox would.</summary>
+        public void ToggleConstrainMouse() => _bridge.ToggleConstrainMouse();
+
+        /// <summary>Same as <see cref="ConstrainMouse"/>, for Settings &gt; Monitors' default-profile checkbox (`_chkSetConstrain`), committed by "Save Monitor Default".</summary>
+        public bool ConstrainMouseDefault => _bridge.ConstrainMouseDefault;
+
+        /// <summary>Flips <see cref="ConstrainMouseDefault"/> exactly as clicking the real checkbox would.</summary>
+        public void ToggleConstrainMouseDefault() => _bridge.ToggleConstrainMouseDefault();
+
+        /// <summary>
+        /// Phase 8.9: WindowControls.razor's three buttons (minimize/
+        /// maximize-restore/close), replacing the native title bar's system
+        /// buttons now that MainForm draws its own frameless chrome (see
+        /// program.cs's WndProc WM_NCCALCSIZE/WM_NCHITTEST handling). Each
+        /// forwards to the exact same WindowState/Close() calls a native
+        /// button click already triggered, so MinimizeToTray-on-minimize and
+        /// MinimizeToTray-on-close (OnResize/OnFormClosing) keep working
+        /// completely unchanged — nothing here reimplements that behavior.
+        /// </summary>
+        public void MinimizeWindow() => _bridge.MinimizeWindow();
+
+        /// <summary>Toggles between maximized and normal, same as double-clicking the title bar drag region (WM_NCHITTEST's HTCAPTION) already does natively.</summary>
+        public void ToggleMaximizeWindow() => _bridge.ToggleMaximizeWindow();
+
+        /// <summary>Closes the app, respecting the same "minimize to tray instead" setting a native close click always has.</summary>
+        public void CloseWindow() => _bridge.CloseWindow();
+
+        /// <summary>Drives the maximize/restore button's glyph swap — true once MainForm.WindowState is Maximized, however that happened (button click, title bar double-click, Win+Up, drag-to-top-edge).</summary>
+        public bool IsWindowMaximized => _bridge.IsWindowMaximized();
+
+        /// <summary>
+        /// The frameless title bar's drag region — call from the header's
+        /// own @onmousedown (not its buttons, which need
+        /// @onmousedown:stopPropagation so this never fires for them). See
+        /// MainForm.BeginWindowDrag's doc comment for why this replaced a
+        /// WM_NCHITTEST-based approach that turned out not to work with
+        /// BlazorWebView covering the reclaimed caption area.
+        /// </summary>
+        public void BeginWindowDrag() => _bridge.BeginWindowDrag();
     }
 }

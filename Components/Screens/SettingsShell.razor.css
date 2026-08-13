@@ -31,6 +31,10 @@
   color: var(--nb-text-bright);
 }
 
+.nb-settings__spacer {
+  flex: 1;
+}
+
 .nb-settings__body {
   display: flex;
   flex: 1;

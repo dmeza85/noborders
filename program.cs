@@ -8,6 +8,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -17,6 +18,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 using Microsoft.AspNetCore.Components.WebView.WindowsForms;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using NoBorders.Services;
 
 namespace NoBorders
@@ -61,6 +63,21 @@ namespace NoBorders
         [System.Text.Json.Serialization.JsonIgnore]
         private Regex? _compiledPattern;
 
+        // review.md §1.2: a 500ms matchTimeout on both the real and the
+        // "never matches" fallback regex — this pattern is user-editable
+        // text (Matching tab) and IsMatch runs against every open window on
+        // every EnforceTimer_Tick (1s) and ClipTimer_Tick (100ms), both on
+        // the UI thread, so a pathological catastrophic-backtracking pattern
+        // (typed by hand, pasted, or arriving via an imported config) would
+        // otherwise hang the whole app with no crash and no log line
+        // explaining why. IsProcessMatch below is the only place that
+        // actually calls IsMatch — it catches the resulting
+        // RegexMatchTimeoutException and treats a timeout as "no match"
+        // (safe default: never accidentally enforces borderless on the
+        // wrong window), so every call site gets this for free instead of
+        // needing its own try/catch.
+        private static readonly TimeSpan PatternMatchTimeout = TimeSpan.FromMilliseconds(500);
+
         [System.Text.Json.Serialization.JsonIgnore]
         public Regex CompiledPattern
         {
@@ -72,19 +89,30 @@ namespace NoBorders
                     {
                         _compiledPattern = new Regex(
                             RegexPattern,
-                            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                            RegexOptions.IgnoreCase | RegexOptions.Compiled,
+                            PatternMatchTimeout);
                     }
                     catch
                     {
-                        _compiledPattern = new Regex("(?!)", RegexOptions.Compiled); // never matches
+                        _compiledPattern = new Regex("(?!)", RegexOptions.Compiled, PatternMatchTimeout); // never matches
                     }
                 }
-                return _compiledPattern ?? new Regex("(?!)", RegexOptions.Compiled);
+                return _compiledPattern ?? new Regex("(?!)", RegexOptions.Compiled, PatternMatchTimeout);
             }
         }
 
         /// <summary>Call after editing RegexPattern so the cache is rebuilt.</summary>
         public void InvalidatePattern() => _compiledPattern = null;
+
+        /// <summary>The one real entry point for testing an exe name against this
+        /// game's pattern — every call site should use this instead of touching
+        /// CompiledPattern.IsMatch directly, so the ReDoS timeout guard above
+        /// can't accidentally be bypassed by a new call site that skips it.</summary>
+        public bool IsProcessMatch(string exeName)
+        {
+            try { return CompiledPattern.IsMatch(exeName); }
+            catch (RegexMatchTimeoutException) { return false; }
+        }
     }
 
     public class HotkeyConfig
@@ -124,8 +152,53 @@ namespace NoBorders
         // steamgriddb.com/profile/preferences/api), pasted in Settings >
         // Diagnostics. Empty means artwork fetch falls back to the game's own
         // .exe icon only — never a hard requirement to use the app.
+        //
+        // review.md §1.3: the in-memory plaintext value the rest of the app
+        // reads/writes (ArtworkService's Bearer header, the Settings field) —
+        // JsonIgnore keeps it OUT of games_config.json. The persisted form is
+        // SteamGridDbApiKeyProtected below; LoadConfig/SaveConfig do the
+        // actual DPAPI encrypt/decrypt round-trip, once, in one place.
+        [System.Text.Json.Serialization.JsonIgnore]
         public string SteamGridDbApiKey { get; set; } = string.Empty;
+
+        /// <summary>DPAPI-protected (CurrentUser scope), base64-encoded form of
+        /// SteamGridDbApiKey — the only copy that actually reaches disk. Only
+        /// touched by LoadConfig (decrypt into SteamGridDbApiKey after
+        /// deserializing) and SaveConfig (encrypt from SteamGridDbApiKey right
+        /// before serializing) — never read/written anywhere else.</summary>
+        public string SteamGridDbApiKeyProtected { get; set; } = string.Empty;
+
+        // Phase 8.4: remembers the main window's last real (non-minimized)
+        // bounds so a resize/move persists across restarts. WindowX/Y default
+        // to int.MinValue as an "unset" sentinel — distinct from a legitimate
+        // saved coordinate (which can itself be negative on a multi-monitor
+        // setup with a display to the left of/above the primary) — so a
+        // fresh install falls back to the original CenterScreen behavior
+        // instead of parsing as "restore to (0,0)".
+        public int  WindowWidth      { get; set; } = 1200;
+        public int  WindowHeight     { get; set; } = 800;
+        public int  WindowX          { get; set; } = int.MinValue;
+        public int  WindowY          { get; set; } = int.MinValue;
+        public bool WindowMaximized  { get; set; } = false;
+
+        // Settings > Ignore List (Phase 8.4): the user's own additions on top
+        // of the built-in, never-shown _systemProcessBlocklist — kept as a
+        // separate set (rather than merged into it) specifically so the
+        // Settings page only ever lists what the user actually chose to add,
+        // never the ~100 built-in system-process entries. "Clear All" empties
+        // just this set; the built-in list still applies underneath either way.
+        public HashSet<string> IgnoredProcesses { get; set; }
+            = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Phase 8.6: the four one-shot alignment actions replacing the old
+    /// single "Center On Monitor" link — Left/Right keep the current
+    /// Width/Height's vertical centering but flush the window to that edge;
+    /// Bottom keeps horizontal centering and flushes to the bottom edge;
+    /// Center is the original both-axes-centered behavior.
+    /// </summary>
+    public enum MonitorAlignMode { Left, Center, Bottom, Right }
 
     public class MonitorItem
     {
@@ -165,10 +238,33 @@ namespace NoBorders
     /// </summary>
     public enum LogLevel { Info, Ok, Warn, Error }
 
+    /// <summary>
+    /// review.md §2.1: games_config.json, noborders.log, and the artwork-cache
+    /// folder used to live under AppDomain.CurrentDomain.BaseDirectory — the
+    /// app's own install directory. That's fine for a portable dev build, but
+    /// a standard user can't write there if the app is ever installed to
+    /// somewhere like Program Files, silently breaking settings persistence,
+    /// logging, and artwork caching alike. %LOCALAPPDATA%\NoBorders is always
+    /// writable by the user running the app, regardless of install location.
+    /// </summary>
+    internal static class AppPaths
+    {
+        public static readonly string AppDataDir = CreateAndGet();
+
+        private static string CreateAndGet()
+        {
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "NoBorders");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+    }
+
     internal static class AppLogger
     {
         private static readonly string _path = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "noborders.log");
+            AppPaths.AppDataDir, "noborders.log");
 
         /// <summary>Real file path, exposed for Services/LogTailService.cs to tail
         /// — was private until Phase 6.4 needed a reader.</summary>
@@ -177,7 +273,7 @@ namespace NoBorders
         public static void Log(string message, LogLevel level = LogLevel.Info)
         {
             try { File.AppendAllText(_path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level.ToString().ToUpperInvariant()}] {message}\n"); }
-            catch { }
+            catch { /* logging a log-write failure would be circular; nothing to do */ }
         }
 
         public static void Log(Exception ex, string context)
@@ -308,6 +404,22 @@ namespace NoBorders
         [STAThread]
         private static void Main()
         {
+            // review.md §1.4: without these, an exception thrown from inside
+            // a WinForms event handler (a button click, a Timer tick — the
+            // routine case, not a startup failure) never reaches the
+            // try/catch around Application.Run below at all — WinForms'
+            // message pump catches those itself and, with no
+            // ThreadException/UnhandledException subscriber, either shows
+            // the bare default .NET crash dialog or just terminates, with
+            // nothing written to noborders.log explaining why. Registered
+            // before anything else runs so no code path is left uncovered.
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += (s, e) => AppLogger.Log(e.Exception, "Application.ThreadException");
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+                AppLogger.Log(
+                    e.ExceptionObject as Exception ?? new Exception(e.ExceptionObject?.ToString() ?? "(unknown)"),
+                    $"AppDomain.UnhandledException (IsTerminating={e.IsTerminating})");
+
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -335,21 +447,174 @@ namespace NoBorders
             {
                 // Only release if we still own it — RestartAsAdmin may have
                 // already released it in order to hand off to the elevated copy.
-                try { AppMutex.ReleaseMutex(); } catch { }
+                try { AppMutex.ReleaseMutex(); } catch { /* not owned by this thread/instance — nothing to release */ }
                 AppMutex.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Phase 8.3 bugfix: a plain <see cref="BlazorWebView"/> only serves wwwroot
+    /// content it knew about at build time — a `dotnet build` (as opposed to
+    /// `dotnet publish`) run loads static content through the SDK's dev-time
+    /// static-web-assets manifest, which only knows about files that existed
+    /// at build time. `ArtworkService` (Services/ArtworkService.cs) downloads
+    /// hero/icon art into `contentRootDir`/artwork-cache at runtime, long
+    /// after that manifest was generated, so it's invisible to it. Layering a
+    /// plain <see cref="PhysicalFileProvider"/> rooted at `contentRootDir` on
+    /// top of the SDK's own provider closes that gap defensively for any
+    /// runtime-written asset. Confirmed via temporary logging this was NOT
+    /// actually the reason art wasn't rendering, though (`contentRootDir`
+    /// here already matched exactly where ArtworkService writes) — the real
+    /// bug was in ArtworkService's own cache filenames (see
+    /// SanitizeFileName's doc comment: BlazorWebView passes the still-percent
+    /// -encoded request path straight to the file provider, so a cached file
+    /// with a literal space in its name never matched a "%20" lookup no
+    /// matter which physical folder was checked). Kept anyway since it's a
+    /// correct, harmless safety net for future runtime-written wwwroot
+    /// content — a no-op in a real `dotnet publish` build, where
+    /// `contentRootDir` is already right on its own.
+    ///
+    /// review.md §2.1: ArtworkService now caches into %LOCALAPPDATA%\NoBorders
+    /// (AppPaths.AppDataDir), not contentRootDir, since the install directory
+    /// isn't guaranteed writable. contentRootDir itself can't be redirected —
+    /// BlazorWebView derives it from HostPage relative to the app's own base
+    /// directory, with no supported override — so a third PhysicalFileProvider
+    /// rooted at AppDataDir is layered on top instead. A request for
+    /// "artwork-cache/xyz.png" resolves against AppDataDir\artwork-cache\xyz.png,
+    /// while everything else (index.html, css, js) still comes from the
+    /// install-directory providers, which never had an artwork-cache folder
+    /// to conflict with in the first place.
+    /// </summary>
+    internal sealed class ArtworkAwareBlazorWebView : BlazorWebView
+    {
+        public override IFileProvider CreateFileProvider(string contentRootDir) =>
+            new CompositeFileProvider(
+                base.CreateFileProvider(contentRootDir),
+                new PhysicalFileProvider(contentRootDir),
+                new PhysicalFileProvider(AppPaths.AppDataDir));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // MAIN FORM BRIDGE
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// review.md §4.1: AppStateService used to take 59 (then 75, after this
+    /// session's own additions) positional Func/Action constructor parameters
+    /// — nearly all the exact same shape (Func&lt;bool&gt;, Action, etc.), so
+    /// the compiler could not catch two adjacent ones being swapped; only a
+    /// manual read of the ~90-line call site in CreateBlazorServices() would
+    /// catch it. This interface replaces that entire positional list with
+    /// named members: MainForm implements it explicitly (below), and
+    /// AppStateService takes a single <c>IMainFormBridge</c> instead — every
+    /// binding is now resolved by name at compile time, so a swap is a
+    /// compile error, not a silent behavioral bug. Members are named to match
+    /// AppStateService's own existing public API 1:1 (this interface exists
+    /// purely so that API has something safer than a delegate list behind
+    /// it) except where MainForm already had a same-shaped real method,
+    /// which is reused as-is rather than introducing a second name for the
+    /// same thing.
+    /// </summary>
+    internal interface IMainFormBridge
+    {
+        AppSettings Settings { get; }
+        GameConfig? SelectedGame { get; }
+        List<OpenWindowEntry> GetOpenWindows();
+        List<MonitorItem> Monitors { get; }
+        string HotkeyAddStatusText { get; }
+        string HotkeyRefreshStatusText { get; }
+        void SelectGame(GameConfig game);
+        List<string> MonitorOptions { get; }
+        string ActiveMonitorScope { get; }
+        void SelectMonitorScope(string scope);
+        void ToggleGameActive();
+        void LoadMonitorDefaultsForSelectedGame();
+        string PendingDisplayName { get; }
+        void FetchNameForSelectedGame();
+        string PendingRegexPattern { get; }
+        void SetPendingRegexPattern(string pattern);
+        void SaveGameChanges();
+        void RemoveSelectedGame();
+        bool AddGameFromRunningWindow(OpenWindowEntry entry);
+        bool BrowseForExe();
+        string ActiveMonitorDefaultScope { get; }
+        void SelectMonitorDefaultScope(string scope);
+        void SaveMonitorDefault();
+        void DeleteMonitorDefault(string scope);
+        void DetectDisplays();
+        void RemoveAllSavedMonitors();
+        bool IsCapturingHotkeyAdd { get; }
+        bool IsCapturingHotkeyRefresh { get; }
+        void ToggleHotkeyAddCapture();
+        void ToggleHotkeyRefreshCapture();
+        void ToggleMinimizeToTray();
+        void ToggleStartWithWindows();
+        void ToggleStartMinimized();
+        bool CanUndo { get; }
+        void UndoLastSave();
+        bool IsGameRunning(GameConfig game);
+        void QueueSave();
+        void SaveConfig();
+        void RestartAsAdmin();
+        string ArtworkApiKey { get; }
+        void SetSteamGridDbApiKey(string key);
+        void ApplyArtwork(string heroPath, string iconPath);
+        bool ConstrainMouse { get; }
+        void ToggleConstrainMouse();
+        bool ConstrainMouseDefault { get; }
+        void ToggleConstrainMouseDefault();
+        bool IsElevated { get; }
+        void ConfirmRestartAsAdmin();
+        List<string> GetIgnoredProcesses();
+        void AddIgnoredProcess(string exeName);
+        void RemoveIgnoredProcess(string exeName);
+        void ConfirmClearIgnoredProcesses();
+        int Width { get; }
+        void AdjustWidth(int delta);
+        int Height { get; }
+        void AdjustHeight(int delta);
+        int OffsetX { get; }
+        void AdjustOffsetX(int delta);
+        int OffsetY { get; }
+        void AdjustOffsetY(int delta);
+        int MonitorDefaultWidth { get; }
+        void AdjustMonitorDefaultWidth(int delta);
+        int MonitorDefaultHeight { get; }
+        void AdjustMonitorDefaultHeight(int delta);
+        int MonitorDefaultOffsetX { get; }
+        void AdjustMonitorDefaultOffsetX(int delta);
+        int MonitorDefaultOffsetY { get; }
+        void AdjustMonitorDefaultOffsetY(int delta);
+        void AlignOnMonitor(MonitorAlignMode mode);
+        void AlignOnMonitorDefault(MonitorAlignMode mode);
+        void MinimizeWindow();
+        void ToggleMaximizeWindow();
+        void CloseWindow();
+        bool IsWindowMaximized();
+        void BeginWindowDrag();
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
     // MAIN FORM
     // ══════════════════════════════════════════════════════════════════════════════
 
-    internal sealed class MainForm : Form
+    internal sealed partial class MainForm : Form, IMainFormBridge
     {
         // ── Win32 display-config structs ─────────────────────────────────────────
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT { public int Left, Top, Right, Bottom; }
+
+        // Only rgrc[0] is touched (see WndProc's WM_NCCALCSIZE handling) —
+        // rgrc[1]/rgrc[2]/lppos are part of the OS's struct layout but unused
+        // by this recipe, so they're declared only to keep the marshaled size
+        // correct, never read or written.
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NCCALCSIZE_PARAMS
+        {
+            public RECT rgrc0, rgrc1, rgrc2;
+            public IntPtr lppos;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct LUID { public uint LowPart; public int HighPart; }
@@ -452,7 +717,23 @@ namespace NoBorders
         private const int    PBT_APMRESUMESUSPEND   = 0x0007; // woke from sleep
         private const int    PBT_APMRESUMEAUTOMATIC = 0x0012; // woke automatically (no user input yet)
         private const int    WM_DISPLAYCHANGE       = 0x007E;
+        private const int    WM_SETTINGCHANGE       = 0x001A; // fires on taskbar/app theme toggle, among other broadcast settings changes
         private const int    HSHELL_WINDOWCREATED   = 1;
+        // Phase 8.9: frameless-chrome custom title bar (see WndProc's
+        // WM_NCCALCSIZE handling, BeginWindowDrag, and WindowControls.razor).
+        // WM_NCCALCSIZE reclaims the native caption's screen space for the
+        // client area (so Blazor's own header row, not Windows, draws that
+        // strip). Dragging that strip does NOT use the classic WM_NCHITTEST-
+        // reports-HTCAPTION recipe — confirmed live that message never
+        // reaches this window once BlazorWebView covers the reclaimed area
+        // (WebView2's own child HWND fields it first) — see BeginWindowDrag's
+        // doc comment for the real mechanism (WM_NCLBUTTONDOWN, sent
+        // explicitly from a genuine Blazor mousedown event instead).
+        // HTCAPTION is still needed as that message's wParam value.
+        private const int    WM_NCCALCSIZE          = 0x0083;
+        private const int    WM_NCLBUTTONDOWN       = 0x00A1;
+        private const int    HTCAPTION               = 2;
+        private const int    SM_CYCAPTION            = 4;
         private const int    HOTKEY_ID_ADD          = 1001;
         private const int    HOTKEY_ID_REFRESH      = 1002;
         private const uint   MOD_ALT                = 0x0001;
@@ -480,6 +761,14 @@ namespace NoBorders
         [DllImport("user32.dll")] private static extern bool   SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")] private static extern bool   GetWindowRect(IntPtr hWnd, out RECT r);
         [DllImport("user32.dll")] private static extern bool   IsWindow(IntPtr hWnd);
+        // Per-monitor-DPI-correct caption height (this app opts into
+        // PerMonitorV2 via Application.SetHighDpiMode) — SystemInformation.
+        // CaptionHeight reflects only the primary monitor's scale, which
+        // would be wrong on a secondary monitor at a different DPI.
+        [DllImport("user32.dll")] private static extern int    GetSystemMetricsForDpi(int nIndex, uint dpi);
+        // BeginWindowDrag's mechanism — see its doc comment.
+        [DllImport("user32.dll")] private static extern bool   ReleaseCapture();
+        [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int maxLength);
         [DllImport("user32.dll")] private static extern bool   ClipCursor(ref RECT r);
@@ -519,11 +808,17 @@ namespace NoBorders
         private Dictionary<string, GameDisplayProfile> _undoProfiles = new(StringComparer.OrdinalIgnoreCase);
 
         private readonly string _configPath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "games_config.json");
+            AppPaths.AppDataDir, "games_config.json");
 
-        // ── Process blocklist for "Add Running App" dialog ─────────────────────────
-        // Any process whose name appears here will never show up in the game picker.
-        // This covers the full range of Windows shell, UWP infrastructure, system
+        // ── Built-in ignore list (Settings > Ignore List, Phase 8.4) ───────────────
+        // Permanently baked-in and never shown/editable in Settings — kept
+        // separate from _settings.IgnoredProcesses (the user's own additions)
+        // specifically so the Ignore List page only ever lists what the user
+        // actually chose to add, not ~100 built-in system-process entries the
+        // vast majority of users would never touch. GetOpenWindowEntries/
+        // TryGetHotkeyTargetExe check both sets; "Clear All" only ever empties
+        // the user's own set, this one included unconditionally regardless.
+        // Covers the full range of Windows shell, UWP infrastructure, system
         // utility, accessibility, security, and driver companion processes that can
         // have visible window handles but are obviously not games.
         // Add entries here (lowercase, with .exe) as new system processes surface.
@@ -790,34 +1085,112 @@ namespace NoBorders
             // delegate" convention as AppStateService — a key pasted in
             // Settings takes effect on the very next fetch, no restart needed.
             services.AddSingleton(_ => new Services.ArtworkService(
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot"),
+                AppPaths.AppDataDir,
                 () => _settings.SteamGridDbApiKey));
             // Lazy factory — only runs whenever something first resolves
             // AppStateService, which happens long after LoadConfig() has already
-            // run, and the Func<AppSettings>/Func<GameConfig?> accessors re-read
-            // _settings/_selectedGame on every access rather than capturing a
-            // snapshot, so this is correct regardless of exact timing.
-            services.AddSingleton(_ => new AppStateService(
-                () => _settings, () => _selectedGame, GetOpenWindowEntries,
-                () => _monitors, () => _lblHotkeyAddStatus.Text, () => _lblHotkeyRefreshStatus.Text,
-                SelectGame,
-                () => _cmbMonitor.Items.Cast<string>().ToList(), () => _activeScope, SelectMonitorScope,
-                ToggleGameActive, LoadMonitorDefaultsForSelectedGame,
-                () => _txtGameName.Text, FetchNameForSelectedGame,
-                SaveGameChanges, RemoveSelectedGame, AddGameFromRunningWindow, BrowseForExe,
-                () => _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty, SelectMonitorDefaultScope,
-                SaveMonitorDefault, DeleteMonitorDefault,
-                () => _capturingHotkeyId == HOTKEY_ID_ADD, () => _capturingHotkeyId == HOTKEY_ID_REFRESH,
-                ToggleHotkeyAddCapture, ToggleHotkeyRefreshCapture,
-                ToggleMinimizeToTray, ToggleStartWithWindows, ToggleStartMinimized,
-                () => _undoTarget != null && _undoTarget == _selectedGame, UndoLastSave,
-                g => _runningGames.Contains(g),
-                QueueSave, SaveConfig,
-                RestartAsAdmin,
-                () => _settings.SteamGridDbApiKey, SetSteamGridDbApiKey,
-                ApplyArtwork));
+            // run; IMainFormBridge's members re-read live fields on every access
+            // rather than capturing a snapshot (same as the Func<T> accessors
+            // this replaced), so this is correct regardless of exact timing.
+            // review.md §4.1: this used to be a single ~35-line call passing 75
+            // positional Func/Action arguments — see IMainFormBridge's doc
+            // comment (just above the MainForm class) for why that was a risk,
+            // and MainForm's own "IMainFormBridge" region below for the named
+            // members that replaced them.
+            services.AddSingleton(_ => new AppStateService(this));
             return services.BuildServiceProvider();
         }
+
+        // ════════════════════════════════════════════════════════════════════════
+        // IMainFormBridge — explicit implementation
+        // ════════════════════════════════════════════════════════════════════════
+        // review.md §4.1: named replacement for what used to be 75 positional
+        // constructor arguments passed to AppStateService (see
+        // IMainFormBridge's own doc comment). Explicit implementation (the
+        // `IMainFormBridge.Member` syntax) keeps every one of these off
+        // MainForm's own public surface — only reachable through the
+        // interface, exactly as narrow as the old delegate list was — while
+        // still being a single named, compiler-checked member instead of a
+        // positional slot. Each line is either a direct forward to an
+        // existing private method of the same name (no behavior change at
+        // all) or, for the ones that previously had no real member — just a
+        // lambda closing over a private field — the smallest possible
+        // wrapper around that same field.
+        AppSettings IMainFormBridge.Settings => _settings;
+        GameConfig? IMainFormBridge.SelectedGame => _selectedGame;
+        List<OpenWindowEntry> IMainFormBridge.GetOpenWindows() => GetOpenWindowEntries();
+        List<MonitorItem> IMainFormBridge.Monitors => _monitors;
+        string IMainFormBridge.HotkeyAddStatusText => _lblHotkeyAddStatus.Text;
+        string IMainFormBridge.HotkeyRefreshStatusText => _lblHotkeyRefreshStatus.Text;
+        void IMainFormBridge.SelectGame(GameConfig game) => SelectGame(game);
+        List<string> IMainFormBridge.MonitorOptions => _cmbMonitor.Items.Cast<string>().ToList();
+        string IMainFormBridge.ActiveMonitorScope => _activeScope;
+        void IMainFormBridge.SelectMonitorScope(string scope) => SelectMonitorScope(scope);
+        void IMainFormBridge.ToggleGameActive() => ToggleGameActive();
+        void IMainFormBridge.LoadMonitorDefaultsForSelectedGame() => LoadMonitorDefaultsForSelectedGame();
+        string IMainFormBridge.PendingDisplayName => _txtGameName.Text;
+        void IMainFormBridge.FetchNameForSelectedGame() => FetchNameForSelectedGame();
+        string IMainFormBridge.PendingRegexPattern => _txtRegex.Text;
+        void IMainFormBridge.SetPendingRegexPattern(string pattern) => SetPendingRegexPattern(pattern);
+        void IMainFormBridge.SaveGameChanges() => SaveGameChanges();
+        void IMainFormBridge.RemoveSelectedGame() => RemoveSelectedGame();
+        bool IMainFormBridge.AddGameFromRunningWindow(OpenWindowEntry entry) => AddGameFromRunningWindow(entry);
+        bool IMainFormBridge.BrowseForExe() => BrowseForExe();
+        string IMainFormBridge.ActiveMonitorDefaultScope => _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty;
+        void IMainFormBridge.SelectMonitorDefaultScope(string scope) => SelectMonitorDefaultScope(scope);
+        void IMainFormBridge.SaveMonitorDefault() => SaveMonitorDefault();
+        void IMainFormBridge.DeleteMonitorDefault(string scope) => DeleteMonitorDefault(scope);
+        void IMainFormBridge.DetectDisplays() => DetectDisplays();
+        void IMainFormBridge.RemoveAllSavedMonitors() => RemoveAllSavedMonitors();
+        bool IMainFormBridge.IsCapturingHotkeyAdd => _capturingHotkeyId == HOTKEY_ID_ADD;
+        bool IMainFormBridge.IsCapturingHotkeyRefresh => _capturingHotkeyId == HOTKEY_ID_REFRESH;
+        void IMainFormBridge.ToggleHotkeyAddCapture() => ToggleHotkeyAddCapture();
+        void IMainFormBridge.ToggleHotkeyRefreshCapture() => ToggleHotkeyRefreshCapture();
+        void IMainFormBridge.ToggleMinimizeToTray() => ToggleMinimizeToTray();
+        void IMainFormBridge.ToggleStartWithWindows() => ToggleStartWithWindows();
+        void IMainFormBridge.ToggleStartMinimized() => ToggleStartMinimized();
+        bool IMainFormBridge.CanUndo => _undoTarget != null && _undoTarget == _selectedGame;
+        void IMainFormBridge.UndoLastSave() => UndoLastSave();
+        bool IMainFormBridge.IsGameRunning(GameConfig game) => _runningGames.Contains(game);
+        void IMainFormBridge.QueueSave() => QueueSave();
+        void IMainFormBridge.SaveConfig() => SaveConfig();
+        void IMainFormBridge.RestartAsAdmin() => RestartAsAdmin();
+        string IMainFormBridge.ArtworkApiKey => _settings.SteamGridDbApiKey;
+        void IMainFormBridge.SetSteamGridDbApiKey(string key) => SetSteamGridDbApiKey(key);
+        void IMainFormBridge.ApplyArtwork(string heroPath, string iconPath) => ApplyArtwork(heroPath, iconPath);
+        bool IMainFormBridge.ConstrainMouse => _chkConstrain.Checked;
+        void IMainFormBridge.ToggleConstrainMouse() => ToggleConstrainMouse();
+        bool IMainFormBridge.ConstrainMouseDefault => _chkSetConstrain.Checked;
+        void IMainFormBridge.ToggleConstrainMouseDefault() => ToggleConstrainMouseDefault();
+        bool IMainFormBridge.IsElevated => _isElevated;
+        void IMainFormBridge.ConfirmRestartAsAdmin() => ConfirmRestartAsAdmin();
+        List<string> IMainFormBridge.GetIgnoredProcesses() => GetIgnoredProcesses();
+        void IMainFormBridge.AddIgnoredProcess(string exeName) => AddIgnoredProcess(exeName);
+        void IMainFormBridge.RemoveIgnoredProcess(string exeName) => RemoveIgnoredProcess(exeName);
+        void IMainFormBridge.ConfirmClearIgnoredProcesses() => ConfirmClearIgnoredProcesses();
+        int IMainFormBridge.Width => (int)_numWidth.Value;
+        void IMainFormBridge.AdjustWidth(int delta) => AdjustWidth(delta);
+        int IMainFormBridge.Height => (int)_numHeight.Value;
+        void IMainFormBridge.AdjustHeight(int delta) => AdjustHeight(delta);
+        int IMainFormBridge.OffsetX => (int)_numOffsetX.Value;
+        void IMainFormBridge.AdjustOffsetX(int delta) => AdjustOffsetX(delta);
+        int IMainFormBridge.OffsetY => (int)_numOffsetY.Value;
+        void IMainFormBridge.AdjustOffsetY(int delta) => AdjustOffsetY(delta);
+        int IMainFormBridge.MonitorDefaultWidth => (int)_numSetWidth.Value;
+        void IMainFormBridge.AdjustMonitorDefaultWidth(int delta) => AdjustMonitorDefaultWidth(delta);
+        int IMainFormBridge.MonitorDefaultHeight => (int)_numSetHeight.Value;
+        void IMainFormBridge.AdjustMonitorDefaultHeight(int delta) => AdjustMonitorDefaultHeight(delta);
+        int IMainFormBridge.MonitorDefaultOffsetX => (int)_numSetOffsetX.Value;
+        void IMainFormBridge.AdjustMonitorDefaultOffsetX(int delta) => AdjustMonitorDefaultOffsetX(delta);
+        int IMainFormBridge.MonitorDefaultOffsetY => (int)_numSetOffsetY.Value;
+        void IMainFormBridge.AdjustMonitorDefaultOffsetY(int delta) => AdjustMonitorDefaultOffsetY(delta);
+        void IMainFormBridge.AlignOnMonitor(MonitorAlignMode mode) => AlignOnMonitor(mode);
+        void IMainFormBridge.AlignOnMonitorDefault(MonitorAlignMode mode) => AlignOnMonitorDefault(mode);
+        void IMainFormBridge.MinimizeWindow() => MinimizeWindow();
+        void IMainFormBridge.ToggleMaximizeWindow() => ToggleMaximizeWindow();
+        void IMainFormBridge.CloseWindow() => CloseWindow();
+        bool IMainFormBridge.IsWindowMaximized() => IsWindowMaximized();
+        void IMainFormBridge.BeginWindowDrag() => BeginWindowDrag();
 
         // ════════════════════════════════════════════════════════════════════════
         // CONSTRUCTOR
@@ -833,6 +1206,31 @@ namespace NoBorders
             SetupTrayIcon();
             RefreshMonitors();
             PopulateGamesList();
+
+            // Phase 8.7: establish a real selection immediately at startup.
+            // PopulateGamesList() always sets _selectedGame back to null, and
+            // originally nothing here ever re-selected a row — the old
+            // WinForms UI just hid the whole detail pane (SetDetailVisible
+            // (false)) until a real click happened. But Blazor's rail/Target
+            // Monitor/Hero banner have always shown a "display-only fallback"
+            // pick (DisplayedGame => SelectedGame ?? Games.FirstOrDefault())
+            // as if it WERE selected — while Width/Height/OffsetX/OffsetY
+            // (backed by the shadow NumericTextBox fields, only ever
+            // populated by LstGames_SelectedIndexChanged) stayed at their
+            // zeroed default, since that handler had never actually run.
+            // Confirmed live: fresh launch showed the rail's first game
+            // highlighted and its monitor named correctly, but 0×0 fields,
+            // "cursor free", and a blank Result Preview well. Now that
+            // Blazor is the only UI (Phase 7.0), there's no more reason to
+            // leave real selection state unestablished — this makes the
+            // fallback's visual claim true instead of merely cosmetic.
+            // LstGames_SelectedIndexChanged is already subscribed (BuildUI,
+            // above) and does the real work; Blazor's _appState.RaiseChanged
+            // subscriber isn't wired until after this, so nothing needs to
+            // be notified yet — Blazor's first render just reads correct
+            // state directly.
+            if (_settings.Games.Count > 0) _lstGames.SelectedIndex = 0;
+
             ApplyTheme();
 
             _enforceTimer.Tick  += EnforceTimer_Tick;
@@ -868,6 +1266,20 @@ namespace NoBorders
             _chkMinToTray.CheckedChanged      += (s, e) => _appState.RaiseChanged();
             _chkStartWindows.CheckedChanged   += (s, e) => _appState.RaiseChanged();
             _chkStartMin.CheckedChanged       += (s, e) => _appState.RaiseChanged();
+            _chkConstrain.CheckedChanged      += (s, e) => _appState.RaiseChanged();
+            _chkSetConstrain.CheckedChanged   += (s, e) => _appState.RaiseChanged();
+            // Phase 8.4: Width/Height/Offset X/Y steppers do NOT get the same
+            // "+= (s,e) => _appState.RaiseChanged()" treatment as the
+            // checkboxes above — confirmed live in NumericTextBox's own
+            // source (this file, ~line 241): its Value setter sets
+            // _updatingText = true before touching Text, and OnTextChanged
+            // (the only place ValueChanged is actually raised) early-returns
+            // whenever _updatingText is true. So a *programmatic* `.Value =`
+            // assignment — which is the only way to change it at all now
+            // that Phase 7.0 covers these controls with the BlazorWebView —
+            // never raises ValueChanged. AdjustWidth/AdjustHeight/
+            // AdjustOffsetX/AdjustOffsetY/their MonitorDefault counterparts
+            // below call _appState.RaiseChanged() themselves instead.
 
             // ════════════════════════════════════════════════════════════════
             // PHASE 7.0 CUTOVER (MIGRATION_PLAN.md) — permanent Blazor mount.
@@ -895,7 +1307,7 @@ namespace NoBorders
             // tree — only fully covered, never hidden or torn down. That's
             // load-bearing, not incidental: PerformClick()/SelectedIndex
             // assignment/etc. all still run through these real controls.
-            _blazorWebView = new BlazorWebView
+            _blazorWebView = new ArtworkAwareBlazorWebView
             {
                 HostPage = "wwwroot\\index.html",
                 Dock     = DockStyle.Fill,
@@ -1007,6 +1419,29 @@ namespace NoBorders
         /// (non-elevated) instance. The single-instance mutex is released first so
         /// the new elevated process doesn't think another copy is already running.
         /// </summary>
+        /// <summary>
+        /// Blazor Settings > Permissions "Restart as Administrator" button's
+        /// entry point — same native confirmation MessageBox this action's
+        /// WinForms Settings-tab button already showed (BuildUI's
+        /// `_btnRestartAdmin.Click`, still defined below for the frozen
+        /// WinForms tab), then calls the real, unchanged RestartAsAdmin() on
+        /// Yes. A native dialog rather than a Blazor modal — same tradeoff as
+        /// the monitor-deletion confirm (Phase 4.10), since this action is
+        /// irreversible (closes this instance for good) and there was
+        /// already a working native confirmation to reuse.
+        /// </summary>
+        private void ConfirmRestartAsAdmin()
+        {
+            var confirm = MessageBox.Show(
+                "NoBorders will restart with Administrator privileges.\n\n" +
+                "This helps with games that run elevated (common with anti-cheat " +
+                "software like Vanguard, EAC, or BattlEye), which a non-elevated " +
+                "copy of NoBorders cannot modify.\n\nContinue?",
+                "Restart as Administrator",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (confirm == DialogResult.Yes) RestartAsAdmin();
+        }
+
         private void RestartAsAdmin()
         {
             try
@@ -1037,31 +1472,58 @@ namespace NoBorders
                 }
 
                 // Preserve any launch arguments (e.g. -minimized) on the relaunch.
-                string args = string.Join(" ",
-                    Environment.GetCommandLineArgs().Skip(1).Select(a => $"\"{a}\""));
-                AppLogger.Log($"RestartAsAdmin: relaunch args = '{args}'");
-
-                var psi = new ProcessStartInfo(exePath, args)
+                // review.md §1.1: ArgumentList (not a manually quoted Arguments
+                // string) — CreateProcess-correct escaping per element, so an
+                // argument containing an embedded `"` can't break out of its
+                // own boundary and inject extra tokens into this elevated
+                // relaunch's command line.
+                var psi = new ProcessStartInfo(exePath)
                 {
                     UseShellExecute  = true,
                     Verb             = "runas",
                     WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
                 };
+                foreach (var a in Environment.GetCommandLineArgs().Skip(1))
+                    psi.ArgumentList.Add(a);
+                AppLogger.Log($"RestartAsAdmin: relaunch args = [{string.Join(", ", psi.ArgumentList)}]");
 
                 // Flush any pending debounced save immediately so the new elevated
                 // instance loads fully up-to-date settings rather than whatever was
-                // on disk before the last 600ms autosave window elapsed.
+                // on disk before the last 600ms autosave window elapsed. Also
+                // captures window bounds (same as a real close) so the elevated
+                // copy reopens at the same size/position, not the 1200×800 default.
                 _saveDebounce.Stop();
+                CaptureWindowBounds();
                 SaveConfig();
                 AppLogger.Log("RestartAsAdmin: config flushed to disk before restart.");
 
                 // Release the single-instance lock BEFORE spawning the new process,
                 // otherwise the elevated copy would see it still held and simply
                 // bring this (soon-to-close) window to the front instead of starting.
+                //
+                // ReleaseMutex() alone isn't enough (confirmed live: the elevated
+                // copy launched, then vanished with zero logging and no crash
+                // record — Main()'s `if (!isNew) { ...; return; }` early-exit,
+                // silent by design). A named OS mutex stays alive system-wide as
+                // long as ANY handle to it is open, regardless of who currently
+                // "owns" it — ReleaseMutex only gives up ownership, it doesn't
+                // close this process's handle. That handle isn't actually closed
+                // until Main()'s own `finally { AppMutex.Dispose(); }` runs, which
+                // only happens after Application.Run() returns — i.e. after the
+                // full WinForms/BlazorWebView teardown below completes, easily
+                // slower than how fast the elevated child starts via UAC. So the
+                // child's own `new Mutex(true, NAME, out isNew)` was finding the
+                // still-existing (if unowned) object and getting isNew=false,
+                // assuming a copy was already running. Disposing here — not just
+                // releasing — actually closes this process's handle immediately,
+                // so the object is fully gone before the child ever asks.
+                // Mutex.Dispose() is safe to call twice, so Main()'s own later
+                // `finally` block disposing it again is a harmless no-op.
                 try
                 {
                     Program.AppMutex?.ReleaseMutex();
-                    AppLogger.Log("RestartAsAdmin: single-instance mutex released.");
+                    Program.AppMutex?.Dispose();
+                    AppLogger.Log("RestartAsAdmin: single-instance mutex released and disposed.");
                 }
                 catch (Exception relEx)
                 {
@@ -1174,7 +1636,6 @@ namespace NoBorders
         private void BuildUI()
         {
             this.Text            = _isElevated ? "NoBorders (Administrator)" : "NoBorders";
-            this.Size            = new Size(1200, 800);
             // Was fixed-width (800/800) for the WinForms UI alone. Widened and made
             // freely resizable so the window is comfortably large enough by default
             // for both the current Settings tab content (previously needed a manual
@@ -1184,9 +1645,40 @@ namespace NoBorders
             // responsive below that yet.
             this.MinimumSize     = new Size(1150, 720);
             this.MaximumSize     = Size.Empty; // no maximum — freely resizable/maximizable
-            this.StartPosition   = FormStartPosition.CenterScreen;
+
+            // Phase 8.4: restore the last real (non-minimized) size/position if one
+            // was saved and still makes sense on the monitors currently connected —
+            // a saved position from a since-unplugged/reconfigured monitor would
+            // otherwise open the window off-screen, unreachable without Windows'
+            // own "move window" keyboard recovery. Falls back to the original
+            // fixed 1200×800 CenterScreen default on first run, or whenever the
+            // saved position doesn't check out against Screen.AllScreens.
+            var savedSize = new Size(
+                Math.Max(_settings.WindowWidth,  this.MinimumSize.Width),
+                Math.Max(_settings.WindowHeight, this.MinimumSize.Height));
+            bool hasSavedPosition = _settings.WindowX != int.MinValue && _settings.WindowY != int.MinValue;
+            var savedLocation = new Point(_settings.WindowX, _settings.WindowY);
+            bool savedPositionOnScreen = hasSavedPosition &&
+                Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(new Rectangle(savedLocation, savedSize)));
+
+            this.Size = savedSize;
+            if (savedPositionOnScreen)
+            {
+                this.StartPosition = FormStartPosition.Manual;
+                this.Location      = savedLocation;
+            }
+            else
+            {
+                this.StartPosition = FormStartPosition.CenterScreen;
+            }
+
             this.Font            = new Font("Segoe UI", 9f);
             this.Icon            = TryExtractIcon(Application.ExecutablePath);
+
+            // Applied after Location/Size are set above so un-maximizing later
+            // restores to the correct saved bounds rather than whatever the
+            // default constructor geometry would have been.
+            if (_settings.WindowMaximized) this.WindowState = FormWindowState.Maximized;
 
             // Status bar — thin, sits below the tab content
             _lblStatus.Dock      = DockStyle.Bottom;
@@ -1925,35 +2417,54 @@ namespace NoBorders
             n.Value   = Math.Max(min, Math.Min(max, 0)); // initializes Text consistently
         }
 
-        // ════════════════════════════════════════════════════════════════════════
-        // TRAY ICON
-        // ════════════════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Phase 8.9: WindowControls.razor's minimize button — the frameless
+        /// custom title bar's replacement for the native minimize button
+        /// (Adaptation Decision #1 originally kept the native title bar
+        /// specifically to avoid needing this; superseded by the user's
+        /// explicit request to match the mock's inline window-control
+        /// buttons). Just sets WindowState, exactly what a native minimize
+        /// click already does under the hood — OnResize's existing
+        /// MinimizeToTray handling picks it up unchanged, nothing here
+        /// duplicates that logic.
+        /// </summary>
+        private void MinimizeWindow() => this.WindowState = FormWindowState.Minimized;
 
-        private void SetupTrayIcon()
+        /// <summary>Same shape as <see cref="MinimizeWindow"/>, for the maximize/restore button — toggles WindowState, same as double-clicking the (now-Blazor-drawn) title bar drag region already does via WM_NCHITTEST's HTCAPTION.</summary>
+        private void ToggleMaximizeWindow() =>
+            this.WindowState = this.WindowState == FormWindowState.Maximized
+                ? FormWindowState.Normal
+                : FormWindowState.Maximized;
+
+        /// <summary>Same shape as <see cref="MinimizeWindow"/>, for the close button — calls Close(), exactly what a native close click already does, so OnFormClosing's existing MinimizeToTray-on-close handling runs unchanged.</summary>
+        private void CloseWindow() => this.Close();
+
+        /// <summary>Drives WindowControls.razor's maximize/restore glyph swap (▢ vs ❐).</summary>
+        private bool IsWindowMaximized() => this.WindowState == FormWindowState.Maximized;
+
+        /// <summary>
+        /// Phase 8.9 bugfix: WindowControls.razor's drag region (the header
+        /// row, minus its own buttons) — replaces a WM_NCHITTEST-based
+        /// approach confirmed live NOT to work once BlazorWebView covers the
+        /// whole reclaimed caption area (see the WM_NCCALCSIZE handler's own
+        /// doc comment for how that was diagnosed). Called from a real
+        /// Blazor @onmousedown, which WebView2 DOES deliver normally (it's
+        /// ordinary client-area input, not a non-client hit-test query) —
+        /// ReleaseCapture() lets go of whatever implicit mouse capture the
+        /// click just started, then SendMessage(WM_NCLBUTTONDOWN, HTCAPTION)
+        /// asks DefWndProc to do exactly what it would have done if the OS's
+        /// own hit-testing had classified the original click as HTCAPTION:
+        /// start its real, native, modal caption-drag loop — Aero Snap,
+        /// restore-then-follow-cursor from maximized, and all, genuinely at
+        /// the OS level, not anything reimplemented here. Standard technique
+        /// for exactly this "custom title bar hosted in an embedded browser
+        /// control" scenario (same shape web-content-hosted apps generally
+        /// use), not specific to this codebase.
+        /// </summary>
+        private void BeginWindowDrag()
         {
-            var menuOpen = new ToolStripMenuItem("Open NoBorders");
-            menuOpen.Click += (s, e) => RestoreFromTray();
-
-            var menuExit = new ToolStripMenuItem("Exit");
-            menuExit.Click += (s, e) => { _forceClose = true; Application.Exit(); };
-
-            _trayMenu.Items.AddRange(new ToolStripItem[] { menuOpen, new ToolStripSeparator(), menuExit });
-            _trayIcon.Text             = "NoBorders";
-            _trayIcon.Icon             = TryExtractIcon(Application.ExecutablePath);
-            _trayIcon.ContextMenuStrip = _trayMenu;
-            _trayIcon.MouseDoubleClick += (s, e) => { if (e.Button == MouseButtons.Left) RestoreFromTray(); };
-            _trayIcon.Visible          = true;
-
-            // -minimized handling moved to OnLoad so BeginInvoke has a valid handle.
-        }
-
-        private void RestoreFromTray()
-        {
-            this.Show();
-            this.ShowInTaskbar = true;
-            this.WindowState   = FormWindowState.Normal;
-            this.Activate();
-            SetForegroundWindow(this.Handle);
+            ReleaseCapture();
+            SendMessage(this.Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
         }
 
         private static Icon TryExtractIcon(string path)
@@ -2144,202 +2655,13 @@ namespace NoBorders
             }
         }
 
-        // ════════════════════════════════════════════════════════════════════════
-        // MONITOR HELPERS
-        // ════════════════════════════════════════════════════════════════════════
+        // Monitor enumeration (RefreshMonitors, SyncMonitorComboBoxes,
+        // BuildGdiToFriendlyMap, DetectDisplays, TrimNull, IsIgnoredName,
+        // GetPrimaryMonitorId, RestoreComboSelection) moved to
+        // MainForm.Monitors.cs — review.md §4.2.
 
-        private void RefreshMonitors()
-        {
-            try
-            {
-                _monitors.Clear();
-                var gdiMap    = BuildGdiToFriendlyMap();
-                var seenNames = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var screen in Screen.AllScreens)
-                {
-                    string gdi = TrimNull(screen.DeviceName);
-                    if (!gdiMap.TryGetValue(gdi, out string? friendly) || string.IsNullOrWhiteSpace(friendly))
-                        friendly = gdi;
-
-                    if (seenNames.TryGetValue(friendly, out int n))
-                    {
-                        seenNames[friendly] = n + 1;
-                        friendly = $"{friendly} ({n + 1})";
-                    }
-                    else seenNames[friendly] = 1;
-
-                    _monitors.Add(new MonitorItem
-                    {
-                        ID = friendly, DeviceName = screen.DeviceName,
-                        Width = screen.Bounds.Width, Height = screen.Bounds.Height,
-                        Primary = screen.Primary
-                    });
-                    if (!IsIgnoredName(friendly)) _settings.KnownMonitors.Add(friendly);
-                }
-
-                SyncMonitorComboBoxes();
-            }
-            catch (Exception ex) { AppLogger.Log(ex, "RefreshMonitors"); }
-        }
-
-        private void SyncMonitorComboBoxes()
-        {
-            _settings.KnownMonitors.RemoveWhere(IsIgnoredName);
-
-            var all = _monitors.Select(m => m.ID).ToList();
-            foreach (var k in _settings.KnownMonitors)
-                if (!all.Contains(k, StringComparer.OrdinalIgnoreCase))
-                    all.Add(k);
-
-            // Game detail monitor combobox
-            string prevDetail = _cmbMonitor.SelectedItem?.ToString() ?? string.Empty;
-            _cmbMonitor.Items.Clear();
-            _cmbMonitor.Items.AddRange(all.ToArray());
-            RestoreComboSelection(_cmbMonitor, prevDetail);
-
-            // Settings monitor combobox
-            string prevSet = _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty;
-            _cmbSetMonitor.Items.Clear();
-            _cmbSetMonitor.Items.AddRange(all.ToArray());
-            RestoreComboSelection(_cmbSetMonitor, prevSet);
-        }
-
-        private static void RestoreComboSelection(ComboBox cmb, string previous)
-        {
-            if (cmb.Items.Count == 0) return;
-            if (!string.IsNullOrEmpty(previous) && cmb.Items.Contains(previous))
-                cmb.SelectedItem = previous;
-            else
-                cmb.SelectedIndex = 0;
-        }
-
-        private string GetPrimaryMonitorId()
-        {
-            string gdi = TrimNull(Screen.PrimaryScreen?.DeviceName ?? string.Empty);
-            return _monitors.FirstOrDefault(m =>
-                TrimNull(m.DeviceName).Equals(gdi, StringComparison.OrdinalIgnoreCase))?.ID
-                ?? string.Empty;
-        }
-
-        private Dictionary<string, string> BuildGdiToFriendlyMap()
-        {
-            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            try
-            {
-                if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, out uint nP, out uint nM) != 0)
-                    return map;
-
-                var paths = new DISPLAYCONFIG_PATH_INFO[nP];
-                var modes = new DISPLAYCONFIG_MODE_INFO[nM];
-                if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, ref nP, paths, ref nM, modes, IntPtr.Zero) != 0)
-                    return map;
-
-                for (int i = 0; i < nP; i++)
-                {
-                    var src = new DISPLAYCONFIG_SOURCE_DEVICE_NAME
-                    {
-                        header = new DISPLAYCONFIG_DEVICE_INFO_HEADER
-                        {
-                            type      = DCDI_GET_SOURCE_NAME,
-                            size      = (uint)Marshal.SizeOf<DISPLAYCONFIG_SOURCE_DEVICE_NAME>(),
-                            adapterId = paths[i].sourceInfo.adapterId,
-                            id        = paths[i].sourceInfo.id
-                        }
-                    };
-                    var tgt = new DISPLAYCONFIG_TARGET_DEVICE_NAME
-                    {
-                        header = new DISPLAYCONFIG_DEVICE_INFO_HEADER
-                        {
-                            type      = DCDI_GET_TARGET_NAME,
-                            size      = (uint)Marshal.SizeOf<DISPLAYCONFIG_TARGET_DEVICE_NAME>(),
-                            adapterId = paths[i].targetInfo.adapterId,
-                            id        = paths[i].targetInfo.id
-                        }
-                    };
-
-                    if (DisplayConfigGetDeviceInfo(ref src) == 0 &&
-                        DisplayConfigGetDeviceInfo(ref tgt) == 0)
-                    {
-                        string gdi = TrimNull(src.viewGdiDeviceName);
-                        string friendly = TrimNull(tgt.monitorFriendlyDeviceName);
-                        if (string.IsNullOrEmpty(friendly))
-                            friendly = $"Monitor_{tgt.edidManufactureId:X4}_{tgt.edidProductCodeId:X4}";
-                        if (!string.IsNullOrEmpty(gdi)) map[gdi] = friendly;
-                    }
-                }
-            }
-            catch (Exception ex) { AppLogger.Log(ex, "BuildGdiToFriendlyMap"); }
-            return map;
-        }
-
-        private static string TrimNull(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return string.Empty;
-            int i = s.IndexOf('\0');
-            return (i >= 0 ? s[..i] : s).Trim();
-        }
-
-        private static bool IsIgnoredName(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return true;
-            if (name.StartsWith(@"\\.\DISPLAY",    StringComparison.OrdinalIgnoreCase)) return true;
-            if (name.StartsWith("Generic PnP",     StringComparison.OrdinalIgnoreCase)) return true;
-            if (name.StartsWith("Generic Non-PnP", StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
-        }
-
-        // ════════════════════════════════════════════════════════════════════════
-        // CONFIG
-        // ════════════════════════════════════════════════════════════════════════
-
-        private void LoadConfig()
-        {
-            try
-            {
-                if (!File.Exists(_configPath)) return;
-                var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_configPath));
-                if (loaded == null) return;
-                _settings = loaded;
-
-                _settings.MonitorDefaults ??= new Dictionary<string, GameDisplayProfile>(StringComparer.OrdinalIgnoreCase);
-                _settings.Games           ??= new List<GameConfig>();
-                _settings.HotkeyAddApp    ??= new HotkeyConfig { Modifiers = MOD_CONTROL | MOD_SHIFT, Key = (uint)Keys.A };
-                _settings.HotkeyRefreshApp ??= new HotkeyConfig { Modifiers = MOD_CONTROL | MOD_SHIFT, Key = (uint)Keys.R };
-
-                foreach (var g in _settings.Games)
-                {
-                    g.Profiles ??= new Dictionary<string, GameDisplayProfile>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var k in g.Profiles.Keys)
-                        if (!IsIgnoredName(k)) _settings.KnownMonitors.Add(k);
-                }
-
-                // Sort immediately after load so the list is alphabetical
-                // from the very first frame, before PopulateGamesList runs.
-                SortGames();
-            }
-            catch (Exception ex)
-            {
-                AppLogger.Log(ex, "LoadConfig");
-                _settings = new AppSettings();
-            }
-        }
-
-        private void SaveConfig()
-        {
-            try
-            {
-                var opts = new JsonSerializerOptions { WriteIndented = true };
-                File.WriteAllText(_configPath, JsonSerializer.Serialize(_settings, opts));
-            }
-            catch (Exception ex) { AppLogger.Log(ex, "SaveConfig"); }
-        }
-
-        private void QueueSave()
-        {
-            _saveDebounce.Stop();
-            _saveDebounce.Start();
-        }
+        // Config load/save (MigrateLegacyAppDataIfNeeded, LoadConfig,
+        // SaveConfig, QueueSave) moved to MainForm.Config.cs — review.md §4.2.
 
         // ════════════════════════════════════════════════════════════════════════
         // GAMES LIST
@@ -2397,7 +2719,7 @@ namespace NoBorders
                     foreach (var g in _settings.Games)
                     {
                         if (running.Contains(g)) continue;
-                        if (g.CompiledPattern.IsMatch(exe)) running.Add(g);
+                        if (g.IsProcessMatch(exe)) running.Add(g);
                     }
                 }
                 catch { /* process may have exited */ }
@@ -2688,7 +3010,11 @@ namespace NoBorders
         /// exactly as a physical click would, so `BtnLoadDefaults_Click` above runs
         /// unchanged (plus the `Changed`-raising subscriber added in the constructor).
         /// </summary>
-        private void LoadMonitorDefaultsForSelectedGame() => _btnLoadDefaults.PerformClick();
+        private void LoadMonitorDefaultsForSelectedGame()
+        {
+            EnsureGamesTabActive();
+            _btnLoadDefaults.PerformClick();
+        }
 
         private void BtnFetchName_Click(object? sender, EventArgs e)
         {
@@ -2704,7 +3030,7 @@ namespace NoBorders
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
                     if (string.IsNullOrWhiteSpace(p.MainWindowTitle)) continue;
                     string exe = (p.ProcessName + ".exe").ToLowerInvariant();
-                    if (!_selectedGame.CompiledPattern.IsMatch(exe)) continue;
+                    if (!_selectedGame.IsProcessMatch(exe)) continue;
                     found = p.MainWindowTitle.Trim();
                     break;
                 }
@@ -2728,7 +3054,25 @@ namespace NoBorders
         /// above runs (which only fills `_txtGameName.Text`; committing it to
         /// `_selectedGame.GameName` is Save Changes' job, Phase 4.6).
         /// </summary>
-        private void FetchNameForSelectedGame() => _btnFetchName.PerformClick();
+        private void FetchNameForSelectedGame()
+        {
+            EnsureGamesTabActive();
+            _btnFetchName.PerformClick();
+        }
+
+        /// <summary>
+        /// review.md §3: backs Matching tab's "Use Title Of Selected" link,
+        /// previously dead. Only writes the pending `_txtRegex.Text` buffer —
+        /// same as FetchNameForSelectedGame does for the display name — Save
+        /// Changes still owns committing it to GameConfig.RegexPattern. Not
+        /// routed through a hidden WinForms button's Click, so RaiseChanged is
+        /// explicit here (same shape as AdjustWidth/DetectDisplays).
+        /// </summary>
+        private void SetPendingRegexPattern(string pattern)
+        {
+            _txtRegex.Text = pattern;
+            _appState.RaiseChanged();
+        }
 
         private void BtnSaveGame_Click(object? sender, EventArgs e)
         {
@@ -2744,6 +3088,13 @@ namespace NoBorders
             PopulateGamesList();
             _lstGames.SelectedIndex = idx;
             ShowStatus($"Saved changes for {_selectedGame.GameName}.");
+
+            // ShowStatus alone lands on _lblStatus, a legacy WinForms control
+            // permanently covered by the BlazorWebView since Phase 7.0 — so it
+            // was never actually visible to a Blazor-UI user, making "Save
+            // Changes" look like a no-op even though it was persisting fine.
+            // The toast is real, on-screen confirmation.
+            ShowToast($"Changes saved\n{_selectedGame.GameName} — {_activeScope}", success: true, _selectedGame.IconImagePath);
         }
 
         /// <summary>Records <paramref name="game"/>'s pre-Save state so <see cref="UndoLastSave"/> can restore it. See the field group's doc comment for the single-level-undo rationale.</summary>
@@ -2803,7 +3154,11 @@ namespace NoBorders
         /// `_btnSaveGame`, so the real, unchanged handler runs regardless of which
         /// Blazor tab is showing.
         /// </summary>
-        private void SaveGameChanges() => _btnSaveGame.PerformClick();
+        private void SaveGameChanges()
+        {
+            EnsureGamesTabActive();
+            _btnSaveGame.PerformClick();
+        }
 
         private void BtnDeleteGame_Click(object? sender, EventArgs e)
         {
@@ -2826,7 +3181,11 @@ namespace NoBorders
         /// add one either — reproducing exact existing behavior, not inventing
         /// safer-seeming UX the original app never had.
         /// </summary>
-        private void RemoveSelectedGame() => _btnDeleteGame.PerformClick();
+        private void RemoveSelectedGame()
+        {
+            EnsureGamesTabActive();
+            _btnDeleteGame.PerformClick();
+        }
 
         /// <summary>
         /// Restores any windows currently being enforced for the given game back
@@ -2885,9 +3244,24 @@ namespace NoBorders
                 {
                     if (string.IsNullOrWhiteSpace(p.MainWindowTitle)) return false;
                     if (p.MainWindowHandle == IntPtr.Zero) return false;
-                    // Check the static named blocklist first — fast path
-                    if (_systemProcessBlocklist.Contains(p.ProcessName + ".exe")) return false;
-                    // Also exclude anything whose exe lives in a Windows system directory
+                    // Check the built-in default list plus the user's own
+                    // Settings > Ignore List additions — fast path. The default
+                    // list is never shown/editable in Settings (Phase 8.4); only
+                    // _settings.IgnoredProcesses is user-visible/editable there.
+                    string exeName = p.ProcessName + ".exe";
+                    if (_systemProcessBlocklist.Contains(exeName) || _settings.IgnoredProcesses.Contains(exeName)) return false;
+                    // Also exclude anything whose exe lives in a Windows system directory.
+                    // Best-effort only: confirmed live that anti-cheat-protected games
+                    // (EAC, BattlEye, Vanguard) can make Process.MainModule throw
+                    // Win32Exception "Access is denied" outright (a real running
+                    // EAC-protected game reproduced this exactly) — the exact same
+                    // failure TryGetHotkeyTargetExe already treats as "can't confirm,
+                    // so don't exclude" (see its own doc comment), not as "assume
+                    // system process, hide it". Getting that wrong here silently
+                    // vanished precisely the games this app cares most about from the
+                    // Matching tab's live-test list, so this mirrors that same
+                    // fail-open handling instead of the fail-closed `return false`
+                    // this used to have.
                     try
                     {
                         string? exePath = p.MainModule?.FileName;
@@ -2895,7 +3269,7 @@ namespace NoBorders
                             exePath.StartsWith(d, StringComparison.OrdinalIgnoreCase)))
                             return false;
                     }
-                    catch { /* access denied on system process — exclude it */ return false; }
+                    catch { /* can't determine — don't assume system process */ }
                     return true;
                 })
                 .OrderBy(p => p.MainWindowTitle)
@@ -2945,11 +3319,51 @@ namespace NoBorders
         /// which fires the existing `Changed`-raising subscriber (Phase 4.1) — the
         /// explicit `RaiseChanged()` below is a defensive backstop for the (very
         /// unlikely) case the new game isn't found in the rebuilt list.
+        ///
+        /// Returns whether a genuinely new <see cref="GameConfig"/> was created
+        /// (`_settings.Games.Count` growing), not `AddGame`'s own bool (which
+        /// also folds in "added, but an elevation warning happened applying
+        /// borderless" as false — irrelevant here; the Blazor caller uses this
+        /// return value only to decide whether `State.SelectedGame` is now the
+        /// new game, for the Phase 8.4 auto-fetch-artwork-on-add feature).
         /// </summary>
-        private void AddGameFromRunningWindow(OpenWindowEntry entry)
+        private bool AddGameFromRunningWindow(OpenWindowEntry entry)
         {
+            int countBefore = _settings.Games.Count;
             AddGame(entry.Exe, false, entry.WindowTitle);
             _appState.RaiseChanged();
+            return _settings.Games.Count > countBefore;
+        }
+
+        /// <summary>
+        /// Phase 8.4: the Ctrl+Shift+A hotkey-add path's auto-fetch — same
+        /// underlying ArtworkService.TryAutoFetchAsync as the Blazor "Add
+        /// Running App"/Browse-for-EXE modal, resolved from `_blazorServices`
+        /// since this runs entirely on the WinForms side. Mutates `game`
+        /// directly rather than going through AppStateService.ApplyArtwork,
+        /// since this is a genuine fire-and-forget background call (see the
+        /// call site's own comment for why) — `game` is a specific captured
+        /// object reference, not "whichever game happens to be selected when
+        /// this resolves". The `await` here resumes on the UI thread's own
+        /// SynchronizationContext (HotkeyAdd always runs on the UI thread, via
+        /// WndProc), so touching `_settings`/QueueSave/_appState.RaiseChanged
+        /// afterward needs no extra marshaling.
+        /// </summary>
+        private async Task AutoFetchArtworkForNewGameAsync(GameConfig game)
+        {
+            try
+            {
+                var artwork = _blazorServices.GetRequiredService<ArtworkService>();
+                string slug = string.IsNullOrEmpty(game.ExePath) ? game.GameName : game.ExePath;
+                var auto = await artwork.TryAutoFetchAsync(game.GameName, slug);
+                if (auto.HeroPath == null && auto.IconPath == null) return;
+
+                game.HeroImagePath = auto.HeroPath ?? game.HeroImagePath;
+                game.IconImagePath = auto.IconPath ?? game.IconImagePath;
+                QueueSave();
+                _appState.RaiseChanged();
+            }
+            catch (Exception ex) { AppLogger.Log(ex, "AutoFetchArtworkForNewGameAsync"); }
         }
 
         /// <summary>
@@ -2984,6 +3398,68 @@ namespace NoBorders
             _appState.RaiseChanged();
         }
 
+        /// <summary>
+        /// Settings > Ignore List (Phase 8.4): the live, sorted contents of
+        /// _settings.IgnoredProcesses — no pre-existing WinForms control to
+        /// reuse, same shape as ApplyArtwork/SetSteamGridDbApiKey above (this
+        /// setting is entirely net-new).
+        /// </summary>
+        private List<string> GetIgnoredProcesses() =>
+            _settings.IgnoredProcesses.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+
+        /// <summary>
+        /// Adds an exe name (e.g. from the ignore-list "Add Program" picker,
+        /// which reuses GetOpenWindowEntries the same way the game picker
+        /// does) to the ignore list. Immediately affects every other consumer
+        /// of _settings.IgnoredProcesses (GetOpenWindowEntries,
+        /// TryGetHotkeyTargetExe) on their next call — no separate "apply" step.
+        /// </summary>
+        private void AddIgnoredProcess(string exeName)
+        {
+            if (string.IsNullOrWhiteSpace(exeName)) return;
+            if (_settings.IgnoredProcesses.Add(exeName.Trim()))
+            {
+                QueueSave();
+                _appState.RaiseChanged();
+            }
+        }
+
+        private void RemoveIgnoredProcess(string exeName)
+        {
+            if (_settings.IgnoredProcesses.Remove(exeName))
+            {
+                QueueSave();
+                _appState.RaiseChanged();
+            }
+        }
+
+        /// <summary>
+        /// Settings > Ignore List "Clear All" button's entry point — shows a
+        /// native confirmation MessageBox (same reasoning/shape as
+        /// ConfirmRestartAsAdmin: irreversible from the user's point of view)
+        /// naming exactly how many entries are about to be discarded, then
+        /// empties _settings.IgnoredProcesses on Yes. Only ever touches the
+        /// user's own additions — the built-in list (_systemProcessBlocklist)
+        /// isn't part of this set at all, so there's nothing to "restore".
+        /// </summary>
+        private void ConfirmClearIgnoredProcesses()
+        {
+            int count = _settings.IgnoredProcesses.Count;
+            if (count == 0) return;
+
+            var confirm = MessageBox.Show(
+                $"Remove all {count} program{(count == 1 ? "" : "s")} you've added to the ignore list?\n\n" +
+                "This can't be undone. NoBorders' own built-in system-process " +
+                "filtering (Explorer, Task Manager, etc.) isn't affected either way.",
+                "Clear Ignore List",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (confirm != DialogResult.Yes) return;
+
+            _settings.IgnoredProcesses.Clear();
+            SaveConfig();
+            _appState.RaiseChanged();
+        }
+
         private void BtnAddBrowse_Click(object? sender, EventArgs e)
         {
             using var ofd = new OpenFileDialog
@@ -3006,8 +3482,20 @@ namespace NoBorders
         /// it's surfaced as a secondary link inside AddRunningAppModal (screen
         /// 1d) rather than inventing new rail iconography the mock doesn't
         /// specify — see that component's doc comment.
+        ///
+        /// Returns whether a genuinely new game was created — same
+        /// `_settings.Games.Count` growth check as `AddGameFromRunningWindow`,
+        /// for the same Phase 8.4 auto-fetch-artwork-on-add reason (the user
+        /// may have cancelled the native file dialog, in which case nothing
+        /// was added and there's no new selection to fetch art for).
         /// </summary>
-        private void BrowseForExe() => _btnAddBrowse.PerformClick();
+        private bool BrowseForExe()
+        {
+            EnsureGamesTabActive();
+            int countBefore = _settings.Games.Count;
+            _btnAddBrowse.PerformClick();
+            return _settings.Games.Count > countBefore;
+        }
 
         /// <param name="displayName">
         /// Optional human-readable name shown in the list. When null the sanitized
@@ -3022,14 +3510,21 @@ namespace NoBorders
         /// so callers only need the return value to decide whether it's safe to
         /// layer an additional "success" notification on top.
         /// </returns>
+        /// <summary>
+        /// review.md §5: the exe-basename cleanup extracted out of AddGame so
+        /// it's testable in isolation — strips common build-variant suffixes
+        /// (debug/shipping/platform tags) so e.g. "HELLDIVERS2-Win64-Shipping"
+        /// and "HELLDIVERS2" are recognized as the same game.
+        /// </summary>
+        internal static string CleanExeBaseName(string baseName) =>
+            Regex.Replace(baseName, @"(-d|-shipping|-win64|-win32|-test|-debug)$", string.Empty, RegexOptions.IgnoreCase);
+
         private bool AddGame(string input, bool isFullPath, string? displayName = null)
         {
             if (string.IsNullOrEmpty(input)) return false;
 
             string baseName  = Path.GetFileNameWithoutExtension(input);
-            string cleanName = Regex.Replace(
-                baseName, @"(-d|-shipping|-win64|-win32|-test|-debug)$", string.Empty,
-                RegexOptions.IgnoreCase);
+            string cleanName = CleanExeBaseName(baseName);
             string pattern   = $"^{Regex.Escape(cleanName)}.*\\.exe$";
 
             // Display name: prefer the window title passed from the picker;
@@ -3133,9 +3628,26 @@ namespace NoBorders
         /// itself, or anything set directly rather than via `PerformClick()`)
         /// isn't affected — only the `PerformClick()` gate is.
         /// </summary>
-        private void EnsureSettingsTabActive()
+        private void EnsureSettingsTabActive() => EnsureTabActive(1);
+
+        /// <summary>
+        /// The Games-tab mirror of <see cref="EnsureSettingsTabActive"/> — same
+        /// `PerformClick()`/`CanSelect`/`Visible` gate, just for the other
+        /// direction. Bugfix: every Settings-tab bridge method already called
+        /// its own guard, but the five Games-tab ones (Load Monitor Defaults,
+        /// Fetch Name, Save Changes, Remove Game, Browse for EXE) never did —
+        /// confirmed live as the reported repro: visit Settings > Monitors
+        /// (which leaves the real `_tabs.SelectedIndex` on 1 via
+        /// `EnsureSettingsTabActive`), navigate back to a game's Display tab in
+        /// Blazor, click "Load Monitor Defaults" — `_btnLoadDefaults` is still
+        /// on the now-inactive tab 0, so `PerformClick()` silently no-ops.
+        /// </summary>
+        private void EnsureGamesTabActive() => EnsureTabActive(0);
+
+        /// <summary>Shared body for <see cref="EnsureSettingsTabActive"/>/<see cref="EnsureGamesTabActive"/> — same `PerformClick()`/`CanSelect`/`Visible` gate, just a different tab index.</summary>
+        private void EnsureTabActive(int index)
         {
-            if (_tabs.SelectedIndex != 1) _tabs.SelectedIndex = 1;
+            if (_tabs.SelectedIndex != index) _tabs.SelectedIndex = index;
         }
 
         /// <summary>
@@ -3256,6 +3768,57 @@ namespace NoBorders
             _btnDeleteMonitor.PerformClick();
         }
 
+        /// <summary>
+        /// review.md §3: backs Settings &gt; Monitors' "Remove All" link
+        /// (saved-but-not-connected group), previously dead — same
+        /// permanently-delete-with-confirmation shape as
+        /// BtnDeleteMonitor_Click, just applied to every saved-disconnected
+        /// monitor at once instead of a single selected one.
+        /// </summary>
+        private void RemoveAllSavedMonitors()
+        {
+            var connected = new HashSet<string>(_monitors.Select(m => m.ID), StringComparer.OrdinalIgnoreCase);
+            var saved = _settings.KnownMonitors.Where(k => !connected.Contains(k)).ToList();
+            if (saved.Count == 0)
+            {
+                ShowStatus("No saved monitors to remove.");
+                return;
+            }
+
+            var savedSet = new HashSet<string>(saved, StringComparer.OrdinalIgnoreCase);
+            int affectedGames = _settings.Games.Count(g => g.Profiles.Keys.Any(savedSet.Contains));
+            string impactLine = affectedGames > 0
+                ? $"\n\nThis will also remove saved profiles for these monitors from {affectedGames} game(s)."
+                : string.Empty;
+
+            var result = MessageBox.Show(
+                $"Permanently delete all {saved.Count} saved, not-connected monitor(s)?{impactLine}\n\n" +
+                "This cannot be undone.",
+                "Remove All Saved Monitors",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            if (result != DialogResult.Yes) return;
+
+            foreach (string name in saved)
+            {
+                _settings.MonitorDefaults.Remove(name);
+                _settings.KnownMonitors.Remove(name);
+                foreach (var g in _settings.Games) g.Profiles.Remove(name);
+            }
+
+            SaveConfig();
+            AppLogger.Log($"Removed all saved monitors ({saved.Count}) — affected {affectedGames} game(s).");
+
+            RefreshMonitors();
+            if (_selectedGame != null)
+            {
+                int idx = _lstGames.SelectedIndex;
+                if (idx >= 0) LstGames_SelectedIndexChanged(this, EventArgs.Empty);
+            }
+
+            ShowStatus($"Removed {saved.Count} saved monitor(s).");
+            _appState.RaiseChanged();
+        }
+
         private void BtnSaveDefault_Click(object? sender, EventArgs e)
         {
             string sel = _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty;
@@ -3272,11 +3835,17 @@ namespace NoBorders
             SaveConfig();
             ShowStatus($"Monitor defaults saved for {sel}.");
 
-            // Flash the button text briefly
+            // Flash the button text briefly (same caveat as the toast below —
+            // _btnSaveDefault is a legacy WinForms control permanently covered
+            // by the BlazorWebView since Phase 7.0, so this text flash was
+            // never actually visible; kept as-is since it's still harmless/
+            // cheap and the toast is the real confirmation now).
             _btnSaveDefault.Text = "Saved ✔";
             var t = new System.Windows.Forms.Timer { Interval = 1400 };
             t.Tick += (ts, te) => { _btnSaveDefault.Text = "Save Monitor Default"; t.Stop(); t.Dispose(); };
             t.Start();
+
+            ShowToast($"Monitor default saved\n{sel}", success: true);
         }
 
         /// <summary>
@@ -3344,208 +3913,115 @@ namespace NoBorders
             _chkStartMin.Checked = !_chkStartMin.Checked;
         }
 
-        private void BeginHotkeyCapture(int hotkeyId, HotkeyConfig config, TextBox display, Button button, string label)
+        /// <summary>
+        /// Blazor "Lock cursor to window bounds" checkbox entry points — same
+        /// shape as <see cref="ToggleMinimizeToTray"/>, flipping the real
+        /// checkbox's `Checked` property. `_chkConstrain` backs the selected
+        /// game/scope's Display tab checkbox (its current value is only
+        /// committed onto the profile by `SaveUIToProfile`, at Save Changes or
+        /// on scope switch — same as before this was reachable from Blazor);
+        /// `_chkSetConstrain` backs the Settings &gt; Monitors default checkbox
+        /// (committed by `BtnSaveDefault_Click`).
+        /// </summary>
+        private void ToggleConstrainMouse() => _chkConstrain.Checked = !_chkConstrain.Checked;
+
+        private void ToggleConstrainMouseDefault() => _chkSetConstrain.Checked = !_chkSetConstrain.Checked;
+
+        /// <summary>
+        /// Blazor Width/Height/Offset X/Y stepper entry points (SteppedNumberField's
+        /// ▲/▼) — adjusts the real shadow NumericTextBox's Value by a signed
+        /// delta (already ×10/×100'd for Shift/Ctrl by the component) and
+        /// raises Changed explicitly, since — unlike the checkboxes above —
+        /// a programmatic Value assignment on this control never raises its
+        /// own ValueChanged (see the comment on the RaiseChanged wiring block
+        /// in the constructor for why). `_numWidth`/`_numHeight`/
+        /// `_numOffsetX`/`_numOffsetY` back the Display tab's selected
+        /// game/scope (committed by SaveUIToProfile, same as ConstrainMouse);
+        /// `_numSetWidth`/`_numSetHeight`/`_numSetOffsetX`/`_numSetOffsetY`
+        /// back Settings &gt; Monitors' default profile (committed by
+        /// BtnSaveDefault_Click). Value's own setter silently clamps to
+        /// Minimum/Maximum rather than throwing, so no clamping is needed here.
+        /// </summary>
+        private void AdjustWidth(int delta) { _numWidth.Value += delta; _appState.RaiseChanged(); }
+        private void AdjustHeight(int delta) { _numHeight.Value += delta; _appState.RaiseChanged(); }
+        private void AdjustOffsetX(int delta) { _numOffsetX.Value += delta; _appState.RaiseChanged(); }
+        private void AdjustOffsetY(int delta) { _numOffsetY.Value += delta; _appState.RaiseChanged(); }
+        private void AdjustMonitorDefaultWidth(int delta) { _numSetWidth.Value += delta; _appState.RaiseChanged(); }
+        private void AdjustMonitorDefaultHeight(int delta) { _numSetHeight.Value += delta; _appState.RaiseChanged(); }
+        private void AdjustMonitorDefaultOffsetX(int delta) { _numSetOffsetX.Value += delta; _appState.RaiseChanged(); }
+        private void AdjustMonitorDefaultOffsetY(int delta) { _numSetOffsetY.Value += delta; _appState.RaiseChanged(); }
+
+        /// <summary>
+        /// Blazor alignment buttons' entry point (Display tab) — replaced the
+        /// old single "Center On Monitor" link (Phase 8.5) with four one-shot
+        /// actions (Phase 8.6). Only meaningful for a currently-connected
+        /// monitor — there's no physical resolution to align against for a
+        /// saved-but-disconnected one — so this no-ops with a status message
+        /// rather than guessing, same shape as BtnLoadDefaults_Click's "no
+        /// saved defaults" case.
+        /// </summary>
+        private void AlignOnMonitor(MonitorAlignMode mode)
         {
-            if (_capturingHotkeyId != 0) CancelHotkeyCapture(); // only one capture session at a time
+            if (_selectedGame == null || string.IsNullOrEmpty(_activeScope)) return;
+            var mon = _monitors.FirstOrDefault(m => m.ID == _activeScope);
+            if (mon == null)
+            {
+                ShowStatus($"{_activeScope} is not connected — can't align.");
+                return;
+            }
+            ApplyAlign(mon, mode, _numWidth, _numHeight, _numOffsetX, _numOffsetY);
+            _appState.RaiseChanged();
+        }
 
-            UnregisterHotKey(this.Handle, hotkeyId);
-
-            _capturingHotkeyId      = hotkeyId;
-            _capturingHotkeyConfig  = config;
-            _capturingHotkeyDisplay = display;
-            _capturingHotkeyButton  = button;
-            _capturingHotkeyLabel   = label;
-
-            display.Text = "Press new key combo… (Esc to cancel)";
-            button.Text  = "Listening… (click to cancel)";
-
-            // Deferred, not a direct call (Phase 4.11 finding): when capture is
-            // started from a Blazor button, this runs inside a callback WebView2's
-            // Chromium widget originated for that click — a synchronous
-            // display.Focus() here is silently overridden when that widget
-            // re-asserts its own OS-level keyboard focus immediately afterward
-            // (confirmed live via GetGUIThreadInfo: focus stayed on
-            // Chrome_WidgetWin_1 despite Focus() having been called). Posting it
-            // via BeginInvoke runs it after the current call stack — including
-            // WebView2's own post-click focus handling — has fully unwound, so
-            // the real focus move actually sticks. Purely a timing fix for
-            // driving this frozen state machine from Blazor; doesn't change what
-            // it decides or when a WinForms-originated capture behaves (that
-            // path's call stack has no WebView2 involvement, so Focus() there
-            // already worked synchronously and still does).
-            BeginInvoke(new MethodInvoker(() => display.Focus()));
-
-            // Capture UI notification only (Phase 4.11) — the state machine's
-            // own decisions above are untouched, per MIGRATION_PLAN.md's frozen-
-            // systems note ("only the capture UI ... moves to Razor").
+        /// <summary>Same as <see cref="AlignOnMonitor"/>, for Settings &gt; Monitors' default-profile fields.</summary>
+        private void AlignOnMonitorDefault(MonitorAlignMode mode)
+        {
+            string sel = _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty;
+            if (string.IsNullOrEmpty(sel)) return;
+            var mon = _monitors.FirstOrDefault(m => m.ID == sel);
+            if (mon == null)
+            {
+                ShowStatus($"{sel} is not connected — can't align.");
+                return;
+            }
+            ApplyAlign(mon, mode, _numSetWidth, _numSetHeight, _numSetOffsetX, _numSetOffsetY);
             _appState.RaiseChanged();
         }
 
         /// <summary>
-        /// Aborts an in-progress hotkey capture without changing the hotkey,
-        /// restoring the display text and re-registering the unchanged binding
-        /// that was unregistered when capture began.
+        /// Shared math for both alignment entry points above — Left/Right
+        /// flush the window to that edge while keeping the other axis
+        /// centered; Bottom flushes vertically while keeping X centered;
+        /// Center matches the original both-axes-centered "Center On
+        /// Monitor" behavior. Integer division matches every other
+        /// coverage/offset calculation in this file (SummaryText,
+        /// CoveragePercent) — no rounding beyond what `/` already does.
         /// </summary>
-        private void CancelHotkeyCapture()
+        private static void ApplyAlign(MonitorItem mon, MonitorAlignMode mode,
+            NumericTextBox numWidth, NumericTextBox numHeight, NumericTextBox numOffsetX, NumericTextBox numOffsetY)
         {
-            if (_capturingHotkeyId == 0) return;
-
-            _capturingHotkeyDisplay!.Text = _capturingHotkeyConfig!.ToString();
-            _capturingHotkeyButton!.Text  = "Set Hotkey";
-
-            _capturingHotkeyId      = 0;
-            _capturingHotkeyConfig  = null;
-            _capturingHotkeyDisplay = null;
-            _capturingHotkeyButton  = null;
-            _capturingHotkeyLabel   = string.Empty;
-
-            RegisterHotkeys(); // restores the binding that was unregistered for capture
-            _appState.RaiseChanged(); // capture UI notification only, see BeginHotkeyCapture
+            var (offsetX, offsetY) = ComputeAlignOffset(mon.Width, mon.Height, (int)numWidth.Value, (int)numHeight.Value, mode);
+            numOffsetX.Value = Clamp(offsetX, -16384, 16384);
+            numOffsetY.Value = Clamp(offsetY, -16384, 16384);
         }
 
         /// <summary>
-        /// KeyDown handler for the hotkey display textboxes. Does nothing unless
-        /// a capture session for that exact textbox is active (started via its
-        /// Set Hotkey button) — a stray click/keypress in the box otherwise has
-        /// no effect, and the currently-registered hotkeys keep working normally
-        /// while the boxes just sit there showing the current bindings.
+        /// review.md §5: the pure offset math extracted out of ApplyAlign so it's
+        /// testable without a live NumericTextBox/MonitorItem — same Left/Right/
+        /// Bottom/Center rules as ApplyAlign's own doc comment above, unchanged.
         /// </summary>
-        private void CaptureHotkey(KeyEventArgs e, TextBox display)
+        internal static (int OffsetX, int OffsetY) ComputeAlignOffset(
+            int monitorWidth, int monitorHeight, int windowWidth, int windowHeight, MonitorAlignMode mode) => mode switch
         {
-            if (_capturingHotkeyId == 0 || _capturingHotkeyDisplay != display) return;
-            e.SuppressKeyPress = true;
-            if (e.KeyCode is Keys.ShiftKey or Keys.ControlKey or Keys.Menu) return; // wait for a real key
+            MonitorAlignMode.Left   => (0, (monitorHeight - windowHeight) / 2),
+            MonitorAlignMode.Right  => (monitorWidth - windowWidth, (monitorHeight - windowHeight) / 2),
+            MonitorAlignMode.Bottom => ((monitorWidth - windowWidth) / 2, monitorHeight - windowHeight),
+            _                       => ((monitorWidth - windowWidth) / 2, (monitorHeight - windowHeight) / 2),
+        };
 
-            string label = _capturingHotkeyLabel;
-
-            if (e.KeyCode == Keys.Escape)
-            {
-                CancelHotkeyCapture();
-                ShowStatus($"{label} hotkey unchanged.");
-                return;
-            }
-
-            var config = _capturingHotkeyConfig!;
-            var button = _capturingHotkeyButton!;
-
-            if (e.KeyCode is Keys.Back or Keys.Delete)
-            {
-                config.Modifiers = 0;
-                config.Key       = 0;
-            }
-            else
-            {
-                uint mods = MOD_NOREPEAT;  // always set; hidden from display
-                if (e.Control) mods |= MOD_CONTROL;
-                if (e.Shift)   mods |= MOD_SHIFT;
-                if (e.Alt)     mods |= MOD_ALT;
-                config.Modifiers = mods;
-                config.Key       = (uint)e.KeyCode;
-            }
-
-            display.Text = config.ToString();
-            button.Text  = "Set Hotkey";
-            SaveConfig();
-
-            _capturingHotkeyId      = 0;
-            _capturingHotkeyConfig  = null;
-            _capturingHotkeyDisplay = null;
-            _capturingHotkeyButton  = null;
-            _capturingHotkeyLabel   = string.Empty;
-
-            RegisterHotkeys();
-            ShowStatus($"{label} hotkey updated to {config}.");
-            _appState.RaiseChanged(); // capture UI notification only, see BeginHotkeyCapture
-        }
-
-        // ════════════════════════════════════════════════════════════════════════
-        // HOTKEYS
-        // ════════════════════════════════════════════════════════════════════════
-
-        private void RegisterHotkeys()
-        {
-            UnregisterHotKey(this.Handle, HOTKEY_ID_ADD);
-            UnregisterHotKey(this.Handle, HOTKEY_ID_REFRESH);
-
-            TryRegisterHotkey(HOTKEY_ID_ADD,     _settings.HotkeyAddApp,     "Add",     _lblHotkeyAddStatus);
-            TryRegisterHotkey(HOTKEY_ID_REFRESH,  _settings.HotkeyRefreshApp, "Refresh", _lblHotkeyRefreshStatus);
-        }
-
-        /// <summary>
-        /// Attempts to register a hotkey, always including MOD_NOREPEAT.
-        /// Updates the given status label so the actual registration outcome is
-        /// always visible in Settings rather than relying on catching a toast —
-        /// a hotkey that fails to register at the OS level (most commonly
-        /// because another app or driver already owns that combination) will
-        /// simply never fire, with no per-window symptom to debug from, so this
-        /// is the ground-truth signal for "is this hotkey actually live".
-        /// </summary>
-        private void TryRegisterHotkey(int id, HotkeyConfig config, string label, Label? statusLabel = null)
-        {
-            if (config.Key == 0)
-            {
-                SetHotkeyStatusLabel(statusLabel, "Disabled", Color.Empty, muted: true);
-                return;
-            }
-
-            // Always ensure MOD_NOREPEAT is set regardless of how the config was saved.
-            uint mods = config.Modifiers | MOD_NOREPEAT;
-
-            if (RegisterHotKey(this.Handle, id, mods, config.Key))
-            {
-                AppLogger.Log($"RegisterHotKey {label} OK: {config}");
-                SetHotkeyStatusLabel(statusLabel, "Active", Color.FromArgb(72, 199, 72), muted: false);
-                return;
-            }
-
-            int err = Marshal.GetLastWin32Error();
-            AppLogger.Log($"RegisterHotKey {label} failed (Win32={err}): {config}");
-
-            // ERROR_HOTKEY_ALREADY_REGISTERED = 1409
-            // This is the most common failure — another app, driver, or Windows
-            // itself already owns this key combination. On some laptops, F-keys
-            // are also intercepted at the firmware/Fn-lock level before Windows
-            // ever sees a normal virtual-key code, which looks identical to a
-            // registration conflict from here.
-            bool bareKey = (mods & ~MOD_NOREPEAT) == 0; // no Ctrl/Shift/Alt
-            Color failColor = Color.FromArgb(210, 70, 70);
-            if (err == 1409 && bareKey)
-            {
-                // Bare F-key blocked by Windows or the foreground app.
-                // Inform the user — they need to add a modifier.
-                SetHotkeyStatusLabel(statusLabel, "Not active — blocked by Windows", failColor, muted: false);
-                if (this.IsHandleCreated)
-                    ShowToast(
-                        $"{label} hotkey ({config}) is blocked by Windows.\n"
-                        + "Try adding Shift or Ctrl in Settings.",
-                        success: false);
-                AppLogger.Log($"  Bare key blocked — user should add Ctrl/Shift/Alt modifier.", LogLevel.Warn);
-            }
-            else if (err == 1409)
-            {
-                // Modifier combo is taken by something else.
-                SetHotkeyStatusLabel(statusLabel, "Not active — conflicts with another app", failColor, muted: false);
-                if (this.IsHandleCreated)
-                    ShowToast(
-                        $"{label} hotkey ({config}) conflicts with another app.\n"
-                        + "Change it in Settings.",
-                        success: false);
-                AppLogger.Log($"{label} hotkey ({config}) conflicts with another app.", LogLevel.Warn);
-            }
-            else
-            {
-                SetHotkeyStatusLabel(statusLabel, $"Not active — Win32 error {err}", failColor, muted: false);
-            }
-        }
-
-        /// <summary>Updates a hotkey status label's text/color. muted uses the
-        /// current theme's muted text color instead of an explicit color.</summary>
-        private void SetHotkeyStatusLabel(Label? lbl, string text, Color color, bool muted)
-        {
-            if (lbl == null) return;
-            lbl.Text      = text;
-            lbl.ForeColor = muted ? PaletteTextMuted : color;
-        }
+        // Hotkey capture/registration (BeginHotkeyCapture, CancelHotkeyCapture,
+        // CaptureHotkey, RegisterHotkeys, TryRegisterHotkey,
+        // SetHotkeyStatusLabel) moved to MainForm.Hotkeys.cs — review.md §4.2.
 
         /// <summary>
         /// Resolves the exe name for a window's owning process, and returns false
@@ -3574,7 +4050,7 @@ namespace NoBorders
                 using var p = Process.GetProcessById((int)pid);
                 exeName = p.ProcessName + ".exe";
 
-                if (_systemProcessBlocklist.Contains(exeName)) return false;
+                if (_systemProcessBlocklist.Contains(exeName) || _settings.IgnoredProcesses.Contains(exeName)) return false;
 
                 try
                 {
@@ -3616,7 +4092,7 @@ namespace NoBorders
                 string windowTitle = sb.ToString().Trim();
                 AppLogger.Log($"HotkeyAdd: windowTitle=\"{windowTitle}\"");
 
-                bool alreadyTracked = _settings.Games.Any(g => g.CompiledPattern.IsMatch(exeName));
+                bool alreadyTracked = _settings.Games.Any(g => g.IsProcessMatch(exeName));
                 AppLogger.Log($"HotkeyAdd: alreadyTracked={alreadyTracked}");
 
                 if (!alreadyTracked && this.IsHandleCreated)
@@ -3636,6 +4112,26 @@ namespace NoBorders
                         {
                             ShowToast($"Added & borderless applied\n{nameToUse}", success: true);
                             AppLogger.Log($"Added & borderless applied to '{nameToUse}'.", LogLevel.Ok);
+
+                            // Phase 8.4: same auto-fetch-artwork-on-add as the
+                            // Blazor "Add Running App"/Browse-for-EXE paths
+                            // (AddGameFromRunningWindow's doc comment has the
+                            // general design). _selectedGame is exactly the
+                            // game just added — AddGame's own
+                            // `_lstGames.SelectedIndex = newIdx` just set it.
+                            // Captured here (synchronously, still the same
+                            // object reference) and applied directly onto it
+                            // rather than through AppStateService.ApplyArtwork's
+                            // "whichever game is currently selected" semantics:
+                            // unlike the Blazor modal (which awaits the fetch
+                            // before closing, safe because the modal blocks all
+                            // other interaction meanwhile), this hotkey handler
+                            // can't block on a network round-trip, so the fetch
+                            // has to run in the background — a user selecting a
+                            // different game in the rail before it resolves
+                            // must not cause it to land on the wrong game.
+                            if (_selectedGame is { } newGame)
+                                _ = AutoFetchArtworkForNewGameAsync(newGame);
                         }
                     }));
                 }
@@ -3643,7 +4139,7 @@ namespace NoBorders
                 {
                     // Game is already in the list — apply borderless instead.
                     AppLogger.Log("HotkeyAdd: game already tracked, applying borderless.");
-                    var match = _settings.Games.First(g => g.CompiledPattern.IsMatch(exeName));
+                    var match = _settings.Games.First(g => g.IsProcessMatch(exeName));
                     _trackedWindows[hwnd] = match;
                     ApplyBorderless(hwnd, match);
                     ShowToast($"Borderless applied\n{match.GameName}", success: true, match.IconImagePath);
@@ -3668,7 +4164,7 @@ namespace NoBorders
             {
                 string exeName = exeNameRaw.ToLowerInvariant();
                 var match       = _settings.Games.FirstOrDefault(g =>
-                    g.IsActive && g.CompiledPattern.IsMatch(exeName));
+                    g.IsActive && g.IsProcessMatch(exeName));
                 if (match == null)
                 {
                     ShowToast("Foreground app is not in the game list.", success: false);
@@ -3713,7 +4209,7 @@ namespace NoBorders
             string exe = (p.ProcessName + ".exe").ToLowerInvariant();
             foreach (var g in _settings.Games)
             {
-                if (g.IsActive && g.CompiledPattern.IsMatch(exe))
+                if (g.IsActive && g.IsProcessMatch(exe))
                 {
                     ApplyBorderless(hwnd, g);
                     _trackedWindows[hwnd] = g;
@@ -3742,7 +4238,7 @@ namespace NoBorders
 
                         foreach (var g in _settings.Games)
                         {
-                            if (g.IsActive && g.CompiledPattern.IsMatch(exe))
+                            if (g.IsActive && g.IsProcessMatch(exe))
                             {
                                 ApplyBorderless(hwnd, g);
                                 _trackedWindows[hwnd] = g;
@@ -3770,7 +4266,7 @@ namespace NoBorders
                 try
                 {
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
-                    if (g.CompiledPattern.IsMatch((p.ProcessName + ".exe").ToLowerInvariant()))
+                    if (g.IsProcessMatch((p.ProcessName + ".exe").ToLowerInvariant()))
                     {
                         ApplyBorderless(p.MainWindowHandle, g);
                         _trackedWindows[p.MainWindowHandle] = g;
@@ -3836,7 +4332,7 @@ namespace NoBorders
                     string exe = (p.ProcessName + ".exe").ToLowerInvariant();
                     foreach (var g in _settings.Games)
                     {
-                        if (!g.IsActive || !g.CompiledPattern.IsMatch(exe)) continue;
+                        if (!g.IsActive || !g.IsProcessMatch(exe)) continue;
                         if (trackedGames.Contains(g)) continue;
 
                         // Verify the window is sized (not a splash/loading stub)
@@ -3982,7 +4478,7 @@ namespace NoBorders
                 using var p   = Process.GetProcessById((int)pid);
                 string exeName = (p.ProcessName + ".exe").ToLowerInvariant();
                 var match      = _settings.Games.FirstOrDefault(g =>
-                    g.IsActive && g.CompiledPattern.IsMatch(exeName));
+                    g.IsActive && g.IsProcessMatch(exeName));
 
                 if (match != null)
                 {
@@ -4053,7 +4549,7 @@ namespace NoBorders
             const int cornerGap   = 18;
             const int holdMs      = 6200; // README: "auto-dismisses ~6s along the progress bar" + a small buffer past the CSS animation's 6s
 
-            var toastView = new BlazorWebView
+            var toastView = new ArtworkAwareBlazorWebView
             {
                 HostPage = "wwwroot\\index.html",
                 Dock     = DockStyle.Fill,
@@ -4145,11 +4641,31 @@ namespace NoBorders
 
         private void OnResize(object? sender, EventArgs e)
         {
+            // Bugfix: double-clicking the tray icon while hidden crashed the
+            // whole process with a native stack overflow (0xc00000fd — not
+            // catchable by any managed handler, which is why it never showed
+            // up in noborders.log). Root cause: RestoreFromTray's this.Show()
+            // can fire this Resize handler while WindowState is still
+            // Minimized (the WindowState=Normal assignment hasn't run yet),
+            // which re-Hide()s the form mid-restore; that Hide()/Show()
+            // churn was feeding back into more Resize events faster than the
+            // stack could unwind. _isRestoringFromTray blocks the hide branch
+            // for the whole duration of a restore, regardless of how many
+            // intermediate Resize events fire during it.
+            if (_isRestoringFromTray) return;
+
             if (this.WindowState == FormWindowState.Minimized && _settings.MinimizeToTray)
             {
                 this.Hide();
                 this.ShowInTaskbar = false;
             }
+
+            // Phase 8.9: WindowControls.razor's maximize/restore glyph needs
+            // to track WindowState regardless of how it changed — a native
+            // double-click/drag-to-edge/Win+Up on the frameless title bar's
+            // HTCAPTION region never goes through the Blazor button, so
+            // nothing else would tell AppStateService a redraw is needed.
+            _appState?.RaiseChanged();
         }
 
         private void OnFormClosing(object? sender, FormClosingEventArgs e)
@@ -4173,10 +4689,47 @@ namespace NoBorders
             _saveDebounce.Stop();
 
             // Flush any pending save immediately on exit
+            CaptureWindowBounds();
             SaveConfig();
 
             ClipCursor(IntPtr.Zero);
             _trayIcon.Visible = false;
+        }
+
+        /// <summary>
+        /// Captures the window's current real (non-minimized) bounds into
+        /// _settings, so the next SaveConfig() call persists them — called
+        /// right before every path that's about to flush config and end this
+        /// process's UI lifetime (real close, restart-as-admin), so a
+        /// resize/move sticks across restarts.
+        ///
+        /// Skipped while WindowState is Minimized (only reachable here via
+        /// minimize-to-tray, or mid-restart): RestoreBounds while minimized
+        /// still correctly reports the pre-minimize normal bounds, but
+        /// WindowState itself can't distinguish "was Normal before
+        /// minimizing" from "was Maximized before minimizing" without extra
+        /// Win32 plumbing (GetWindowPlacement's showCmd) — rather than guess,
+        /// this just leaves whatever was captured the last time the window
+        /// was genuinely Normal or Maximized untouched.
+        /// </summary>
+        private void CaptureWindowBounds()
+        {
+            if (this.WindowState == FormWindowState.Normal)
+            {
+                _settings.WindowX         = this.Location.X;
+                _settings.WindowY         = this.Location.Y;
+                _settings.WindowWidth     = this.Size.Width;
+                _settings.WindowHeight    = this.Size.Height;
+                _settings.WindowMaximized = false;
+            }
+            else if (this.WindowState == FormWindowState.Maximized)
+            {
+                _settings.WindowX         = this.RestoreBounds.X;
+                _settings.WindowY         = this.RestoreBounds.Y;
+                _settings.WindowWidth     = this.RestoreBounds.Width;
+                _settings.WindowHeight    = this.RestoreBounds.Height;
+                _settings.WindowMaximized = true;
+            }
         }
 
         /// <summary>
@@ -4188,43 +4741,55 @@ namespace NoBorders
         /// </summary>
         private async void OnDisplayConfigChanged()
         {
-            // Refresh the monitor list immediately so _monitors reflects the new layout.
-            RefreshMonitors();
-
-            // Windows takes up to ~1 second to finish moving windows around after a
-            // display change. Wait before re-applying so we're working on stable geometry.
-            await Task.Delay(1500);
-
-            // Clear the tracked-window cache so every window gets re-evaluated
-            // from scratch against the new monitor layout.
-            _trackedWindows.Clear();
-
-            // Cancel any pending new-window detection tasks — they were started
-            // with the old monitor layout and should be restarted clean.
-            foreach (var cts in _pending.Values) cts.Cancel();
-            _pending.Clear();
-
-            // Re-apply borderless to all processes that match an active game.
-            // This picks up the correct monitor profile now that _monitors is updated.
-            foreach (var p in Process.GetProcesses())
+            // review.md §2.2: SystemEvents.DisplaySettingsChanged invokes this
+            // directly from its own dedicated thread, outside the normal
+            // WinForms message pump — an exception here (either synchronous,
+            // or after the await resumes) isn't guaranteed to reach the
+            // Application.ThreadException handler the way a control event
+            // would, and an unhandled exception on any thread still tears
+            // down the whole process. Contain it here instead of relying on
+            // a global handler to merely log the crash on the way down.
+            try
             {
-                try
+                // Refresh the monitor list immediately so _monitors reflects the new layout.
+                RefreshMonitors();
+
+                // Windows takes up to ~1 second to finish moving windows around after a
+                // display change. Wait before re-applying so we're working on stable geometry.
+                await Task.Delay(1500);
+
+                // Clear the tracked-window cache so every window gets re-evaluated
+                // from scratch against the new monitor layout.
+                _trackedWindows.Clear();
+
+                // Cancel any pending new-window detection tasks — they were started
+                // with the old monitor layout and should be restarted clean.
+                foreach (var cts in _pending.Values) cts.Cancel();
+                _pending.Clear();
+
+                // Re-apply borderless to all processes that match an active game.
+                // This picks up the correct monitor profile now that _monitors is updated.
+                foreach (var p in Process.GetProcesses())
                 {
-                    if (p.MainWindowHandle != IntPtr.Zero)
-                        MatchAndApply(p.MainWindowHandle, p);
+                    try
+                    {
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                            MatchAndApply(p.MainWindowHandle, p);
+                    }
+                    catch { /* process may have exited */ }
                 }
-                catch { /* process may have exited */ }
-            }
 
-            // Refresh the detail panel if a game is currently selected, so the
-            // monitor combobox reflects the updated display list.
-            // Guard with IsHandleCreated so a display change that fires during
-            // early startup can't cause "Invoke before handle created" crashes.
-            if (_selectedGame != null && this.IsHandleCreated)
-            {
-                int idx = _lstGames.SelectedIndex;
-                if (idx >= 0) LstGames_SelectedIndexChanged(this, EventArgs.Empty);
+                // Refresh the detail panel if a game is currently selected, so the
+                // monitor combobox reflects the updated display list.
+                // Guard with IsHandleCreated so a display change that fires during
+                // early startup can't cause "Invoke before handle created" crashes.
+                if (_selectedGame != null && this.IsHandleCreated)
+                {
+                    int idx = _lstGames.SelectedIndex;
+                    if (idx >= 0) LstGames_SelectedIndexChanged(this, EventArgs.Empty);
+                }
             }
+            catch (Exception ex) { AppLogger.Log(ex, "OnDisplayConfigChanged"); }
         }
 
         protected override void WndProc(ref Message m)
@@ -4239,14 +4804,64 @@ namespace NoBorders
                 return;
             }
 
-            if (m.Msg == _wmShellHook && m.WParam.ToInt32() == HSHELL_WINDOWCREATED)
+            // Tray menu's "Pause Enforcement" (MainForm.Tray.cs) — skip
+            // auto-detecting/applying borderless to newly-created windows
+            // while paused. Explicit hotkeys and in-app actions still work;
+            // this only suspends the passive shell-hook scan.
+            if (m.Msg == _wmShellHook && m.WParam.ToInt32() == HSHELL_WINDOWCREATED && !_enforcementPaused)
                 _ = TrackNewWindowAsync(m.LParam);
 
             if (_wmShowFirst != 0 && m.Msg == _wmShowFirst)
             { RestoreFromTray(); return; }
 
+            // Phase 8.9: frameless custom title bar — see WindowControls.razor
+            // for the full rationale. Reclaims the native caption's screen
+            // space for the client area (so Blazor's own header row, not
+            // Windows, occupies that strip) while leaving the rest of
+            // DefWndProc's frame math untouched — the resize border stays a
+            // real, OS-hit-tested edge, since it's outside BlazorWebView's
+            // Dock=Fill bounds and unaffected by any of this.
+            //
+            // Bugfix: originally paired this with a WM_NCHITTEST override
+            // (report HTCAPTION for the reclaimed strip, the standard native-
+            // Win32-app recipe for frameless drag/double-click-maximize/Aero
+            // Snap). Confirmed live it never fired — added temporary logging
+            // and captured zero WM_NCHITTEST or even WM_LBUTTONDOWN messages
+            // reaching this WndProc while clicking directly on the header.
+            // Root cause: BlazorWebView (Dock=Fill) now covers the ENTIRE
+            // client area including the reclaimed strip, and WM_NCHITTEST is
+            // dispatched to whichever HWND is directly under the cursor —
+            // WebView2's own child HWND fields it first and never forwards
+            // it up, so MainForm's non-client hit-testing is simply
+            // unreachable for any point inside BlazorWebView's bounds. The
+            // real fix is BeginWindowDrag() below, called from a genuine
+            // Blazor @onmousedown WebView2 DOES deliver normally — see its
+            // doc comment for the mechanism that replaces WM_NCHITTEST here.
+            if (m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero)
+            {
+                base.WndProc(ref m);
+                var p = (NCCALCSIZE_PARAMS)Marshal.PtrToStructure(m.LParam, typeof(NCCALCSIZE_PARAMS))!;
+                uint dpi = (uint)this.DeviceDpi;
+                int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, dpi);
+                var rect = p.rgrc0;
+                rect.Top -= captionHeight; // reclaim just the caption strip; leave the resize-frame insets DefWndProc already computed
+                p.rgrc0 = rect;
+                Marshal.StructureToPtr(p, m.LParam, true);
+                m.Result = IntPtr.Zero;
+                return;
+            }
+
             if (m.Msg == WM_DISPLAYCHANGE)
                 OnDisplayConfigChanged();
+
+            // icon_export/README.md: "Windows tray does not tint for you —
+            // pick the mono asset from the current taskbar theme
+            // (SystemUsesLightTheme) and re-load on WM_SETTINGCHANGE." Windows
+            // broadcasts this for every settings change (not just theme), so
+            // RefreshTrayIconForTheme() re-reads the registry and only
+            // actually swaps the icon if the light/dark choice changed.
+            if (m.Msg == WM_SETTINGCHANGE)
+                RefreshTrayIconForTheme();
 
             if (m.Msg == WM_HOTKEY)
             {
@@ -4309,6 +4924,12 @@ namespace NoBorders
 
         private async void OnWake()
         {
+            // review.md §2.2: same rationale as OnDisplayConfigChanged above —
+            // SystemEvents.PowerModeChanged invokes this off the normal
+            // message pump, so an unhandled exception here would crash the
+            // process rather than merely being logged by a global handler.
+            try
+            {
             AppLogger.Log("=== SYSTEM WAKE ===");
 
             // Wait for Windows to finish resuming drivers, re-enumerating displays,
@@ -4348,7 +4969,7 @@ namespace NoBorders
                     string exe = (p.ProcessName + ".exe").ToLowerInvariant();
                     foreach (var g in _settings.Games)
                     {
-                        if (!g.IsActive || !g.CompiledPattern.IsMatch(exe)) continue;
+                        if (!g.IsActive || !g.IsProcessMatch(exe)) continue;
                         GetWindowRect(p.MainWindowHandle, out RECT r);
                         AppLogger.Log($"  Found running game '{g.GameName}' (hwnd={p.MainWindowHandle}, rect={r.Left},{r.Top},{r.Right},{r.Bottom})");
                         ApplyBorderless(p.MainWindowHandle, g);
@@ -4375,6 +4996,8 @@ namespace NoBorders
             {
                 AppLogger.Log($"  Form visibility restored: visible={this.Visible}, taskbar={this.ShowInTaskbar}");
             }
+            }
+            catch (Exception ex) { AppLogger.Log(ex, "OnWake"); }
         }
 
         // ════════════════════════════════════════════════════════════════════════

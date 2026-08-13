@@ -27,11 +27,12 @@
   padding: 4px 0;
 }
 
+/* Same brand mark as MainShell's header (MainShell.razor.css) — kept
+   consistent across both of the app's own top-level windows. */
 .nb-log-window__mark {
   width: 14px;
   height: 14px;
-  border-radius: var(--nb-radius-chrome-btn);
-  background: var(--nb-accent);
+  background: url('img/noborders-mark.svg') no-repeat center / contain;
   flex: none;
 }
 
@@ -44,6 +45,10 @@
   color: var(--nb-text-faint);
   font-size: 10.5px;
   white-space: nowrap;
+}
+
+.nb-log-window__spacer {
+  flex: 1;
 }
 
 .nb-log-window__toolbar {

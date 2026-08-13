@@ -52,9 +52,29 @@
         OffsetX == 0 && OffsetY == 0 &&
         WindowWidth == MonitorWidth && WindowHeight == MonitorHeight;
 
-    private string WindowStyle => IsFullCoverage
-        ? string.Empty
-        : $"left:{Px(OffsetX * ScaleX)};top:{Px(OffsetY * ScaleY)};width:{Px(WindowWidth * ScaleX)};height:{Px(WindowHeight * ScaleY)}";
+    // Clamped to the well's own 290×132 bounds — a profile whose window is
+    // bigger than (or offset past) its target monitor is real, valid data
+    // (the "X% of monitor · out of bounds" summary line already says so in
+    // words), but the raw scaled geometry can be many times the well's size.
+    // `.nb-preview__monitor`'s own `overflow: hidden` is the hard backstop
+    // against that spilling into the rest of the page, but clamping here
+    // too means a wildly oversized window reads as a box filling the whole
+    // well — a clearer signal than whatever sliver happened to survive
+    // clipping in a corner would be.
+    private string WindowStyle
+    {
+        get
+        {
+            if (IsFullCoverage) return string.Empty;
+
+            double width  = Math.Clamp(WindowWidth  * ScaleX, 0, WellWidth);
+            double height = Math.Clamp(WindowHeight * ScaleY, 0, WellHeight);
+            double left   = Math.Clamp(OffsetX * ScaleX, 0, WellWidth  - width);
+            double top    = Math.Clamp(OffsetY * ScaleY, 0, WellHeight - height);
+
+            return $"left:{Px(left)};top:{Px(top)};width:{Px(width)};height:{Px(height)}";
+        }
+    }
 
     private string BandXStyle => $"width:{Px(OffsetX * ScaleX)}";
 

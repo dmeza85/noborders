@@ -113,6 +113,14 @@
   font-weight: 600;
 }
 
+/* review.md §3: "Window Title" isn't real functionality yet (see the doc
+   comment above) — visibly inert instead of looking like an unselected-
+   but-clickable option next to --active. */
+.nb-matching-pane__chip--disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
 .nb-matching-pane__exe {
   min-height: var(--nb-control-height-standard);
   border-radius: var(--nb-radius-input);
@@ -165,6 +173,7 @@
   color: var(--nb-text-secondary);
   white-space: nowrap;
   cursor: pointer;
+  cursor: pointer;
 }
 
 .nb-matching-pane__test-list {
@@ -180,6 +189,7 @@
   gap: 11px;
   padding: 10px 12px;
   border-left: 2px solid transparent;
+  cursor: pointer;
 }
 
 .nb-match-row + .nb-match-row {
@@ -189,6 +199,12 @@
 .nb-match-row--match {
   background: rgba(61, 220, 132, .07);
   border-left-color: var(--nb-success);
+}
+
+/* review.md §3: click feedback for "Use Title Of Selected"'s target row —
+   independent of (and layerable with) --match's own green treatment above. */
+.nb-match-row--selected {
+  background: rgba(var(--nb-accent-rgb), .1);
 }
 
 .nb-match-row__thumb {

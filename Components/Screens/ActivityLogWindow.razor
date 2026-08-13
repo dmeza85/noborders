@@ -11,11 +11,13 @@
     separate top-level window", but per Adaptation Decision #2
     (MIGRATION_PLAN.md), it's an in-app view within the single
     BlazorWebView like Settings — opened from Settings → Diagnostics'
-    "Open Log" button — so the mock's window-control glyphs are dropped
-    here for the same reason as SettingsShell, with the same "← Back"
-    substitute. (That Diagnostics → Open Log navigation link itself is
-    still a separate, not-yet-itemized concern — DiagnosticsSettingsPage's
-    button remains inert; this component doesn't depend on it to be real.)
+    "Open Log" button — with the same "← Back" substitute SettingsShell
+    uses for what would be closing that separate window.
+
+    2026-08-11: WindowControls.razor (— ▢ ✕) is back — see SettingsShell's
+    doc comment for why (MainForm is now a genuinely frameless custom-chrome
+    window, so every screen needs its own copy of those buttons; this one
+    controls the same single real MainForm window, same as everywhere else).
 
     Phase 6.4 (MIGRATION_PLAN.md): wired to Services/LogTailService.cs,
     which tails the real noborders.log — see that file's doc comment for
@@ -38,11 +40,13 @@
 *@
 
 <div class="nb-log-window">
-    <header class="nb-log-window__titlebar">
-        <button type="button" class="nb-log-window__back" @onclick="() => OnBack.InvokeAsync()">← Back</button>
+    <header class="nb-log-window__titlebar" @onmousedown="() => State.BeginWindowDrag()">
+        <button type="button" class="nb-log-window__back" @onmousedown:stopPropagation="true" @onclick="() => OnBack.InvokeAsync()">← Back</button>
         <div class="nb-log-window__mark"></div>
         <div class="nb-text-wordmark nb-log-window__wordmark">ACTIVITY LOG</div>
         <div class="nb-log-window__filename nb-mono">noborders.log</div>
+        <div class="nb-log-window__spacer"></div>
+        <WindowControls />
     </header>
 
     <div class="nb-log-window__toolbar">
@@ -74,7 +78,7 @@
             <div class="nb-log-window__rows" @ref="_rowsRef" @onscroll="OnRowsScroll">
                 @foreach (var entry in FilteredEntries)
                 {
-                    <LogRow Time="@entry.Time.ToString("HH:mm:ss")" Level="@MapLevel(entry.Level)"
+                    <LogRow @key="entry" Time="@entry.Time.ToString("HH:mm:ss")" Level="@MapLevel(entry.Level)"
                             Source="@entry.Source" Message="@FirstLine(entry.Message)"
                             Selected="@(ReferenceEquals(entry, _selectedEntry))"
                             OnSelect="() => _selectedEntry = entry" />

@@ -1,4 +1,5 @@
 @namespace NoBorders.Components.Screens
+@using System.Linq
 @using NoBorders.Services
 @inject AppStateService State
 @inject ArtworkService Artwork
@@ -6,15 +7,26 @@
    predates Phase 8), so this is styled off AddRunningAppModal.razor's own
    established modal-row language rather than invented from scratch.
 
-   Searches SteamGridDB for Game.GameName on open (never auto-applies —
-   the same "don't fabricate a match" principle as the Matching tab's real
-   regex testing: an ambiguous title like "Portal" could resolve to a dozen
-   different real SteamGridDB entries, so the user always picks). "Use this
-   game's own icon instead" is always available regardless of search
-   outcome — the fully offline ExtractExeIcon fallback, for when there's no
-   API key, no match, no network, or the user just doesn't want to wait on
-   a search. Downloading is the one truly async step (a real network
-   round-trip), so this is the one modal in the app with a loading state. *@
+   Searches SteamGridDB for Game.GameName on open. Auto-applies without
+   waiting for a manual pick, but only on the very first attempt (Game has
+   no HeroImagePath/IconImagePath yet) AND only when a candidate's name is
+   an exact match (ArtworkService.IsDirectMatch) — an ambiguous title like
+   "Portal" resolving to a dozen different real SteamGridDB entries still
+   requires a manual pick, same "don't fabricate a match" principle as the
+   Matching tab's real regex testing. Re-opening the picker for a game that
+   already has art (i.e. clicking "Fetch Artwork" a second time) always
+   shows the manual picker, even if the same direct match is found again —
+   a second attempt means the user wants to see/change the options, not
+   silently re-apply the same thing. "Use this game's own icon instead" is
+   always available regardless of search outcome — the fully offline
+   ExtractExeIcon fallback, for when there's no API key, no match, no
+   network, or the user just doesn't want to wait on a search. Downloading
+   is the one truly async step (a real network round-trip), so this is the
+   one modal in the app with a loading state. The auto-apply path
+   (OnInitializedAsync) and the manual one (ConfirmSelected) both go through
+   ArtworkService.TryAutoFetchAsync/DownloadAsync + AppStateService.
+   ApplyArtwork — same underlying write, just reached without a click when
+   there's an unambiguous match to act on. *@
 
 <ModalOverlay Width="480">
     <div class="nb-art-picker__header">
@@ -35,7 +47,7 @@
         {
             <div class="nb-art-picker__status">
                 No SteamGridDB API key set. Add one for free in
-                <span class="nb-mono">Settings → Diagnostics</span>, or use this
+                <span class="nb-mono">Settings → Artwork</span>, or use this
                 game's own icon below.
             </div>
         }
@@ -53,7 +65,7 @@
                 @foreach (var c in _search.Candidates)
                 {
                     bool selected = _selected?.SteamGridDbId == c.SteamGridDbId;
-                    <div class="nb-art-picker__row @(selected ? "nb-art-picker__row--selected" : "")" @onclick="() => _selected = c">
+                    <div @key="c.SteamGridDbId" class="nb-art-picker__row @(selected ? "nb-art-picker__row--selected" : "")" @onclick="() => _selected = c">
                         <div class="nb-art-picker__thumb @(selected ? "nb-art-picker__thumb--selected" : "")"></div>
                         <div class="nb-art-picker__name @(selected ? "nb-art-picker__name--selected" : "")">@c.Name</div>
                         @if (selected)
@@ -89,7 +101,22 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _search = await Artwork.SearchAsync(Game.GameName);
+        bool firstAttempt = string.IsNullOrEmpty(Game.HeroImagePath) && string.IsNullOrEmpty(Game.IconImagePath);
+        if (firstAttempt)
+        {
+            var auto = await Artwork.TryAutoFetchAsync(Game.GameName, Slug);
+            _search = auto.Search;
+            if (auto.HeroPath != null || auto.IconPath != null)
+            {
+                State.ApplyArtwork(auto.HeroPath ?? Game.HeroImagePath, auto.IconPath ?? Game.IconImagePath);
+                await OnClose.InvokeAsync();
+                return;
+            }
+        }
+        else
+        {
+            _search = await Artwork.SearchAsync(Game.GameName);
+        }
     }
 
     private string Slug => string.IsNullOrEmpty(Game.ExePath) ? Game.GameName : Game.ExePath;

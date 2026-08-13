@@ -1,0 +1,45 @@
+.nb-wctl__divider {
+  flex: none;
+  width: var(--nb-divider-width);
+  height: 18px;
+  background: var(--nb-divider-color);
+  margin: 0 4px;
+}
+
+.nb-wctl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.nb-wctl__btn {
+  width: 34px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--nb-text-secondary);
+  font: 400 13px/1 var(--nb-font-ui);
+  cursor: pointer;
+  transition: background .12s ease-out;
+}
+
+.nb-wctl__btn:hover {
+  background: var(--nb-raised);
+}
+
+/* Close gets its own tint at rest (not just on hover) — matches the mock
+   exactly, the one window-control button that's never visually neutral. */
+.nb-wctl__btn--close {
+  background: rgba(255, 80, 90, .12);
+  color: var(--nb-danger);
+}
+
+.nb-wctl__btn--close:hover {
+  background: rgba(255, 80, 90, .22);
+}

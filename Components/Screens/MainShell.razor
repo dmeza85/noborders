@@ -26,11 +26,12 @@
     in-app overlay — see that component's own doc comment for why this is
     the one Phase 4 sub-item that doesn't trigger a native WinForms dialog.
 
-    Adaptation Decision #1 (MIGRATION_PLAN.md "Resolved decisions"):
-    MainForm keeps its native title bar, so the mock's window-control
-    glyphs (— ▢ ✕) and the divider that separated them from the Settings
-    button are intentionally dropped here — only the wordmark/version
-    chip/Settings button remain as a thin in-content header row.
+    Adaptation Decision #1 superseded (2026-08-11, user request): originally
+    MainForm kept its native title bar and dropped the mock's window-control
+    glyphs (— ▢ ✕) entirely. WindowControls.razor now draws them for real,
+    backed by a genuinely frameless MainForm (program.cs's WndProc
+    WM_NCCALCSIZE/WM_NCHITTEST handling) — see that component's own doc
+    comment for the full mechanism.
 
     Phase 6.1: the rail rows below were already pure Razor/CSS as of Phase
     3.3/4.1 (real State.Games, selected/active tiers, ON pill) — nothing
@@ -55,14 +56,15 @@
 *@
 
 <div class="nb-shell">
-    <header class="nb-shell__titlebar">
+    <header class="nb-shell__titlebar" @onmousedown="() => State.BeginWindowDrag()">
         <div class="nb-shell__mark"></div>
         <div class="nb-text-wordmark nb-shell__wordmark">NOBORDERS</div>
         <div class="nb-text-data nb-shell__version">v2.4</div>
         <div class="nb-shell__spacer"></div>
-        <button type="button" class="nb-shell__settings-btn" @onclick="() => OnOpenSettings.InvokeAsync()">
+        <button type="button" class="nb-shell__settings-btn" @onmousedown:stopPropagation="true" @onclick="() => OnOpenSettings.InvokeAsync()">
             <span class="nb-shell__settings-ring"></span>Settings
         </button>
+        <WindowControls />
     </header>
 
     <section class="nb-shell__hero" style="@HeroStyle">
@@ -102,11 +104,10 @@
             {
                 var selected = g == DisplayedGame;
                 var tier = RowTier(g, selected);
-                <div class="nb-shell__rail-row @(selected ? "nb-shell__rail-row--selected" : "")" @onclick="() => State.SelectGame(g)">
+                <div @key="g" class="nb-shell__rail-row @(selected ? "nb-shell__rail-row--selected" : "")" @onclick="() => State.SelectGame(g)">
                     <div class="nb-shell__rail-thumb @(selected ? "nb-shell__rail-thumb--selected" : "")" style="@ThumbStyle(g)"></div>
                     <div class="nb-shell__rail-info">
                         <div class="nb-shell__rail-name nb-shell__rail-name--@tier">@g.GameName</div>
-                        <div class="nb-shell__rail-res nb-shell__rail-res--@tier nb-mono">@RailResolution(g)</div>
                     </div>
                     @if (g.IsActive)
                     {
@@ -126,10 +127,16 @@
     </div>
 
     <footer class="nb-shell__statusbar nb-text-statusbar">
-        <span>Ctrl+Shift+A add</span>
-        <span>Ctrl+Shift+R refresh</span>
+        @if (!string.IsNullOrEmpty(AddHotkeyHint))
+        {
+            <span>@AddHotkeyHint add</span>
+        }
+        @if (!string.IsNullOrEmpty(RefreshHotkeyHint))
+        {
+            <span>@RefreshHotkeyHint refresh</span>
+        }
         <div class="nb-shell__statusbar-spacer"></div>
-        <span>standard user</span>
+        <span>@(State.IsElevated ? "administrator" : "standard user")</span>
     </footer>
 
     @if (_showAddModal)
@@ -162,6 +169,26 @@
     public void Dispose() => State.Changed -= OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
+    // Phase 8.8 bugfix: this footer previously hardcoded "Ctrl+Shift+A"/
+    // "Ctrl+Shift+R" — the app's actual defaults, but not what a user sees
+    // once they rebind a hotkey in Settings > Hotkeys (confirmed live: a
+    // real install customized to Ctrl+F9/Ctrl+F10 still showed the stale
+    // default text here). Reads the same real HotkeyConfig the Settings page
+    // itself displays (AppStateService.HotkeyAddApp/HotkeyRefreshApp),
+    // formatted via HotkeyConfig's own ToString() ("Ctrl + F9") rather than
+    // HotkeysSettingsPage's per-key chip rendering, since this is a single
+    // plain-text status line, not a set of key caps. A cleared/unset hotkey
+    // (ToString() == "None") hides its hint entirely rather than showing the
+    // slightly odd "None add" — there's no shortcut to advertise.
+    private string? AddHotkeyHint => HintOrNull(State.HotkeyAddApp);
+    private string? RefreshHotkeyHint => HintOrNull(State.HotkeyRefreshApp);
+
+    private static string? HintOrNull(HotkeyConfig cfg)
+    {
+        string text = cfg.ToString();
+        return text == "None" ? null : text;
+    }
+
     // Display-only fallback: never writes MainForm's real _selectedGame, just
     // picks something sensible to show/highlight when nothing is selected yet.
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
@@ -176,10 +203,10 @@
     // through untouched. Inline style rather than a class swap since the URL
     // itself is per-game data, not a fixed token.
     private string HeroStyle =>
-        string.IsNullOrEmpty(DisplayedGame?.HeroImagePath) ? "" : $"background-image:url('{DisplayedGame.HeroImagePath}');background-size:cover;background-position:center;";
+        string.IsNullOrEmpty(DisplayedGame?.HeroImagePath) ? "" : $"background-image:url('{ArtworkService.CssUrlEscape(DisplayedGame.HeroImagePath)}');background-size:cover;background-position:center;";
 
     private static string ThumbStyle(GameConfig g) =>
-        string.IsNullOrEmpty(g.IconImagePath) ? "" : $"background-image:url('{g.IconImagePath}');background-size:cover;background-position:center;";
+        string.IsNullOrEmpty(g.IconImagePath) ? "" : $"background-image:url('{ArtworkService.CssUrlEscape(g.IconImagePath)}');background-size:cover;background-position:center;";
 
     // Phase 4.3: ChkActive_CheckedChanged (via State.ToggleActive) only acts
     // on MainForm's real _selectedGame, which is still null before the first
@@ -195,28 +222,42 @@
         State.ToggleActive();
     }
 
-    // A GameConfig's Profiles dictionary is keyed by monitor friendly-name, so
-    // "the" resolution/offset/monitor isn't well-defined without a selected
-    // scope — that's the Target Monitor dropdown's job (DisplayDetailPane),
-    // not wired until later. Until then, this shows the first saved profile,
-    // if any, which is honest about being a placeholder pick rather than a
-    // resolved "current" one.
-    private static string RailResolution(GameConfig g)
-    {
-        var p = g.Profiles.Values.FirstOrDefault();
-        return p == null ? "no profile saved" : $"{p.Width}×{p.Height}";
-    }
+    // Same fallback chain as DisplayDetailPane.TargetMonitorName — the
+    // Target Monitor dropdown's own selection (State.ActiveMonitorScope)
+    // wins once it's been set, so this stays honestly tied to whichever
+    // monitor is actually showing in the Display tab, rather than an
+    // arbitrary "first profile found" pick that never changed when the
+    // dropdown did. Duplicated here rather than shared, same as this file's
+    // other display-only fallbacks (DisplayedGame, EnsureSelected pattern
+    // elsewhere) — MainShell and DisplayDetailPane are separate components
+    // with no shared instance state, both just reading the same
+    // AppStateService source of truth independently.
+    private string ActiveMonitorName =>
+        !string.IsNullOrEmpty(State.ActiveMonitorScope) ? State.ActiveMonitorScope :
+        DisplayedGame?.Profiles.Keys.FirstOrDefault()
+        ?? (State.Monitors.FirstOrDefault(m => m.Primary) ?? State.Monitors.FirstOrDefault())?.ID
+        ?? State.KnownMonitors.FirstOrDefault()
+        ?? string.Empty;
 
-    private static string HeroMetaLine(GameConfig? g)
+    // Phase 8.4: entirely live (State.Width/Height/OffsetX/OffsetY/
+    // ConstrainMouse — the same shadow NumericTextBox/checkbox fields
+    // DisplayDetailPane's own Width/Height/Offset steppers and Lock-cursor
+    // checkbox read/write), not a profile-dictionary lookup. Those shadow
+    // fields are reloaded fresh from the effective profile on every
+    // selection/scope change (LoadProfileToUI), so they're already scoped
+    // to "whichever game+monitor is currently active" — exactly what
+    // ActiveMonitorName resolves to — and they're what actually changes
+    // the instant you step a field or toggle the checkbox, unlike the
+    // persisted profile object (which only catches up on Save Changes).
+    private string HeroMetaLine(GameConfig? g)
     {
         if (g == null) return string.Empty;
-        var monitor = g.Profiles.Keys.FirstOrDefault();
-        if (monitor == null || !g.Profiles.TryGetValue(monitor, out var p))
-            return "no display profile saved yet";
-        string offsetX = p.OffsetX >= 0 ? $"+{p.OffsetX}" : p.OffsetX.ToString();
-        string offsetY = p.OffsetY >= 0 ? $"+{p.OffsetY}" : p.OffsetY.ToString();
-        string cursor  = p.ConstrainMouse ? "cursor locked" : "cursor free";
-        return $"{p.Width}×{p.Height} · {offsetX},{offsetY} · {monitor} · {cursor}";
+        string monitor = ActiveMonitorName;
+        if (string.IsNullOrEmpty(monitor)) return "no display profile saved yet";
+        string offsetX = State.OffsetX >= 0 ? $"+{State.OffsetX}" : State.OffsetX.ToString();
+        string offsetY = State.OffsetY >= 0 ? $"+{State.OffsetY}" : State.OffsetY.ToString();
+        string cursor = State.ConstrainMouse ? "cursor locked" : "cursor free";
+        return $"{State.Width}×{State.Height} · {offsetX},{offsetY} · {monitor} · {cursor}";
     }
 
     // Text color tier follows (selected, active) exactly as the mock's

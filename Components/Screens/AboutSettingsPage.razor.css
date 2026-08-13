@@ -1,3 +1,15 @@
+.nb-about-page__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nb-about-page__icon {
+  width: 64px;
+  height: 64px;
+  flex: none;
+}
+
 .nb-about-page__title {
   font: var(--nb-text-screen-title-weight) var(--nb-text-screen-title-size)/1.2 var(--nb-font-ui);
   color: var(--nb-text-primary);

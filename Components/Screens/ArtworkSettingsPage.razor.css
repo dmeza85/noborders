@@ -1,0 +1,39 @@
+.nb-artwork-page__title {
+  font: var(--nb-text-screen-title-weight) var(--nb-text-screen-title-size)/1.2 var(--nb-font-ui);
+  color: var(--nb-text-primary);
+}
+
+.nb-artwork-page__subline {
+  font: 400 12.5px/1.45 var(--nb-font-ui);
+  color: var(--nb-text-secondary);
+  margin-top: 5px;
+  max-width: 440px;
+}
+
+.nb-artwork-page__field {
+  margin-top: 20px;
+}
+
+.nb-artwork-page__field-label {
+  margin-bottom: 8px;
+}
+
+.nb-artwork-page__input {
+  width: 260px;
+  height: var(--nb-control-height-compact);
+  padding: 0 11px;
+  border: 1px solid var(--nb-border);
+  border-radius: var(--nb-radius-input);
+  background: var(--nb-field);
+  color: var(--nb-text-body);
+  font-size: 12px;
+}
+
+.nb-artwork-page__input::placeholder {
+  color: var(--nb-text-muted);
+}
+
+.nb-artwork-page__input:focus {
+  outline: none;
+  border-color: var(--nb-border-strong);
+}

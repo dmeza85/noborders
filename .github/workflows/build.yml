@@ -1,0 +1,38 @@
+# review.md §5: "nothing currently verifies a build even compiles before
+# it's committed." This is the minimum useful CI for this repo — build the
+# app and run the test project (NoBorders.Tests, added alongside this
+# workflow) on every push/PR. Windows-hosted specifically because NoBorders
+# is a net10.0-windows WinForms app (UseWindowsForms) — it cannot build on
+# a Linux/macOS runner.
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore NoBorders.csproj
+
+      - name: Build
+        run: dotnet build NoBorders.csproj --configuration Release --no-restore
+
+      - name: Restore tests
+        run: dotnet restore NoBorders.Tests/NoBorders.Tests.csproj
+
+      - name: Run tests
+        run: dotnet test NoBorders.Tests/NoBorders.Tests.csproj --configuration Release --no-restore --verbosity normal

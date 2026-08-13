@@ -12,9 +12,28 @@
   min-width: 0;
 }
 
+.nb-monitor-card__name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .nb-monitor-card__name {
   font: 600 12.5px/1 var(--nb-font-ui);
   color: var(--nb-text-body);
+}
+
+/* Phase 8.14 (revised twice per feedback): first pass was an 8px badge
+   straddling the card's left border (8px); later passes tried 12.5px
+   (matching the name's full font-size) and 10px (a midpoint) — both read
+   as too big. Back to the original 8px, just inline before the name now
+   instead of straddling the border. */
+.nb-monitor-card__primary-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--nb-success);
+  flex: none;
 }
 
 .nb-monitor-card__detail {
@@ -47,8 +66,27 @@
   color: var(--nb-text-secondary);
 }
 
+/* Saved + selected — same idea as --selected above (accent border + tint,
+   brighter text), dialed down since this card is a disconnected monitor,
+   not an active one: no border-width bump, a lower-alpha background tint,
+   and the name only steps up to --nb-text-body rather than the full
+   --nb-text-primary the connected case gets. Border-style stays dashed
+   (only the color changes) — that's still the primary "not connected"
+   signal and must survive selection. */
+.nb-monitor-card--saved.nb-monitor-card--saved-selected {
+  border-color: var(--nb-accent);
+  background: rgba(var(--nb-accent-rgb), .05);
+}
+
+.nb-monitor-card--saved.nb-monitor-card--saved-selected .nb-monitor-card__name {
+  color: var(--nb-text-body);
+}
+
 .nb-monitor-card__remove {
   flex: none;
+  background: transparent;
+  border: none;
+  padding: 0;
   color: var(--nb-text-muted);
   font: 400 11px/1 var(--nb-font-ui);
   cursor: pointer;

@@ -52,14 +52,18 @@
 
    Phase 4.6: Save Changes calls AppStateService.SaveGameChanges, shared with
    MatchingDetailPane's own Save Changes button (README: "both tabs share
-   Save Changes / Undo"). Width/Height/Offset/Lock-cursor here are still
-   read-only display (SteppedNumberField has no click handling yet — the
-   README's ±1/Shift±10/Ctrl±100 stepper interaction isn't itemized anywhere
-   in Phase 4 and is being treated as out of this migration's scope, not an
-   oversight), so today Save Changes mainly re-commits the pending display
-   name (see MatchingDetailPane) and re-persists whatever profile is already
-   loaded — a real, working round-trip, just not yet a way to change the
-   numbers from Blazor.
+   Save Changes / Undo") — commits the pending display name (see
+   MatchingDetailPane) and re-persists whatever profile is currently loaded
+   in the shadow NumericTextBox fields (SaveUIToProfile), a real, working
+   round-trip.
+
+   Phase 8.4: Width/Height/Offset X/Y are real, editable steppers — the
+   README's ±1/Shift±10/Ctrl±100 interaction, via SteppedNumberField's
+   OnStep and AppStateService.Width/Height/OffsetX/OffsetY (Adjust* mutates
+   the real shadow `_numWidth`/`_numHeight`/`_numOffsetX`/`_numOffsetY`
+   NumericTextBox fields SaveUIToProfile already reads). Lock-cursor got the
+   same treatment earlier (AppStateService.ConstrainMouse/ToggleConstrainMouse)
+   via a checkbox instead of a stepper.
 
    Phase 4.13: ↶ Undo calls AppStateService.Undo — net-new per the README
    (no prior WinForms UI/handler existed for this). Disabled
@@ -67,8 +71,18 @@
    currently selected game this session; forwards to MainForm's
    UndoLastSave, which restores the pre-Save GameName/RegexPattern/Profiles
    snapshot MainForm captures right before BtnSaveGame_Click applies its
-   changes (single-level — one Undo consumes the snapshot). Center On
-   Monitor remains static (Phase 6). *@
+   changes (single-level — one Undo consumes the snapshot).
+
+   Phase 8.5: Save Changes now also raises a real toast (ShowToast) in
+   addition to the pre-existing ShowStatus call — ShowStatus alone lands on
+   a legacy WinForms label permanently hidden behind the BlazorWebView since
+   the Phase 7.0 cutover, so it gave no visible confirmation at all.
+
+   Phase 8.6: the old single "Center On Monitor" text link is now four
+   MonitorAlignButton icon buttons (Left/Center/Bottom/Right) — each computes
+   Offset X/Y from the active scope's real connected resolution via
+   AppStateService.AlignOnMonitor(mode); no-ops with a status message if
+   that monitor isn't currently connected. *@
 
 <div class="nb-display-pane">
     <div class="nb-display-pane__left">
@@ -95,42 +109,47 @@
         <div class="nb-display-pane__row">
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">WIDTH</div>
-                <SteppedNumberField Value="@DisplayedProfile.Width" />
+                <SteppedNumberField Value="@State.Width" OnStep="@(delta => AdjustWidth(delta))" />
             </div>
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">HEIGHT</div>
-                <SteppedNumberField Value="@DisplayedProfile.Height" />
+                <SteppedNumberField Value="@State.Height" OnStep="@(delta => AdjustHeight(delta))" />
             </div>
         </div>
 
         <div class="nb-display-pane__row nb-display-pane__row--offsets">
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">OFFSET X</div>
-                <SteppedNumberField Value="@DisplayedProfile.OffsetX" BorderSubtle="true" />
+                <SteppedNumberField Value="@State.OffsetX" BorderSubtle="true" OnStep="@(delta => AdjustOffsetX(delta))" />
             </div>
             <div class="nb-display-pane__field">
                 <div class="nb-text-label nb-display-pane__field-label">OFFSET Y</div>
-                <SteppedNumberField Value="@DisplayedProfile.OffsetY" BorderSubtle="true" />
+                <SteppedNumberField Value="@State.OffsetY" BorderSubtle="true" OnStep="@(delta => AdjustOffsetY(delta))" />
             </div>
         </div>
 
         <div class="nb-text-subline nb-display-pane__hint">Arrows step by 1 px · hold Shift for 10 · Ctrl for 100</div>
 
-        <label class="nb-display-pane__check">
-            <span class="nb-display-pane__check-box @(DisplayedProfile.ConstrainMouse ? "nb-display-pane__check-box--checked" : "")">@(DisplayedProfile.ConstrainMouse ? "✓" : "")</span>
+        <label class="nb-display-pane__check" @onclick="() => State.ToggleConstrainMouse()">
+            <span class="nb-display-pane__check-box @(State.ConstrainMouse ? "nb-display-pane__check-box--checked" : "")">@(State.ConstrainMouse ? "✓" : "")</span>
             <span>Lock cursor to window bounds</span>
         </label>
     </div>
 
     <div class="nb-display-pane__right">
         <ResultPreview MonitorWidth="PreviewMonitorWidth" MonitorHeight="PreviewMonitorHeight"
-                       WindowWidth="DisplayedProfile.Width" WindowHeight="DisplayedProfile.Height"
-                       OffsetX="DisplayedProfile.OffsetX" OffsetY="DisplayedProfile.OffsetY"
+                       WindowWidth="State.Width" WindowHeight="State.Height"
+                       OffsetX="State.OffsetX" OffsetY="State.OffsetY"
                        Caption="@PreviewCaption" />
 
         <div class="nb-display-pane__summary">
             <div class="nb-display-pane__summary-text nb-mono nb-display-pane__summary-text--@SummaryClass()">@SummaryText()</div>
-            <div class="nb-display-pane__center-link nb-mono">Center On Monitor</div>
+            <div class="nb-display-pane__align-row">
+                <MonitorAlignButton Position="MonitorAlignMode.Left" Title="Align left, centered vertically" OnClick="@(() => OnAlign(MonitorAlignMode.Left))" />
+                <MonitorAlignButton Position="MonitorAlignMode.Center" Title="Center on monitor" OnClick="@(() => OnAlign(MonitorAlignMode.Center))" />
+                <MonitorAlignButton Position="MonitorAlignMode.Bottom" Title="Align bottom, centered horizontally" OnClick="@(() => OnAlign(MonitorAlignMode.Bottom))" />
+                <MonitorAlignButton Position="MonitorAlignMode.Right" Title="Align right, centered vertically" OnClick="@(() => OnAlign(MonitorAlignMode.Right))" />
+            </div>
         </div>
 
         <div class="nb-display-pane__actions">
@@ -155,10 +174,21 @@
         ?? State.KnownMonitors.FirstOrDefault()
         ?? string.Empty;
 
+    // Phase 8.4 bugfix: was missing the EnsureSelected() every sibling write
+    // action below already has — confirmed live, on a fresh launch (before
+    // ever clicking a game row) State.SelectedGame is still null even though
+    // DisplayedGame is showing a fallback pick, so MainForm.
+    // CmbMonitor_SelectedIndexChanged's own `_selectedGame == null` guard
+    // silently no-op'd the whole monitor switch: the <select> itself still
+    // visually changed (plain browser DOM behavior), but _activeScope never
+    // moved, so nothing reading it — Width/Height/Offset, Result Preview,
+    // MainShell's hero meta line — ever followed.
     private void OnMonitorChanged(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
-        if (!string.IsNullOrEmpty(value)) State.SelectMonitorScope(value);
+        if (string.IsNullOrEmpty(value)) return;
+        EnsureSelected();
+        State.SelectMonitorScope(value);
     }
 
     // Write actions below all guard on MainForm's real _selectedGame, which
@@ -178,26 +208,26 @@
         State.LoadMonitorDefaults();
     }
 
+    // Phase 8.4: Width/Height/Offset X/Y are now real, editable steppers —
+    // same EnsureSelected()-first shape as every other write action here, so
+    // a stepper click against the Phase 3.3 display-only fallback (before
+    // any real selection exists) establishes the selection instead of
+    // silently no-oping.
+    private void AdjustWidth(int delta) { EnsureSelected(); State.AdjustWidth(delta); }
+    private void AdjustHeight(int delta) { EnsureSelected(); State.AdjustHeight(delta); }
+    private void AdjustOffsetX(int delta) { EnsureSelected(); State.AdjustOffsetX(delta); }
+    private void AdjustOffsetY(int delta) { EnsureSelected(); State.AdjustOffsetY(delta); }
+
     private void OnSaveChanges()
     {
         EnsureSelected();
         State.SaveGameChanges();
     }
 
-    // Same fallback chain as MainForm.GetEffectiveProfile(): the game's own
-    // saved profile for this monitor, else that monitor's saved default,
-    // else GameDisplayProfile's own schema default.
-    private GameDisplayProfile DisplayedProfile
+    private void OnAlign(MonitorAlignMode mode)
     {
-        get
-        {
-            if (DisplayedGame != null && !string.IsNullOrEmpty(TargetMonitorName)
-                && DisplayedGame.Profiles.TryGetValue(TargetMonitorName, out var gp))
-                return gp;
-            if (!string.IsNullOrEmpty(TargetMonitorName) && State.MonitorDefaults.TryGetValue(TargetMonitorName, out var def))
-                return def;
-            return new GameDisplayProfile();
-        }
+        EnsureSelected();
+        State.AlignOnMonitor(mode);
     }
 
     // Only known while the target monitor is actually connected — a saved
@@ -205,17 +235,22 @@
     private MonitorItem? TargetMonitorConnected =>
         State.Monitors.FirstOrDefault(m => m.ID == TargetMonitorName);
 
-    private int PreviewMonitorWidth  => TargetMonitorConnected?.Width  ?? DisplayedProfile.Width;
-    private int PreviewMonitorHeight => TargetMonitorConnected?.Height ?? DisplayedProfile.Height;
+    // Phase 8.4: live (State.Width/Height/OffsetX/OffsetY — the same shadow
+    // NumericTextBox fields the steppers now edit), not the persisted
+    // profile a DisplayedProfile-style lookup would read. Same reasoning as
+    // MainShell's hero meta line fix: reading the persisted value here meant
+    // the Result Preview/summary line never moved as you stepped the
+    // fields, only after Save Changes.
+    private int PreviewMonitorWidth  => TargetMonitorConnected?.Width  ?? State.Width;
+    private int PreviewMonitorHeight => TargetMonitorConnected?.Height ?? State.Height;
 
     private string PreviewCaption
     {
         get
         {
-            var p = DisplayedProfile;
-            bool fullCoverage = p.OffsetX == 0 && p.OffsetY == 0
-                && p.Width == PreviewMonitorWidth && p.Height == PreviewMonitorHeight;
-            string core = $"{p.Width}×{p.Height} @ {p.OffsetX},{p.OffsetY}";
+            bool fullCoverage = State.OffsetX == 0 && State.OffsetY == 0
+                && State.Width == PreviewMonitorWidth && State.Height == PreviewMonitorHeight;
+            string core = $"{State.Width}×{State.Height} @ {State.OffsetX},{State.OffsetY}";
             return fullCoverage ? $"{core} — full coverage" : core;
         }
     }
@@ -227,8 +262,7 @@
         {
             var m = TargetMonitorConnected;
             if (m == null || m.Width <= 0 || m.Height <= 0) return null;
-            var p = DisplayedProfile;
-            return (int)Math.Round((double)(p.Width * p.Height) / (m.Width * m.Height) * 100);
+            return (int)Math.Round((double)(State.Width * State.Height) / (m.Width * m.Height) * 100);
         }
     }
 
@@ -239,10 +273,9 @@
         {
             var m = TargetMonitorConnected;
             if (m == null) return null;
-            var p = DisplayedProfile;
-            return p.OffsetX >= 0 && p.OffsetY >= 0
-                && p.OffsetX + p.Width <= m.Width
-                && p.OffsetY + p.Height <= m.Height;
+            return State.OffsetX >= 0 && State.OffsetY >= 0
+                && State.OffsetX + State.Width <= m.Width
+                && State.OffsetY + State.Height <= m.Height;
         }
     }
 
@@ -253,8 +286,7 @@
     {
         if (DisplayedGame == null) return "no game selected";
         if (string.IsNullOrEmpty(TargetMonitorName)) return "no monitor available";
-        var p = DisplayedProfile;
-        string core = $"{p.Width}×{p.Height} @ {p.OffsetX},{p.OffsetY}";
+        string core = $"{State.Width}×{State.Height} @ {State.OffsetX},{State.OffsetY}";
         if (CoveragePercent is not int pct) return $"{core} — {TargetMonitorName} not connected, coverage unknown";
         string fit = FitsOnScreen == true ? "fits on screen" : "out of bounds";
         return $"{core} — {pct}% of {TargetMonitorName} · {fit}";

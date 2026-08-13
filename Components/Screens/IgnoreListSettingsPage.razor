@@ -1,0 +1,59 @@
+@namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
+@implements IDisposable
+@* Settings > Ignore List (Phase 8.4) — lists only the programs the user has
+   explicitly chosen to ignore, on top of NoBorders' own built-in system-
+   process filtering, which stays internal and is never shown or editable
+   here (MainForm's _systemProcessBlocklist — ~100 entries most users would
+   never touch, so surfacing them here would just be noise). Every process
+   listed here is hidden from the "Add Running App"/this page's own "Add
+   Program" picker and the Matching tab's live-test list — both ultimately
+   read AppStateService.GetOpenWindows(), which filters against the built-in
+   list AND this one together (see GetOpenWindowEntries in program.cs).
+   "Clear All" empties this list only, with a native confirmation first
+   since it's irreversible; the built-in filtering is unaffected either way.
+   No mock precedent (the design bundle predates this feature), so styled
+   off Diagnostics/Monitors' own already-established row/toolbar language
+   rather than invented from scratch. *@
+
+<div class="nb-ignore-page__title">Ignore List</div>
+<div class="nb-ignore-page__subline">Programs you add here never show up as candidates to add as a game, and are hidden from the Matching tab's live test. NoBorders already filters out common Windows system processes on its own — this list is only for anything extra you want hidden too.</div>
+
+<div class="nb-ignore-page__toolbar">
+    <button type="button" class="nb-btn nb-btn--outline nb-ignore-page__add" @onclick="() => _showAddModal = true">+ Add Program</button>
+    <button type="button" class="nb-btn nb-btn--danger-outline nb-ignore-page__clear" disabled="@(State.IgnoredProcesses.Count == 0)" @onclick="() => State.ConfirmClearIgnoredProcesses()">Clear All</button>
+</div>
+
+@if (State.IgnoredProcesses.Count == 0)
+{
+    <div class="nb-ignore-page__empty">Nothing ignored yet — use "+ Add Program" to pick a running program to hide.</div>
+}
+else
+{
+    <div class="nb-text-label nb-ignore-page__count">IGNORED · @State.IgnoredProcesses.Count</div>
+    <div class="nb-ignore-page__list">
+        @foreach (var exe in State.IgnoredProcesses)
+        {
+            <div @key="exe" class="nb-ignore-page__row">
+                <div class="nb-ignore-page__row-name nb-mono">@exe</div>
+                <button type="button" class="nb-ignore-page__row-remove" title="Remove from ignore list" aria-label="Remove @exe from ignore list" @onclick="() => State.RemoveIgnoredProcess(exe)">✕</button>
+            </div>
+        }
+    </div>
+}
+
+@if (_showAddModal)
+{
+    <AddIgnoredProcessModal OnClose="() => _showAddModal = false" />
+}
+
+@code {
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+    public void Dispose() => State.Changed -= OnStateChanged;
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    // Local-only UI state, same shape as MainShell's _showAddModal — opening/
+    // closing the picker is just this component's own state.
+    private bool _showAddModal;
+}

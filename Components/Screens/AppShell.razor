@@ -22,7 +22,20 @@
    injectable service would solve — it would just be indirection with no
    payoff, the same reasoning that's kept every other purely-local Phase 4/6/8
    modal-open flag (_showAddModal, _showArtworkModal) as component state
-   instead of a service. *@
+   instead of a service.
+
+   Phase 8.4 bugfix: now also subscribes to AppStateService.Changed purely to
+   notice when the *selected game* changes (by reference — editing the
+   current game's own fields, e.g. Save Changes, mutates the same GameConfig
+   object and correctly does NOT count) and reset _mainTab back to Display
+   when it does. Confirmed live: switching games while the Matching tab was
+   showing left the newly-selected game stuck on Matching too, since nothing
+   here previously reacted to selection changing at all — _mainTab was only
+   ever touched by the user's own tab clicks. *@
+
+@using NoBorders.Services
+@inject AppStateService State
+@implements IDisposable
 
 @switch (_screen)
 {
@@ -56,6 +69,31 @@
     private Screen _screen = Screen.Main;
     private MainShell.ShellTab _mainTab = MainShell.ShellTab.Display;
     private SettingsShell.SettingsSection _settingsSection = SettingsShell.SettingsSection.Monitors;
+    private GameConfig? _lastSelectedGame;
+
+    protected override void OnInitialized()
+    {
+        _lastSelectedGame = State.SelectedGame;
+        State.Changed += OnStateChanged;
+    }
+
+    public void Dispose() => State.Changed -= OnStateChanged;
+
+    // Changed fires for lots of reasons that have nothing to do with which
+    // game is selected (e.g. Save Changes editing the current game's own
+    // fields) — reference equality against the last-seen SelectedGame is
+    // what isolates "the selection itself actually changed" from those,
+    // since switching selection always reassigns _selectedGame to a
+    // different GameConfig object, while editing one in place never does.
+    private void OnStateChanged()
+    {
+        if (!ReferenceEquals(State.SelectedGame, _lastSelectedGame))
+        {
+            _lastSelectedGame = State.SelectedGame;
+            _mainTab = MainShell.ShellTab.Display;
+        }
+        InvokeAsync(StateHasChanged);
+    }
 
     private void OpenSettings() => _screen = Screen.Settings;
     private void OpenActivityLog() => _screen = Screen.ActivityLog;

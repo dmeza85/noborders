@@ -1,0 +1,71 @@
+@namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
+@* Settings > Ignore List's "Add Program" picker (Phase 8.4) — deliberately
+   reuses the exact same picker experience as AddRunningAppModal.razor (the
+   "Add a running app" modal, screen 1d): both list AppStateService.
+   GetOpenWindows() rows with a click-to-select/confirm-to-commit shape, per
+   the request that this reuse "the same process picker as the game
+   settings". Kept as its own component rather than parameterizing
+   AddRunningAppModal itself, since the two confirm actions commit
+   fundamentally different things (a new tracked game vs. an ignore-list
+   entry) and AddRunningAppModal's "TRACKED" badge/Browse-for-EXE affordance
+   don't apply here — a process already on the ignore list can't appear in
+   this list at all (GetOpenWindowEntries already filters it out), so
+   there's nothing parallel to "TRACKED" to show.
+
+   Confirming calls AppStateService.AddIgnoredProcess with the selected
+   row's Exe (not its window title) — the same field GetOpenWindowEntries/
+   TryGetHotkeyTargetExe match against. *@
+
+<ModalOverlay Width="560">
+    <div class="nb-add-ignore__header">
+        <div class="nb-add-ignore__title">Add to ignore list</div>
+        <div class="nb-add-ignore__subline">Pick a running program to hide from every picker and the Matching tab's live test.</div>
+        <div class="nb-add-ignore__search">
+            <span class="nb-add-ignore__search-ring"></span>
+            <span>Search @(Rows.Count) window@(Rows.Count == 1 ? "" : "s")…</span>
+        </div>
+    </div>
+
+    <div class="nb-add-ignore__rows">
+        @foreach (var row in Rows)
+        {
+            bool selected = _selected.HasValue && _selected.Value.Equals(row);
+            <div @key="row" class="nb-add-ignore__row @(selected ? "nb-add-ignore__row--selected" : "")" @onclick="() => _selected = row">
+                <div class="nb-add-ignore__thumb @(selected ? "nb-add-ignore__thumb--selected" : "")"></div>
+                <div class="nb-add-ignore__info">
+                    <div class="nb-add-ignore__name @(selected ? "nb-add-ignore__name--selected" : "")">@row.WindowTitle</div>
+                    <div class="nb-add-ignore__detail nb-mono">@row.Exe · PID @row.Pid</div>
+                </div>
+                @if (selected)
+                {
+                    <div class="nb-add-ignore__check">✓</div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="nb-add-ignore__footer">
+        <div class="nb-add-ignore__tip">Already-ignored programs won't appear here — remove them from the list first if you want to pick them again.</div>
+        <button type="button" class="nb-btn nb-btn--outline nb-add-ignore__cancel" @onclick="Cancel">Cancel</button>
+        <button type="button" class="nb-btn nb-btn--primary nb-add-ignore__add" disabled="@(_selected == null)" @onclick="AddSelected">Add to Ignore List</button>
+    </div>
+</ModalOverlay>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<OpenWindowEntry> Rows => State.GetOpenWindows();
+
+    private OpenWindowEntry? _selected;
+
+    private async Task Cancel() => await OnClose.InvokeAsync();
+
+    private async Task AddSelected()
+    {
+        if (_selected is not { } entry) return;
+        State.AddIgnoredProcess(entry.Exe);
+        await OnClose.InvokeAsync();
+    }
+}

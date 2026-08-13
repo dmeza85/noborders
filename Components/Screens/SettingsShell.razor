@@ -1,24 +1,36 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
 @*
     Shared shell for the Settings views (1e Monitors, 1f Hotkeys &
-    Behaviour, 4b Diagnostics, plus the Permissions/About stubs) — title
-    strip + 180px left nav + content area. Static/hardcoded — Phase 2 is
-    visual parity only, no bindings, nav clicks don't navigate yet.
+    Behaviour — now split into their own pages, Artwork, 4b Diagnostics,
+    plus the Permissions/About stubs) — title strip + 180px left nav +
+    content area.
 
     Adaptation note (extends MIGRATION_PLAN.md Decision #1): the mock
     frames every Settings screen as its own 700px OS window with a title
     bar carrying window-control glyphs (— ▢ ✕). Per Decision #2, Settings
     is reached by navigating *within* the single BlazorWebView, not by
-    opening a second OS window — so those glyphs are dropped here for the
-    same reason MainShell drops them, and a "← Back" control takes their
-    place (not in the mock, since the mock assumes a closable window; this
-    is the necessary in-app equivalent).
-*@
+    opening a second OS window — a "← Back" control stands in for what
+    would be closing that separate window (not in the mock, since the mock
+    assumes a closable window; this is the necessary in-app equivalent).
+
+    2026-08-11: WindowControls.razor (— ▢ ✕) is back, though — the glyphs
+    were originally dropped for the same reason MainShell dropped them
+    (single real OS window, no per-screen window to control), but now that
+    MainForm itself is a genuinely frameless custom-chrome window (see
+    WindowControls.razor's doc comment), every screen needs its own copy of
+    those buttons since there's no native title bar left to fall back on
+    anywhere in the app, Settings included. It still controls the one real
+    MainForm window, same as MainShell's copy — Settings isn't a separate
+    window even now, just a different Blazor "page." *@
 
 <div class="nb-settings">
-    <header class="nb-settings__titlebar">
-        <button type="button" class="nb-settings__back" @onclick="() => OnBack.InvokeAsync()">← Back</button>
+    <header class="nb-settings__titlebar" @onmousedown="() => State.BeginWindowDrag()">
+        <button type="button" class="nb-settings__back" @onmousedown:stopPropagation="true" @onclick="() => OnBack.InvokeAsync()">← Back</button>
         <div class="nb-text-wordmark nb-settings__wordmark">SETTINGS</div>
+        <div class="nb-settings__spacer"></div>
+        <WindowControls />
     </header>
 
     <div class="nb-settings__body">
@@ -35,7 +47,7 @@
 </div>
 
 @code {
-    public enum SettingsSection { Monitors, Hotkeys, Behaviour, Permissions, Diagnostics, About }
+    public enum SettingsSection { Monitors, Hotkeys, Behaviour, Artwork, IgnoreList, Permissions, Diagnostics, About }
 
     [Parameter] public SettingsSection Section { get; set; } = SettingsSection.Monitors;
     [Parameter] public RenderFragment? ChildContent { get; set; }
@@ -47,8 +59,8 @@
 
     private static readonly SettingsSection[] NavItems =
     {
-        SettingsSection.Monitors, SettingsSection.Hotkeys, SettingsSection.Behaviour,
-        SettingsSection.Permissions, SettingsSection.Diagnostics, SettingsSection.About,
+        SettingsSection.Monitors, SettingsSection.Hotkeys, SettingsSection.Behaviour, SettingsSection.Artwork,
+        SettingsSection.IgnoreList, SettingsSection.Permissions, SettingsSection.Diagnostics, SettingsSection.About,
     };
 
     private static string SectionLabel(SettingsSection s) => s switch
@@ -56,6 +68,8 @@
         SettingsSection.Monitors    => "Monitors",
         SettingsSection.Hotkeys     => "Hotkeys",
         SettingsSection.Behaviour   => "Behaviour",
+        SettingsSection.Artwork     => "Artwork",
+        SettingsSection.IgnoreList  => "Ignore List",
         SettingsSection.Permissions => "Permissions",
         SettingsSection.Diagnostics => "Diagnostics",
         SettingsSection.About       => "About",

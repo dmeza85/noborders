@@ -25,11 +25,16 @@
    pattern would be incoherent.
 
    Mode chips: GameConfig has no match-target field today — the app has
-   always matched by process/exe name only (every CompiledPattern.IsMatch
-   call site in program.cs tests it against "<processname>.exe", never a
-   window title). "Process Name" is shown as the real active mode; "Window
-   Title" stays present (the mock's intent) but inactive, since it isn't
-   real functionality yet, not invented here.
+   always matched by process/exe name only (every IsProcessMatch call site
+   in program.cs tests it against "<processname>.exe", never a window
+   title). "Process Name" is shown as the real active mode; "Window Title"
+   stays present (the mock's intent — matching by title, not just process
+   name, is plausible future scope) but inactive, since it isn't real
+   functionality yet and building it (a new GameConfig field, a second
+   matching code path, migration for existing saves) is real-feature scope,
+   not a wire-up. review.md §3 fix: it's now explicitly disabled (dimmed,
+   not-allowed cursor, tooltip) instead of just visually unstyled, so it no
+   longer implies a working toggle that happens to do nothing when clicked.
 
    Phase 4.5: the ↺ fetch-name button calls AppStateService.FetchName, which
    forwards to MainForm's real BtnFetchName_Click via PerformClick() — it
@@ -61,8 +66,14 @@
    Disabled (State.CanUndo false) until a Save Changes commit has happened
    for the currently selected game this session.
 
-   Still static: Rescan and "Use Title Of Selected" (net-new write
-   actions, Phase 6). *@
+   Still static: "Use Title Of Selected" (a net-new write action, Phase 6).
+
+   Phase 8.4 bugfix: Rescan had no @onclick at all, so clicking it did
+   nothing — OpenWindows (below) already re-enumerates live on every call,
+   it just had no way to be told "do that again right now" outside of
+   whatever re-render State.Changed happened to trigger next. It now just
+   forces a re-render, which re-evaluates OpenWindows the same way any
+   other State.Changed-triggered render already does. *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
@@ -73,14 +84,14 @@
         </div>
 
         <div class="nb-text-label nb-matching-pane__label">MATCH PATTERN</div>
-        <div class="nb-matching-pane__pattern-field nb-mono @(IsPatternValid ? "" : "nb-matching-pane__pattern-field--invalid")">@(DisplayedGame?.RegexPattern ?? "")</div>
+        <div class="nb-matching-pane__pattern-field nb-mono @(IsPatternValid ? "" : "nb-matching-pane__pattern-field--invalid")">@DisplayedPattern</div>
         <div class="nb-matching-pane__validity">
             <span class="nb-matching-pane__validity-dot @(IsPatternValid ? "" : "nb-matching-pane__validity-dot--invalid")"></span>
             <span>@ValidityText()</span>
         </div>
 
         <div class="nb-matching-pane__chips">
-            <div class="nb-matching-pane__chip">Window Title</div>
+            <div class="nb-matching-pane__chip nb-matching-pane__chip--disabled" title="Not yet supported — matching is currently by process name only">Window Title</div>
             <div class="nb-matching-pane__chip nb-matching-pane__chip--active">Process Name</div>
         </div>
 
@@ -100,14 +111,15 @@
         <div class="nb-matching-pane__test-header">
             <div class="nb-text-label">LIVE TEST · OPEN WINDOWS</div>
             <div class="nb-matching-pane__test-hairline"></div>
-            <div class="nb-matching-pane__rescan">Rescan</div>
+            <div class="nb-matching-pane__rescan" @onclick="() => StateHasChanged()">Rescan</div>
         </div>
 
         <div class="nb-matching-pane__test-list">
             @foreach (var w in OpenWindows)
             {
-                var isMatch = DisplayedGame != null && DisplayedGame.CompiledPattern.IsMatch(w.Exe);
-                <div class="nb-match-row @(isMatch ? "nb-match-row--match" : "")">
+                var isMatch = DisplayedGame != null && DisplayedGame.IsProcessMatch(w.Exe);
+                var isSelected = _selectedWindow.HasValue && _selectedWindow.Value.Equals(w);
+                <div @key="w" class="nb-match-row @(isMatch ? "nb-match-row--match" : "") @(isSelected ? "nb-match-row--selected" : "")" @onclick="() => _selectedWindow = w">
                     <div class="nb-match-row__thumb"></div>
                     <div class="nb-match-row__info">
                         <div class="nb-match-row__title">@w.WindowTitle</div>
@@ -127,7 +139,7 @@
 
         <div class="nb-matching-pane__summary">
             <div class="nb-matching-pane__summary-text nb-mono">@SummaryText()</div>
-            <div class="nb-matching-pane__summary-link nb-mono">Use Title Of Selected</div>
+            <div class="nb-matching-pane__summary-link nb-mono" role="button" @onclick="OnUseSelectedWindow">Use Title Of Selected</div>
         </div>
 
         <div class="nb-matching-pane__actions">
@@ -150,6 +162,18 @@
     private string DisplayName =>
         State.SelectedGame != null ? State.PendingDisplayName : (DisplayedGame?.GameName ?? "");
 
+    // Same shape as DisplayName above, for State.PendingRegexPattern —
+    // shows a just-written "Use Title Of Selected" result immediately,
+    // before Save Changes commits it to DisplayedGame.RegexPattern.
+    private string DisplayedPattern =>
+        State.SelectedGame != null ? State.PendingRegexPattern : (DisplayedGame?.RegexPattern ?? "");
+
+    // Phase 8.3-era addition (review.md §3): which live-test row "Use Title
+    // Of Selected" acts on. Local-only UI state, same as _showArtworkModal
+    // below — nothing MainForm needs to know about until the link is
+    // actually clicked.
+    private OpenWindowEntry? _selectedWindow;
+
     private void EnsureSelected()
     {
         if (State.SelectedGame == null && DisplayedGame != null)
@@ -160,6 +184,25 @@
     {
         EnsureSelected();
         State.FetchName();
+    }
+
+    // review.md §3: "Use Title Of Selected" was previously static/dead. The
+    // original design-handoff mock called for inserting the selected
+    // window's *title* as an escaped literal, but matching in this app is
+    // process/exe-name only (see the "Mode chips" doc comment above) —
+    // GameConfig.IsProcessMatch always tests the pattern against the exe
+    // name, never the title, so a title-based pattern would silently never
+    // match anything real. Using the exe name instead keeps this link
+    // functionally honest: the pattern it writes actually works. Falls back
+    // to the first open window when nothing's been explicitly clicked yet,
+    // same "something honest to show" reasoning as DisplayedMonitorName
+    // elsewhere in this migration.
+    private void OnUseSelectedWindow()
+    {
+        EnsureSelected();
+        var w = _selectedWindow ?? OpenWindows.FirstOrDefault();
+        if (string.IsNullOrEmpty(w.Exe)) return; // default(OpenWindowEntry) — no open windows at all
+        State.SetPendingRegexPattern(Regex.Escape(w.Exe));
     }
 
     private void OnSaveChanges()
@@ -213,7 +256,7 @@
     private int MatchCount(List<OpenWindowEntry> windows)
     {
         var g = DisplayedGame;
-        return g == null ? 0 : windows.Count(w => g.CompiledPattern.IsMatch(w.Exe));
+        return g == null ? 0 : windows.Count(w => g.IsProcessMatch(w.Exe));
     }
 
     private string ValidityText()

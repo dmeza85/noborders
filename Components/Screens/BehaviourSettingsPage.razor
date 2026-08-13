@@ -1,0 +1,51 @@
+@namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
+@implements IDisposable
+@* Screen 1f — Settings: Behaviour. Split out of the former combined
+   HotkeysBehaviourSettingsPage into its own independent page/nav entry —
+   see HotkeysSettingsPage for the other half and its fuller doc history.
+   Markup/styling carried over verbatim from that page's Behaviour section,
+   just renamed to this page's own `nb-behaviour-page__` prefix (CSS
+   isolation scopes per-component regardless, but every other single-topic
+   Settings page — Permissions, About, Monitors, Diagnostics — names its
+   classes after itself, not a former sibling page).
+
+   Phase 4.12: the three Behaviour toggles are real — each ToggleSwitch's
+   OnToggle calls AppStateService.ToggleMinimizeToTray/ToggleStartWithWindows/
+   ToggleStartMinimized, which flip the corresponding real WinForms
+   checkbox's Checked property, firing each one's existing, unchanged
+   CheckedChanged lambda (persists via QueueSave; Start with Windows also
+   updates the registry startup entry and cascades Start-minimized off,
+   exactly as the WinForms UI always has). Plain property flips, not
+   PerformClick() — unaffected by 4.10's inactive-TabPage finding, since
+   that only gates IButtonControl.PerformClick(). *@
+
+<div class="nb-behaviour-page__title">Behaviour</div>
+<div class="nb-behaviour-page__subline">How NoBorders runs in the background.</div>
+
+<div class="nb-behaviour-page__toggle-row">
+    <div class="nb-behaviour-page__toggle-info">
+        <div class="nb-behaviour-page__toggle-name">Minimize to system tray</div>
+        <div class="nb-behaviour-page__toggle-sub">Keeps enforcing while hidden</div>
+    </div>
+    <ToggleSwitch On="@State.MinimizeToTray" OnToggle="() => State.ToggleMinimizeToTray()" />
+</div>
+<div class="nb-behaviour-page__toggle-row nb-behaviour-page__toggle-row--divided">
+    <div class="nb-behaviour-page__toggle-info">
+        <div class="nb-behaviour-page__toggle-name">Start with Windows</div>
+    </div>
+    <ToggleSwitch On="@State.StartWithWindows" OnToggle="() => State.ToggleStartWithWindows()" />
+</div>
+<div class="nb-behaviour-page__toggle-row nb-behaviour-page__toggle-row--divided nb-behaviour-page__toggle-row--indented">
+    <div class="nb-behaviour-page__toggle-info">
+        <div class="nb-behaviour-page__toggle-name nb-behaviour-page__toggle-name--muted">Start minimized to tray</div>
+    </div>
+    <ToggleSwitch On="@State.StartMinimized" OnToggle="() => State.ToggleStartMinimized()" />
+</div>
+
+@code {
+    protected override void OnInitialized() => State.Changed += OnStateChanged;
+    public void Dispose() => State.Changed -= OnStateChanged;
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+}

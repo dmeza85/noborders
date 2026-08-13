@@ -29,12 +29,39 @@
    real, unchanged BtnDeleteMonitor_Click — native confirmation MessageBoxes
    and all (not replaced with Blazor UI, same as 4.9's native file picker).
    "Save Monitor Default" calls State.SaveMonitorDefault
-   (BtnSaveDefault_Click) — same "re-persists the currently-displayed value"
-   scope note as 4.6/Phase 4.4: no editable stepper fields exist yet, so
-   this is a real, working commit of whatever's already shown, not yet a
-   way to change the numbers from Blazor. "Detect Displays"/"Remove All"
-   have no backing handler anywhere in program.cs (grepped for both — no
-   match), so they stay static rather than inventing new functionality. *@
+   (BtnSaveDefault_Click).
+
+   review.md §3 fix: "Detect Displays" now calls State.DetectDisplays(),
+   which forwards to MainForm's own RefreshMonitors() — the same
+   enumeration OnDisplayConfigChanged already runs automatically — plus an
+   explicit RaiseChanged() since this isn't routed through a hidden
+   WinForms button's Click event the way most other actions here are.
+   "Remove All" now calls State.RemoveAllSavedMonitors(), MainForm's new
+   RemoveAllSavedMonitors() — same permanently-delete-with-confirmation
+   shape as the existing single-monitor "✕" (BtnDeleteMonitor_Click),
+   applied to every saved-disconnected monitor at once.
+
+   Phase 8.4: Width/Height/Offset X/Y are real, editable SteppedNumberField
+   steppers (State.MonitorDefaultWidth/etc.), same ±1/Shift±10/Ctrl±100
+   shape as DisplayDetailPane's — committed by Save Monitor Default same as
+   always.
+
+   Phase 8.5: Save Monitor Default now also raises a real toast in addition
+   to its pre-existing ShowStatus/button-text-flash, both of which land on
+   legacy WinForms controls invisibly covered by the BlazorWebView since
+   Phase 7.0 and were never actually visible.
+
+   Phase 8.6: four MonitorAlignButton icon buttons (Left/Center/Bottom/
+   Right) replace Phase 8.5's single "Center On Monitor" text link — new to
+   this page (didn't exist here before Phase 8.5 either) — each computes
+   Offset X/Y via AppStateService.AlignOnMonitorDefault(mode) from the
+   selected scope's real connected resolution.
+
+   Phase 8.10 (user request, layout only — no behavior changed): the align
+   row moved into the same row as "Lock cursor to window bounds by
+   default" (empty space to its right at this page's width), and Save
+   Monitor Default/Detect Displays moved beside Result Preview instead of
+   below it, to cut the panel's overall height. *@
 
 <div class="nb-monitors-page">
     <div class="nb-monitors-page__title">Monitor baseline defaults</div>
@@ -47,60 +74,84 @@
     <div class="nb-monitors-page__grid">
         @foreach (var m in State.Monitors)
         {
-            <MonitorCard Name="@m.ID" Detail="@ConnectedDetail(m)" Selected="@(m.ID == DisplayedMonitorName)"
+            <MonitorCard @key="m" Name="@m.ID" Detail="@ConnectedDetail(m)" Selected="@(m.ID == DisplayedMonitorName)" Primary="@m.Primary"
                          OnSelect="() => State.SelectMonitorDefaultScope(m.ID)" />
         }
     </div>
 
     <div class="nb-monitors-page__group-header nb-monitors-page__group-header--saved">
+        <span class="nb-monitors-page__group-arrow @(_savedExpanded ? "nb-monitors-page__group-arrow--expanded" : "")"
+              role="button" aria-label="@(_savedExpanded ? "Collapse" : "Expand") saved monitors"
+              @onclick="() => _savedExpanded = !_savedExpanded"></span>
         <div class="nb-text-label">SAVED · NOT CONNECTED · @SavedDisconnected.Count</div>
         <div class="nb-monitors-page__hairline"></div>
-        <div class="nb-monitors-page__remove-all">Remove All</div>
+        <div class="nb-monitors-page__remove-all" role="button" @onclick="() => State.RemoveAllSavedMonitors()">Remove All</div>
     </div>
-    <div class="nb-monitors-page__grid">
-        @foreach (var name in SavedDisconnected)
-        {
-            <MonitorCard Name="@name" Detail="@SavedDetail(name)" Saved="true" Selected="@(name == DisplayedMonitorName)"
-                         OnSelect="() => State.SelectMonitorDefaultScope(name)"
-                         OnRemove="() => State.DeleteMonitorDefault(name)" />
-        }
-    </div>
-    <div class="nb-monitors-page__caption">Saved monitors keep their defaults so profiles come back if the display is reconnected.</div>
+    @if (_savedExpanded)
+    {
+        <div class="nb-monitors-page__grid">
+            @foreach (var name in SavedDisconnected)
+            {
+                <MonitorCard @key="name" Name="@name" Detail="@SavedDetail(name)" Saved="true" Selected="@(name == DisplayedMonitorName)"
+                             OnSelect="() => State.SelectMonitorDefaultScope(name)"
+                             OnRemove="() => State.DeleteMonitorDefault(name)" />
+            }
+        </div>
+        <div class="nb-monitors-page__caption">Saved monitors keep their defaults so profiles come back if the display is reconnected.</div>
+    }
 
     <div class="nb-monitors-page__fields">
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">WIDTH</div>
-            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.Width</div>
+            <SteppedNumberField Value="@State.MonitorDefaultWidth" OnStep="@(delta => AdjustWidth(delta))" />
         </div>
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">HEIGHT</div>
-            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.Height</div>
+            <SteppedNumberField Value="@State.MonitorDefaultHeight" OnStep="@(delta => AdjustHeight(delta))" />
         </div>
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">OFFSET X</div>
-            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.OffsetX</div>
+            <SteppedNumberField Value="@State.MonitorDefaultOffsetX" BorderSubtle="true" OnStep="@(delta => AdjustOffsetX(delta))" />
         </div>
         <div class="nb-monitors-page__field">
             <div class="nb-text-label nb-monitors-page__field-label">OFFSET Y</div>
-            <div class="nb-monitors-page__field-value nb-mono">@DisplayedDefault.OffsetY</div>
+            <SteppedNumberField Value="@State.MonitorDefaultOffsetY" BorderSubtle="true" OnStep="@(delta => AdjustOffsetY(delta))" />
+        </div>
+    </div>
+    <div class="nb-text-subline nb-monitors-page__hint">Arrows step by 1 px · hold Shift for 10 · Ctrl for 100</div>
+
+    <div class="nb-monitors-page__check-row">
+        <label class="nb-monitors-page__check" @onclick="() => State.ToggleConstrainMouseDefault()">
+            <span class="nb-monitors-page__check-box @(State.ConstrainMouseDefault ? "nb-monitors-page__check-box--checked" : "")"></span>
+            <span>Lock cursor to window bounds by default</span>
+        </label>
+        <div class="nb-monitors-page__align-grid">
+            @foreach (var opt in AlignOptions)
+            {
+                <div class="nb-monitors-page__align-btn" title="@opt.Title" @onclick="() => OnAlign(opt.Mode)">
+                    <svg width="32" height="24" viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="1" y="1" width="30" height="22" rx="3" stroke="#4a4a58" stroke-width="1.6" />
+                        <rect x="@AlignIconX(opt.Mode)" y="@AlignIconY(opt.Mode)" width="14" height="10" rx="1.5" fill="#5c5c6e" />
+                    </svg>
+                    <span class="nb-monitors-page__align-lbl">@opt.Label</span>
+                </div>
+            }
         </div>
     </div>
 
-    <label class="nb-monitors-page__check">
-        <span class="nb-monitors-page__check-box @(DisplayedDefault.ConstrainMouse ? "nb-monitors-page__check-box--checked" : "")"></span>
-        <span>Lock cursor to window bounds by default</span>
-    </label>
-
     <div class="nb-monitors-page__divider"></div>
 
-    <ResultPreview MonitorWidth="PreviewMonitorWidth" MonitorHeight="PreviewMonitorHeight"
-                   WindowWidth="DisplayedDefault.Width" WindowHeight="DisplayedDefault.Height"
-                   OffsetX="DisplayedDefault.OffsetX" OffsetY="DisplayedDefault.OffsetY"
-                   Caption="@PreviewCaption" />
-
-    <div class="nb-monitors-page__actions">
-        <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveMonitorDefault">Save Monitor Default</button>
-        <button type="button" class="nb-btn nb-btn--outline">Detect Displays</button>
+    <div class="nb-monitors-page__preview-row">
+        <div class="nb-monitors-page__actions">
+            <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveMonitorDefault">Save Monitor Default</button>
+            <button type="button" class="nb-btn nb-btn--outline" @onclick="() => State.DetectDisplays()">Detect Displays</button>
+        </div>
+        <div class="nb-monitors-page__preview-col">
+            <ResultPreview MonitorWidth="PreviewMonitorWidth" MonitorHeight="PreviewMonitorHeight"
+                           WindowWidth="State.MonitorDefaultWidth" WindowHeight="State.MonitorDefaultHeight"
+                           OffsetX="State.MonitorDefaultOffsetX" OffsetY="State.MonitorDefaultOffsetY"
+                           Caption="@PreviewCaption" />
+        </div>
     </div>
 </div>
 
@@ -108,6 +159,15 @@
     protected override void OnInitialized() => State.Changed += OnStateChanged;
     public void Dispose() => State.Changed -= OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    // Phase 8.11 (user request): collapsed by default — saved/disconnected
+    // monitors are edited far less often than connected ones (the whole
+    // point of "saved" is that they're just sitting there until
+    // reconnected), so hiding their grid + caption by default saves the
+    // vertical space those rarely-touched cards would otherwise always
+    // cost. The header row (arrow/count/hairline/Remove All) stays visible
+    // either way — only the card grid and its caption collapse.
+    private bool _savedExpanded = false;
 
     // Display-only fallback (same rationale as MainShell.DisplayedGame):
     // prefers the real State.ActiveMonitorDefaultScope once a card has been
@@ -120,40 +180,89 @@
         ?? SavedDisconnected.FirstOrDefault()
         ?? string.Empty;
 
-    private void OnSaveMonitorDefault()
+    // Phase 8.4: shared by OnSaveMonitorDefault and the Width/Height/Offset
+    // steppers below — establishes the real ActiveMonitorDefaultScope first
+    // (same rationale as DisplayDetailPane's EnsureSelected: before any
+    // card's ever been clicked, State.ActiveMonitorDefaultScope is empty
+    // even though DisplayedMonitorName is showing a fallback pick, and
+    // _numSetWidth/etc. were last loaded for whatever CmbSetMonitor_
+    // SelectedIndexChanged most recently ran for — which may not be this
+    // monitor at all — so a stepper click needs the real scope selected
+    // first, exactly like Save Monitor Default already did).
+    private void EnsureMonitorDefaultSelected()
     {
         if (string.IsNullOrEmpty(State.ActiveMonitorDefaultScope) && !string.IsNullOrEmpty(DisplayedMonitorName))
             State.SelectMonitorDefaultScope(DisplayedMonitorName);
+    }
+
+    private void OnSaveMonitorDefault()
+    {
+        EnsureMonitorDefaultSelected();
         State.SaveMonitorDefault();
     }
+
+    private void OnAlign(MonitorAlignMode mode)
+    {
+        EnsureMonitorDefaultSelected();
+        State.AlignOnMonitorDefault(mode);
+    }
+
+    // Phase 8.13 (user request): this page's align buttons switched from the
+    // shared MonitorAlignButton component (Candidate D from the align-
+    // buttons mockup, still used as-is on the Display tab) to a standalone,
+    // Candidate-C-styled set — the 2×2... here 4-wide grid of labeled 76px
+    // tiles, per the user's explicit pick of "Candidate C" from that mockup.
+    // Inlined here rather than factored into a shared component since it's
+    // now deliberately different from DisplayDetailPane's copy, unlike
+    // before. Icon geometry/colors (#4a4a58 stroke, #5c5c6e fill — one-off,
+    // don't map to any named token, same reasoning as the mockup itself)
+    // match the mockup's monitorIcon() helper exactly, non-reactive (no
+    // hover/active color swap) — Candidate C never got the hover/click
+    // polish pass Candidate D did, and the user asked for Candidate C as
+    // presented, not a hybrid.
+    private static readonly (MonitorAlignMode Mode, string Label, string Title)[] AlignOptions =
+    {
+        (MonitorAlignMode.Left,   "Left + centered",   "Align left, centered vertically"),
+        (MonitorAlignMode.Center, "True center",       "Center on monitor"),
+        (MonitorAlignMode.Bottom, "Bottom + centered", "Align bottom, centered horizontally"),
+        (MonitorAlignMode.Right,  "Right + centered",  "Align right, centered vertically"),
+    };
+
+    private static int AlignIconX(MonitorAlignMode mode) => mode switch
+    {
+        MonitorAlignMode.Left  => 2,
+        MonitorAlignMode.Right => 16,
+        _                      => 9, // Center, Bottom
+    };
+
+    private static int AlignIconY(MonitorAlignMode mode) => mode == MonitorAlignMode.Bottom ? 12 : 7;
+
+    private void AdjustWidth(int delta) { EnsureMonitorDefaultSelected(); State.AdjustMonitorDefaultWidth(delta); }
+    private void AdjustHeight(int delta) { EnsureMonitorDefaultSelected(); State.AdjustMonitorDefaultHeight(delta); }
+    private void AdjustOffsetX(int delta) { EnsureMonitorDefaultSelected(); State.AdjustMonitorDefaultOffsetX(delta); }
+    private void AdjustOffsetY(int delta) { EnsureMonitorDefaultSelected(); State.AdjustMonitorDefaultOffsetY(delta); }
 
     private MonitorItem? DisplayedConnectedMonitor =>
         State.Monitors.FirstOrDefault(m => m.ID == DisplayedMonitorName);
 
-    // Same fallback chain as MainForm.GetEffectiveProfile() minus the
-    // per-game-profile branch (there's no selected game on this page) —
-    // saved default if one exists, otherwise GameDisplayProfile's own
-    // schema defaults (1920×1080 @ 0,0).
-    private GameDisplayProfile DisplayedDefault =>
-        !string.IsNullOrEmpty(DisplayedMonitorName) && State.MonitorDefaults.TryGetValue(DisplayedMonitorName, out var def)
-            ? def
-            : new GameDisplayProfile();
-
     // The well needs the monitor's own physical resolution, which is only
     // knowable while it's connected — a saved-but-disconnected monitor has
-    // no such number on file, so this falls back to the default profile's
-    // own size (better than a 0×0 well).
-    private int PreviewMonitorWidth  => DisplayedConnectedMonitor?.Width  ?? DisplayedDefault.Width;
-    private int PreviewMonitorHeight => DisplayedConnectedMonitor?.Height ?? DisplayedDefault.Height;
+    // no such number on file, so this falls back to the live default
+    // profile's own size (better than a 0×0 well). Live (State.
+    // MonitorDefaultWidth/Height), not the persisted MonitorDefaults entry,
+    // so the well/caption below track in-progress stepper edits the same
+    // way MainShell's hero meta line now tracks the Display tab's.
+    private int PreviewMonitorWidth  => DisplayedConnectedMonitor?.Width  ?? State.MonitorDefaultWidth;
+    private int PreviewMonitorHeight => DisplayedConnectedMonitor?.Height ?? State.MonitorDefaultHeight;
 
     private string PreviewCaption
     {
         get
         {
-            var d = DisplayedDefault;
-            bool fullCoverage = d.OffsetX == 0 && d.OffsetY == 0
-                && d.Width == PreviewMonitorWidth && d.Height == PreviewMonitorHeight;
-            string core = $"{d.Width}×{d.Height} @ {d.OffsetX},{d.OffsetY}";
+            int w = State.MonitorDefaultWidth, h = State.MonitorDefaultHeight;
+            int ox = State.MonitorDefaultOffsetX, oy = State.MonitorDefaultOffsetY;
+            bool fullCoverage = ox == 0 && oy == 0 && w == PreviewMonitorWidth && h == PreviewMonitorHeight;
+            string core = $"{w}×{h} @ {ox},{oy}";
             return fullCoverage ? $"{core} — full coverage" : core;
         }
     }

@@ -21,6 +21,38 @@
   margin-top: 16px;
 }
 
+/* Phase 8.11: collapse/expand toggle for the saved-monitors grid below — a
+   CSS-drawn triangle (border trick) rather than a font glyph, which
+   rendered too faint/indistinct at a legible size in this font. Points
+   right at rest (collapsed, the default) and rotates down when expanded. */
+.nb-monitors-page__group-arrow {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.nb-monitors-page__group-arrow::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 4px 0 4px 5px;
+  border-color: transparent transparent transparent var(--nb-text-muted);
+  transition: transform .12s ease-out, border-color .12s ease-out;
+}
+
+.nb-monitors-page__group-arrow:hover::before {
+  border-color: transparent transparent transparent var(--nb-text-secondary);
+}
+
+.nb-monitors-page__group-arrow--expanded::before {
+  transform: rotate(90deg);
+}
+
 .nb-monitors-page__hairline {
   flex: 1;
   height: var(--nb-divider-width);
@@ -49,7 +81,7 @@
 .nb-monitors-page__fields {
   display: flex;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .nb-monitors-page__field {
@@ -61,25 +93,25 @@
   margin-bottom: 7px;
 }
 
-.nb-monitors-page__field-value {
-  height: 34px;
-  border-radius: var(--nb-radius-input);
-  border: 1px solid var(--nb-border);
-  background: var(--nb-field);
+.nb-monitors-page__hint {
+  color: var(--nb-text-secondary);
+  margin-bottom: 16px;
+}
+
+/* Phase 8.10: houses both the checkbox and the align-row beside it —
+   the checkbox alone never used this row's full width, leaving room. */
+.nb-monitors-page__check-row {
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--nb-text-primary);
+  justify-content: space-between;
+  margin-bottom: 20px;
 }
 
 .nb-monitors-page__check {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 20px;
-  cursor: default;
+  cursor: pointer;
 }
 
 .nb-monitors-page__check-box {
@@ -121,5 +153,63 @@
 .nb-monitors-page__actions {
   display: flex;
   gap: 8px;
+}
+
+/* Phase 8.10: sits beside the Result Preview well instead of below it —
+   stacked/stretched to a fixed narrow column so the preview keeps most of
+   the row's width. */
+.nb-monitors-page__preview-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
   margin-top: 18px;
+}
+
+.nb-monitors-page__preview-row .nb-monitors-page__actions {
+  flex-direction: column;
+  align-items: stretch;
+  flex: none;
+  width: 176px;
+}
+
+.nb-monitors-page__preview-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Phase 8.13 (user request): "Candidate C" from the align-buttons mockup —
+   a 4-wide grid of larger, labeled tiles — replacing this page's earlier
+   Candidate-D-styled row (still used as-is on the Display tab; this page
+   deliberately diverges from it now). Sizes/spacing/colors match the
+   mockup's .row-c/.cbtn/.lbl exactly. Shares a row with the "Lock cursor"
+   checkbox, same placement as before — just a different button style
+   within it. */
+.nb-monitors-page__align-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: fit-content;
+}
+
+.nb-monitors-page__align-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: 76px;
+  padding: 12px 8px 9px;
+  background: var(--nb-surface);
+  border: 1px solid var(--nb-border-subtle);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.nb-monitors-page__align-btn:hover {
+  border-color: var(--nb-border-strong);
+}
+
+.nb-monitors-page__align-lbl {
+  font: 500 10px/1.3 var(--nb-font-ui);
+  color: var(--nb-text-secondary);
+  text-align: center;
 }

@@ -1,6 +1,7 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
+@inject ArtworkService Artwork
 @* Screen 1d — Add Running App picker, design-handoff/README.md §"1d — Add
    Running App picker".
 
@@ -26,12 +27,28 @@
    replace here the way 4.8 replaced the running-app dialog). The mock has
    no dedicated affordance for this at all (design-handoff/README.md never
    mentions "browse"), so it's placed as a secondary link next to the tip
-   text rather than inventing rail iconography the mock doesn't specify. *@
+   text rather than inventing rail iconography the mock doesn't specify.
+
+   Phase 8.4: both AddSelected and Browse now try
+   ArtworkService.TryAutoFetchAsync once, automatically, right after a game
+   is genuinely added (AddGameFromRunningWindow/BrowseForExe now return
+   whether one actually was — false on a cancelled dialog or duplicate pick,
+   in which case there's nothing to fetch for). Awaited before this modal
+   closes, not fire-and-forget: while this overlay is up nothing else is
+   clickable, so State.SelectedGame is guaranteed to still be the game that
+   was just added by the time the fetch resolves — a background fetch that
+   outlived the modal could otherwise race a user picking a different game
+   and misapply art via AppStateService.ApplyArtwork (which always targets
+   "whichever game is currently selected", not a specific game reference).
+   A direct name match applies immediately and silently; anything less just
+   leaves the new game's art blank, same as before this existed — the
+   user's own "Fetch Artwork" button on the Display/Matching tab is still
+   there for it. *@
 
 <ModalOverlay Width="560">
     <div class="nb-add-app__header">
         <div class="nb-add-app__title">Add a running app</div>
-        <div class="nb-add-app__subline">System processes are hidden. Pick the window you want to go borderless.</div>
+        <div class="nb-add-app__subline">@(_adding ? "Adding — checking for matching artwork…" : "System processes are hidden. Pick the window you want to go borderless.")</div>
         <div class="nb-add-app__search">
             <span class="nb-add-app__search-ring"></span>
             <span>Search @(Rows.Count) window@(Rows.Count == 1 ? "" : "s")…</span>
@@ -43,7 +60,7 @@
         {
             bool selected = _selected.HasValue && _selected.Value.Equals(row);
             bool tracked = IsTracked(row);
-            <div class="nb-add-app__row @(selected ? "nb-add-app__row--selected" : "")" @onclick="() => _selected = row">
+            <div @key="row" class="nb-add-app__row @(selected ? "nb-add-app__row--selected" : "")" @onclick="() => _selected = row">
                 <div class="nb-add-app__thumb @(selected ? "nb-add-app__thumb--selected" : "")"></div>
                 <div class="nb-add-app__info">
                     <div class="nb-add-app__name @(selected ? "nb-add-app__name--selected" : "")">@row.WindowTitle</div>
@@ -66,8 +83,8 @@
             Tip: press <span class="nb-mono nb-add-app__tip-key">Ctrl+Shift+A</span> in-game to add the focused window.
             <div class="nb-add-app__browse" @onclick="Browse">Not running? Browse for EXE…</div>
         </div>
-        <button type="button" class="nb-btn nb-btn--outline nb-add-app__cancel" @onclick="Cancel">Cancel</button>
-        <button type="button" class="nb-btn nb-btn--primary nb-add-app__add" disabled="@(_selected == null)" @onclick="AddSelected">Add Game</button>
+        <button type="button" class="nb-btn nb-btn--outline nb-add-app__cancel" @onclick="Cancel" disabled="@_adding">Cancel</button>
+        <button type="button" class="nb-btn nb-btn--primary nb-add-app__add" disabled="@(_selected == null || _adding)" @onclick="AddSelected">@(_adding ? "Adding…" : "Add Game")</button>
     </div>
 </ModalOverlay>
 
@@ -77,21 +94,41 @@
     private List<OpenWindowEntry> Rows => State.GetOpenWindows();
 
     private OpenWindowEntry? _selected;
+    private bool _adding;
 
-    private bool IsTracked(OpenWindowEntry row) => State.Games.Any(g => g.CompiledPattern.IsMatch(row.Exe));
+    private bool IsTracked(OpenWindowEntry row) => State.Games.Any(g => g.IsProcessMatch(row.Exe));
 
     private async Task Cancel() => await OnClose.InvokeAsync();
 
     private async Task Browse()
     {
-        State.BrowseForExe();
+        if (_adding) return;
+        _adding = true;
+        StateHasChanged();
+
+        if (State.BrowseForExe() && State.SelectedGame is { } newGame)
+            await TryAutoFetchArtwork(newGame);
+
         await OnClose.InvokeAsync();
     }
 
     private async Task AddSelected()
     {
-        if (_selected is not { } entry) return;
-        State.AddGameFromRunningWindow(entry);
+        if (_selected is not { } entry || _adding) return;
+        _adding = true;
+        StateHasChanged();
+
+        if (State.AddGameFromRunningWindow(entry) && State.SelectedGame is { } newGame)
+            await TryAutoFetchArtwork(newGame);
+
         await OnClose.InvokeAsync();
+    }
+
+    private async Task TryAutoFetchArtwork(GameConfig game)
+    {
+        string slug = string.IsNullOrEmpty(game.ExePath) ? game.GameName : game.ExePath;
+        var auto = await Artwork.TryAutoFetchAsync(game.GameName, slug);
+        if (auto.HeroPath != null || auto.IconPath != null)
+            State.ApplyArtwork(auto.HeroPath ?? game.HeroImagePath, auto.IconPath ?? game.IconImagePath);
     }
 }

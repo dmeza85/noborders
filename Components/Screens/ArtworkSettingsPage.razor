@@ -1,0 +1,26 @@
+@namespace NoBorders.Components.Screens
+@using NoBorders.Services
+@inject AppStateService State
+@* Settings > Artwork — the SteamGridDB API key, split out into its own nav
+   entry rather than living as a row inside Diagnostics (where it first
+   landed in Phase 8.3, next to Diagnostics' other toggles since this
+   setting had no mock precedent of its own at the time). Bound to
+   AppStateService.ArtworkApiKey/SetArtworkApiKey — see that property's doc
+   comment for the write path (MainForm._settings.SteamGridDbApiKey,
+   persisted directly, no pre-existing WinForms control to reuse).
+   type="password" hides the key from casual over-the-shoulder viewing,
+   same reasoning as any credential field — nothing about SteamGridDB's own
+   key format requires it, it's just good practice for a field that gets
+   pasted once and left. *@
+
+<div class="nb-artwork-page__title">Artwork</div>
+<div class="nb-artwork-page__subline">Personal API key for fetching hero banners and rail icons — free at steamgriddb.com/profile/preferences/api. Leave blank to use each game's own .exe icon only.</div>
+
+<div class="nb-artwork-page__field">
+    <div class="nb-text-label nb-artwork-page__field-label">STEAMGRIDDB API KEY</div>
+    <input type="password" class="nb-artwork-page__input nb-mono" placeholder="Paste API key…" value="@State.ArtworkApiKey" @oninput="OnApiKeyInput" />
+</div>
+
+@code {
+    private void OnApiKeyInput(ChangeEventArgs e) => State.SetArtworkApiKey(e.Value?.ToString() ?? "");
+}

@@ -22,6 +22,11 @@
   flex: none;
 }
 
+.nb-permissions-page__status-ring--elevated {
+  border-color: var(--nb-success);
+  background: var(--nb-success);
+}
+
 .nb-permissions-page__restart {
   display: block;
 }

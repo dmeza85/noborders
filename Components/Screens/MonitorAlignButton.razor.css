@@ -1,0 +1,29 @@
+.nb-align-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nb-field);
+  border: 1px solid var(--nb-border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--nb-text-muted); /* icon uses currentColor */
+  transition: border-color .12s, background .12s, color .12s;
+}
+
+.nb-align-btn:hover {
+  border-color: var(--nb-border-strong);
+  background: var(--nb-raised);
+  color: var(--nb-text-secondary);
+}
+
+/* Click feedback reuses the app's own .is-active palette (accent border +
+   accent-tint fill + accent-text icon) for the press instant. */
+.nb-align-btn:active {
+  border-color: var(--nb-accent);
+  background: var(--nb-accent-tint);
+  color: var(--nb-accent-text);
+}

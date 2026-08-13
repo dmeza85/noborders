@@ -1,13 +1,20 @@
 @namespace NoBorders.Components.Screens
-@* Static visual only — Phase 2. Stepper buttons don't do anything yet;
-   the ▲/▼ step-by-1/Shift=10/Ctrl=100 behavior described in
-   design-handoff/README.md is wired up in a later phase. *@
+@* Phase 8.4: real interaction — ▲/▼ step the value by 1, ×10 with Shift
+   held, ×100 with Ctrl held, per design-handoff/README.md's documented
+   "Arrows step by 1 px · hold Shift for 10 · Ctrl for 100". Reports a
+   signed delta via OnStep rather than owning the value itself: every real
+   call site's actual source of truth is a WinForms shadow control (same
+   shape as the Lock-cursor checkbox fix — Width/Height/Offset were always
+   live NumericTextBox fields underneath; Save Changes/Save Monitor Default
+   already read them, Blazor just never had a way to change them before
+   this), so the caller is the one that knows which shadow field to adjust
+   and by how much. *@
 
 <div class="nb-numfield @(BorderSubtle ? "nb-numfield--subtle" : "")">
     <div class="nb-numfield__value nb-text-field-value">@Value</div>
     <div class="nb-numfield__stepper">
-        <button type="button" class="nb-numfield__btn" aria-label="Increase">▲</button>
-        <button type="button" class="nb-numfield__btn" aria-label="Decrease">▼</button>
+        <button type="button" class="nb-numfield__btn" aria-label="Increase" @onclick="(e) => Step(e, 1)">▲</button>
+        <button type="button" class="nb-numfield__btn" aria-label="Decrease" @onclick="(e) => Step(e, -1)">▼</button>
     </div>
 </div>
 
@@ -18,4 +25,16 @@
     /// --nb-border-strong-alt that Width/Height use — matches the literal
     /// mock, not an arbitrary choice.</summary>
     [Parameter] public bool BorderSubtle { get; set; }
+
+    /// <summary>Fires with the signed step size already applied (e.g. -100
+    /// for a Ctrl+click on ▼) — the caller just adds it to its own shadow
+    /// field, which self-clamps (NumericTextBox.Value's setter clamps to
+    /// Minimum/Maximum silently rather than throwing).</summary>
+    [Parameter] public EventCallback<int> OnStep { get; set; }
+
+    private Task Step(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int direction)
+    {
+        int magnitude = e.CtrlKey ? 100 : e.ShiftKey ? 10 : 1;
+        return OnStep.InvokeAsync(direction * magnitude);
+    }
 }
