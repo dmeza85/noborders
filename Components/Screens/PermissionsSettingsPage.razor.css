@@ -37,3 +37,31 @@
   margin-top: 12px;
   max-width: 420px;
 }
+
+/* Same shape as BehaviourSettingsPage's own toggle rows — kept as a
+   separate copy rather than a shared class, matching how every other
+   single-topic Settings page (Permissions, Behaviour, Monitors,
+   Diagnostics) already names its classes after itself, not a shared one. */
+.nb-permissions-page__toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  margin-top: 18px;
+  border-top: 1px solid var(--nb-field-alt);
+}
+
+.nb-permissions-page__toggle-info {
+  flex: 1;
+}
+
+.nb-permissions-page__toggle-name {
+  font: 500 13px/1 var(--nb-font-ui);
+  color: var(--nb-text-bright);
+}
+
+.nb-permissions-page__toggle-sub {
+  font: 400 11.5px/1.3 var(--nb-font-ui);
+  color: #7a7a8a; /* one-off — doesn't match any named text token, same as BehaviourSettingsPage's own */
+  margin-top: 4px;
+}

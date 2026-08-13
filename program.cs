@@ -223,6 +223,14 @@ namespace NoBorders
         // just this set; the built-in list still applies underneath either way.
         public HashSet<string> IgnoredProcesses { get; set; }
             = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Settings > Permissions "Always start as Administrator" — set
+        // automatically whenever RestartAsAdmin() actually runs (any of its
+        // several trigger points), and toggleable directly. Checked once at
+        // startup (OnLoad): true + not currently elevated silently re-runs
+        // RestartAsAdmin() with no prompt, since this is a standing
+        // preference rather than a fresh decision each launch.
+        public bool AlwaysRunAsAdmin { get; set; } = false;
     }
 
     /// <summary>
@@ -292,6 +300,60 @@ namespace NoBorders
                 "NoBorders");
             Directory.CreateDirectory(dir);
             return dir;
+        }
+    }
+
+    /// <summary>
+    /// Portable single-exe support (see the .csproj's own doc comment on the
+    /// wwwroot EmbeddedResource glob): a PublishSingleFile build bundles the
+    /// runtime and managed code into NoBorders.exe but never wwwroot —
+    /// confirmed live by copying just the exe to an empty folder and getting
+    /// a blank BlazorWebView window. Extracts wwwroot's embedded copy to a
+    /// real folder under AppPaths.AppDataDir on first run so
+    /// ArtworkAwareBlazorWebView's PhysicalFileProvider layers have
+    /// something to read even when no physical wwwroot sits next to the
+    /// exe. Versioned by the assembly's own version, so an updated exe
+    /// re-extracts instead of serving a previous install's stale copy —
+    /// every launch after the first for a given version is a single
+    /// File.Exists check, not a re-copy.
+    /// </summary>
+    internal static class EmbeddedWwwroot
+    {
+        private const string ResourcePrefix = "EmbeddedWwwroot/";
+
+        public static readonly string ExtractedDir = Extract();
+
+        private static string Extract()
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            string version = asm.GetName().Version?.ToString() ?? "0.0.0.0";
+            string targetDir = Path.Combine(AppPaths.AppDataDir, "wwwroot", version);
+            string markerFile = Path.Combine(targetDir, ".extracted");
+
+            if (File.Exists(markerFile)) return targetDir;
+
+            foreach (string resourceName in asm.GetManifestResourceNames())
+            {
+                if (!resourceName.StartsWith(ResourcePrefix, StringComparison.Ordinal)) continue;
+
+                // The prefix is the only part guaranteed to use '/' — the
+                // %(RecursiveDir) portion after it uses whatever separator
+                // MSBuild produced on this OS (confirmed live: '\' on
+                // Windows), so both need normalizing before Path.Combine.
+                string relativePath = resourceName.Substring(ResourcePrefix.Length)
+                    .Replace('\\', Path.DirectorySeparatorChar)
+                    .Replace('/', Path.DirectorySeparatorChar);
+                string destPath = Path.Combine(targetDir, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+
+                using Stream? resourceStream = asm.GetManifestResourceStream(resourceName);
+                if (resourceStream == null) continue;
+                using var fileStream = File.Create(destPath);
+                resourceStream.CopyTo(fileStream);
+            }
+
+            File.WriteAllText(markerFile, string.Empty);
+            return targetDir;
         }
     }
 
@@ -519,14 +581,40 @@ namespace NoBorders
     /// while everything else (index.html, css, js) still comes from the
     /// install-directory providers, which never had an artwork-cache folder
     /// to conflict with in the first place.
+    ///
+    /// Portable single-exe support: adds EmbeddedWwwroot.ExtractedDir as a
+    /// fourth layer, between the install-directory providers and
+    /// AppDataDir's artwork-cache one. For a traditional install (wwwroot
+    /// physically sitting next to the exe) the first two providers already
+    /// resolve everything and this layer never gets reached. For a
+    /// standalone portable exe (no physical wwwroot at all — contentRootDir
+    /// points at a directory that doesn't exist), those first two providers
+    /// simply never find anything and CompositeFileProvider falls through
+    /// to this one, which always has a real, already-extracted copy.
     /// </summary>
     internal sealed class ArtworkAwareBlazorWebView : BlazorWebView
     {
         public override IFileProvider CreateFileProvider(string contentRootDir) =>
             new CompositeFileProvider(
                 base.CreateFileProvider(contentRootDir),
-                new PhysicalFileProvider(contentRootDir),
+                SafePhysicalFileProvider(contentRootDir),
+                new PhysicalFileProvider(EmbeddedWwwroot.ExtractedDir),
                 new PhysicalFileProvider(AppPaths.AppDataDir));
+
+        /// <summary>
+        /// PhysicalFileProvider's own constructor throws if the root doesn't
+        /// exist — confirmed live: a portable single-exe with no physical
+        /// wwwroot next to it threw here, which crashed BlazorWebView's
+        /// whole StartWebViewCoreIfPossible() call and left a blank window
+        /// (the global Application.ThreadException handler caught it, but
+        /// by then BlazorWebView had already given up on ever navigating).
+        /// contentRootDir is exactly this "might not exist" case for a
+        /// portable exe — unlike EmbeddedWwwroot.ExtractedDir and
+        /// AppPaths.AppDataDir just below, which both guarantee their own
+        /// directory exists before ever returning it.
+        /// </summary>
+        private static IFileProvider SafePhysicalFileProvider(string root) =>
+            Directory.Exists(root) ? new PhysicalFileProvider(root) : new NullFileProvider();
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -602,6 +690,8 @@ namespace NoBorders
         void ToggleConstrainMouseDefault();
         bool IsElevated { get; }
         void ConfirmRestartAsAdmin();
+        bool AlwaysRunAsAdmin { get; set; }
+        void DismissElevationDialog();
         List<string> GetIgnoredProcesses();
         void AddIgnoredProcess(string exeName);
         void RemoveIgnoredProcess(string exeName);
@@ -1211,6 +1301,12 @@ namespace NoBorders
         void IMainFormBridge.ToggleConstrainMouseDefault() => ToggleConstrainMouseDefault();
         bool IMainFormBridge.IsElevated => _isElevated;
         void IMainFormBridge.ConfirmRestartAsAdmin() => ConfirmRestartAsAdmin();
+        bool IMainFormBridge.AlwaysRunAsAdmin
+        {
+            get => _settings.AlwaysRunAsAdmin;
+            set { _settings.AlwaysRunAsAdmin = value; QueueSave(); _appState.RaiseChanged(); }
+        }
+        void IMainFormBridge.DismissElevationDialog() => CloseElevationDialog();
         List<string> IMainFormBridge.GetIgnoredProcesses() => GetIgnoredProcesses();
         void IMainFormBridge.AddIgnoredProcess(string exeName) => AddIgnoredProcess(exeName);
         void IMainFormBridge.RemoveIgnoredProcess(string exeName) => RemoveIgnoredProcess(exeName);
@@ -1395,6 +1491,18 @@ namespace NoBorders
             _enforceTimer.Start();
             _clipTimer.Start();
 
+            // Persisted "Always start as Administrator" preference (Settings >
+            // Permissions) — checked here, not the constructor, for the same
+            // reason as -minimized below: RestartAsAdmin() calls
+            // CaptureWindowBounds(), which needs a real handle/WindowState to
+            // read correct values from. No prompt here — a standing
+            // preference the user already set, not a fresh decision.
+            if (_settings.AlwaysRunAsAdmin && !_isElevated)
+            {
+                RestartAsAdmin();
+                return; // relaunching — nothing else in OnLoad matters for this instance
+            }
+
             // Scan processes already running before we started.
             ScanExistingWindows();
 
@@ -1468,26 +1576,13 @@ namespace NoBorders
         /// </summary>
         /// <summary>
         /// Blazor Settings > Permissions "Restart as Administrator" button's
-        /// entry point — same native confirmation MessageBox this action's
-        /// WinForms Settings-tab button already showed (BuildUI's
-        /// `_btnRestartAdmin.Click`, still defined below for the frozen
-        /// WinForms tab), then calls the real, unchanged RestartAsAdmin() on
-        /// Yes. A native dialog rather than a Blazor modal — same tradeoff as
-        /// the monitor-deletion confirm (Phase 4.10), since this action is
-        /// irreversible (closes this instance for good) and there was
-        /// already a working native confirmation to reuse.
+        /// entry point — shows ElevationDialog (the in-app Blazor
+        /// notification, generic wording since no specific game triggered
+        /// this) rather than a native MessageBox; RestartAsAdmin() itself
+        /// only runs once the user clicks that dialog's own "Restart As
+        /// Admin" button.
         /// </summary>
-        private void ConfirmRestartAsAdmin()
-        {
-            var confirm = MessageBox.Show(
-                "NoBorders will restart with Administrator privileges.\n\n" +
-                "This helps with games that run elevated (common with anti-cheat " +
-                "software like Vanguard, EAC, or BattlEye), which a non-elevated " +
-                "copy of NoBorders cannot modify.\n\nContinue?",
-                "Restart as Administrator",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (confirm == DialogResult.Yes) RestartAsAdmin();
-        }
+        private void ConfirmRestartAsAdmin() => ShowElevationDialog();
 
         private void RestartAsAdmin()
         {
@@ -1590,6 +1685,18 @@ namespace NoBorders
                 }
 
                 AppLogger.Log($"RestartAsAdmin: elevated process launched successfully, PID={proc.Id}. Closing this instance.");
+
+                // Only now — confirmed launched, not just attempted — does this
+                // count as the user actually choosing to run elevated. Setting
+                // this any earlier (e.g. before Process.Start) would persist it
+                // even if the user then cancelled the UAC prompt, causing a
+                // repeat-prompt-every-launch loop for someone who declined once.
+                // The new elevated copy already read its own config moments ago
+                // (the flush above), so this needs its own save — it only
+                // matters for a *future* launch, not this handoff.
+                _settings.AlwaysRunAsAdmin = true;
+                SaveConfig();
+
                 _forceClose = true;
                 Application.Exit();
             }
@@ -1615,57 +1722,12 @@ namespace NoBorders
         /// currently doesn't, so this offers the same restart already available
         /// from Settings → Restart as Administrator, right at the point it's
         /// actually needed instead of leaving the user to notice a toast or dig
-        /// through the log.
+        /// through the log. Shows ElevationDialog (naming the game) rather
+        /// than a native MessageBox — same in-app-notification move as
+        /// ConfirmRestartAsAdmin, and RestartAsAdmin() only runs from that
+        /// dialog's own button, not synchronously here.
         /// </summary>
-        private void PromptRestartAsAdmin(string gameName)
-        {
-            var result = ShowTopmostMessageBox(
-                $"NoBorders added \"{gameName}\", but couldn't fully apply borderless " +
-                "mode to its window.\n\n" +
-                "This usually means the game (or its anti-cheat) is running with " +
-                "Administrator privileges while NoBorders is not — Windows blocks a " +
-                "non-elevated app from modifying an elevated window.\n\n" +
-                "Restart NoBorders as Administrator now?",
-                "Administrator Privileges Needed",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
-
-            if (result == DialogResult.Yes) RestartAsAdmin();
-        }
-
-        /// <summary>
-        /// Shows a modal MessageBox guaranteed to appear above other topmost
-        /// windows — including a fullscreen/exclusive game — regardless of
-        /// whether the main NoBorders window currently has focus or is hidden
-        /// to tray. Owning the dialog with `this` (the usual pattern) only
-        /// brings it above windows already behind the main form; a dialog
-        /// owned by a genuinely TopMost window is itself shown as topmost, so
-        /// this briefly creates an invisible topmost owner instead.
-        /// </summary>
-        private DialogResult ShowTopmostMessageBox(string text, string caption,
-            MessageBoxButtons buttons, MessageBoxIcon icon,
-            MessageBoxDefaultButton defaultButton = MessageBoxDefaultButton.Button1)
-        {
-            using var owner = new Form
-            {
-                TopMost         = true,
-                ShowInTaskbar   = false,
-                FormBorderStyle = FormBorderStyle.None,
-                StartPosition   = FormStartPosition.Manual,
-                Location        = new Point(-32000, -32000), // off-screen; never actually visible
-                Size            = new Size(1, 1),
-                Opacity         = 0
-            };
-            owner.Show();
-            owner.Activate();
-            try
-            {
-                return MessageBox.Show(owner, text, caption, buttons, icon, defaultButton);
-            }
-            finally
-            {
-                owner.Close();
-            }
-        }
+        private void PromptRestartAsAdmin(string gameName) => ShowElevationDialog(gameName);
 
         private void ApplyTitleBarTheme()
         {
@@ -2313,17 +2375,7 @@ namespace NoBorders
             _btnRestartAdmin.Text    = "Restart as Administrator";
             _btnRestartAdmin.Size    = new Size(190, 28);
             _btnRestartAdmin.Visible = !_isElevated; // nothing to do if already elevated
-            _btnRestartAdmin.Click  += (s, e) =>
-            {
-                var confirm = MessageBox.Show(
-                    "NoBorders will restart with Administrator privileges.\n\n" +
-                    "This helps with games that run elevated (common with anti-cheat " +
-                    "software like Vanguard, EAC, or BattlEye), which a non-elevated " +
-                    "copy of NoBorders cannot modify.\n\nContinue?",
-                    "Restart as Administrator",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                if (confirm == DialogResult.Yes) RestartAsAdmin();
-            };
+            _btnRestartAdmin.Click  += (s, e) => ConfirmRestartAsAdmin();
             var pnlRestartAdmin = MakeSettingsRow(string.Empty);
             pnlRestartAdmin.Controls.Add(_btnRestartAdmin);
             tbl.Controls.Add(pnlRestartAdmin);
@@ -4648,6 +4700,88 @@ namespace NoBorders
             _lblStatus.Text = message;
             _statusTimer.Stop();
             _statusTimer.Start();
+        }
+
+        /// <summary>
+        /// The currently-open elevation dialog, if any — tracked so a second
+        /// trigger (e.g. two elevation-blocked adds in quick succession)
+        /// doesn't stack a duplicate on top, and so DismissElevationDialog
+        /// has something to close.
+        /// </summary>
+        private Form? _elevationDialogForm;
+
+        /// <summary>
+        /// Moves the "Administrator rights needed" notification back into
+        /// the app's own Blazor-rendered surface — replaces the native
+        /// MessageBox PromptRestartAsAdmin/ConfirmRestartAsAdmin used to
+        /// show. Same always-on-top-dedicated-Form technique as ShowToast
+        /// (see that method's own doc comment for why: needs to stay
+        /// visible even if MainForm is minimized/covered by a fullscreen
+        /// game), but centered on screen and NOT auto-dismissing — this
+        /// requires a decision, unlike a passive toast. <paramref
+        /// name="gameName"/> empty means the generic Settings > Permissions
+        /// trigger; non-empty means the automatic elevation-blocked-on-add
+        /// trigger, which gets a message naming that game.
+        /// </summary>
+        private void ShowElevationDialog(string gameName = "")
+        {
+            if (!this.IsHandleCreated) return;
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new MethodInvoker(() => ShowElevationDialog(gameName)));
+                return;
+            }
+
+            // Don't stack a second dialog on top of one already open.
+            if (_elevationDialogForm is { IsDisposed: false }) return;
+
+            const int dialogWidth  = 470;
+            const int dialogHeight = 270;
+
+            var dialogView = new ArtworkAwareBlazorWebView
+            {
+                HostPage = "wwwroot\\index.html",
+                Dock     = DockStyle.Fill,
+                Services = _blazorServices // same DI container as the main window; State.DismissElevationDialog/RestartAsAdmin need AppStateService
+            };
+            var parameters = new Dictionary<string, object?>
+            {
+                [nameof(Components.Screens.ElevationDialog.GameName)] = gameName
+            };
+            dialogView.RootComponents.Add<Components.Screens.ElevationDialog>("#app", parameters);
+
+            var dialog = new Form
+            {
+                FormBorderStyle = FormBorderStyle.None,
+                ShowInTaskbar   = false,
+                TopMost         = true,
+                Size            = new Size(dialogWidth, dialogHeight),
+                StartPosition   = FormStartPosition.Manual,
+                BackColor       = Color.FromArgb(0x0b, 0x0b, 0x0e) // matches --nb-chrome; only visible at the rounded-corner seam
+            };
+
+            var screen = Screen.PrimaryScreen?.WorkingArea ?? Screen.AllScreens[0].WorkingArea;
+            dialog.Location = new Point(
+                screen.X + (screen.Width  - dialog.Width)  / 2,
+                screen.Y + (screen.Height - dialog.Height) / 2);
+
+            dialog.Controls.Add(dialogView);
+
+            using (var path = RoundedRect(new Rectangle(0, 0, dialog.Width, dialog.Height), 10))
+                dialog.Region = new Region(path);
+
+            _elevationDialogForm = dialog;
+            dialog.Show();
+            dialog.Activate(); // unlike the toast, this needs a decision — take focus
+        }
+
+        /// <summary>ElevationDialog.razor's "Not Now" button and the first step of its "Restart As Admin" button — see that component's own doc comment.</summary>
+        private void CloseElevationDialog()
+        {
+            if (_elevationDialogForm is not { IsDisposed: false } dialog) return;
+            _elevationDialogForm = null;
+            dialog.Close();
+            dialog.Dispose();
         }
 
         /// <summary>

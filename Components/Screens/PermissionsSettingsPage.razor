@@ -15,8 +15,19 @@
    elevated, mirroring the WinForms tab's own `_btnRestartAdmin.Visible =
    !_isElevated`). The button previously had no @onclick at all — clicking
    it silently did nothing. It now calls State.ConfirmAndRestartAsAdmin(),
-   which shows the same native confirmation MessageBox the WinForms tab's
-   button always has before actually restarting. *@
+   which shows ElevationDialog (the in-app Blazor notification — moved off
+   a native MessageBox) before actually restarting.
+
+   "Always start as Administrator" toggle: persists AppSettings.
+   AlwaysRunAsAdmin, checked once at startup (MainForm.OnLoad) to silently
+   re-elevate with no prompt if set and not currently elevated. Also set to
+   true automatically by a successful Restart as Administrator from any
+   entry point (this button, the automatic elevation-blocked-on-add
+   prompt, or the Activity Log's own button) — this toggle is what lets the
+   user turn that stickiness back off again. Shown regardless of current
+   elevation state (unlike the button above), since turning it off is only
+   meaningful while it's already on, and turning it on ahead of an
+   elevation problem is a legitimate reason to visit this page too. *@
 
 <div class="nb-permissions-page__title">Permissions</div>
 
@@ -33,3 +44,11 @@
         Only needed if a tracked game isn't going borderless and you see an elevation warning.
     </div>
 }
+
+<div class="nb-permissions-page__toggle-row">
+    <div class="nb-permissions-page__toggle-info">
+        <div class="nb-permissions-page__toggle-name">Always start as Administrator</div>
+        <div class="nb-permissions-page__toggle-sub">Elevates automatically on launch — no prompt</div>
+    </div>
+    <ToggleSwitch On="@State.AlwaysRunAsAdmin" OnToggle="() => State.ToggleAlwaysRunAsAdmin()" />
+</div>

@@ -1,0 +1,67 @@
+/* Hosted in its own top-level Form (see ElevationDialog.razor's own doc
+   comment) rather than ModalOverlay's backdrop+card, so this carries the
+   card's background/border/radius itself instead of getting it from a
+   wrapper — same amber-tinted border/surface values the original Phase 2.9
+   mockup passed into ModalOverlay (BorderColor="#33291a", Background="var(--nb-surface)"). */
+.nb-elevation {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  background: var(--nb-surface);
+  border: 1px solid #33291a;
+  border-radius: var(--nb-radius-window);
+  padding: 22px 24px 20px;
+}
+
+.nb-elevation__header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 14px;
+}
+
+.nb-elevation__icon {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--nb-radius-pill);
+  background: rgba(240, 180, 41, .15);
+  border: 1px solid rgba(240, 180, 41, .4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nb-warning);
+  font: 700 14px/1 var(--nb-font-ui);
+  flex: none;
+}
+
+.nb-elevation__title {
+  font: 700 15.5px/1.2 var(--nb-font-ui);
+  color: var(--nb-text-primary);
+}
+
+.nb-elevation__body {
+  font: 400 13px/1.55 var(--nb-font-ui);
+  color: #9a9aa8; /* one-off — doesn't match any named text token, same as the original mockup */
+}
+
+.nb-elevation__detail {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border-radius: var(--nb-radius-input);
+  background: var(--nb-chrome);
+  border: 1px solid var(--nb-border-subtle);
+  font-size: 11px;
+  line-height: 1.7;
+  color: #6a6a7a; /* one-off — matches LogRow's INFO-level color, coincidentally, same as the original mockup */
+}
+
+.nb-elevation__actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.nb-elevation__spacer {
+  flex: 1;
+}

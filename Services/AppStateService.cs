@@ -446,12 +446,27 @@ namespace NoBorders.Services
         /// Settings &gt; Permissions' "Restart as Administrator" button —
         /// unlike <see cref="RestartAsAdmin"/> above (the Activity Log's
         /// entry point, which restarts immediately with no prompt), this
-        /// shows the same native confirmation `MessageBox` the WinForms
-        /// Settings tab's own button always has before actually restarting,
+        /// shows ElevationDialog (the in-app Blazor notification) first,
         /// since this entry point is reached by casually browsing Settings
         /// rather than reacting to a specific warn/error log entry.
+        /// RestartAsAdmin() itself only runs once the user clicks that
+        /// dialog's own button.
         /// </summary>
         public void ConfirmAndRestartAsAdmin() => _bridge.ConfirmRestartAsAdmin();
+
+        /// <summary>
+        /// Settings &gt; Permissions "Always start as Administrator" checkbox.
+        /// Also set to true automatically whenever RestartAsAdmin() actually
+        /// runs, from any of its several trigger points — see AppSettings.
+        /// AlwaysRunAsAdmin's own doc comment.
+        /// </summary>
+        public bool AlwaysRunAsAdmin => _bridge.AlwaysRunAsAdmin;
+
+        /// <summary>Same shape as ToggleMinimizeToTray/ToggleStartWithWindows — flips the persisted preference.</summary>
+        public void ToggleAlwaysRunAsAdmin() => _bridge.AlwaysRunAsAdmin = !_bridge.AlwaysRunAsAdmin;
+
+        /// <summary>ElevationDialog.razor's "Not Now" button and the first step of its "Restart As Admin" button.</summary>
+        public void DismissElevationDialog() => _bridge.DismissElevationDialog();
 
         /// <summary>
         /// Phase 8.3: SteamGridDB personal API key, pasted in Settings >
