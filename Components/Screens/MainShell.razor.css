@@ -182,6 +182,17 @@
   font-weight: 600;
 }
 
+/* Re-Apply's click feedback — see buttons.css's nb-feedback-flash-anim-a/-b
+   doc comment for why these need genuinely different animation-name values
+   (not just different class names) and why OnReapply keeps the class
+   entirely absent except right after a click. */
+.nb-shell__hero-btn--secondary.nb-feedback-flash-a {
+  animation: nb-feedback-flash-anim-a 1.3s ease-out;
+}
+.nb-shell__hero-btn--secondary.nb-feedback-flash-b {
+  animation: nb-feedback-flash-anim-b 1.3s ease-out;
+}
+
 /* ── Body ─────────────────────────────────────────────────────────── */
 .nb-shell__body {
   display: flex;

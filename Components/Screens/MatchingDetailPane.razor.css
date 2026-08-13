@@ -166,7 +166,20 @@
   color: var(--nb-text-secondary);
   white-space: nowrap;
   cursor: pointer;
-  cursor: pointer;
+  border-radius: var(--nb-radius-pill);
+}
+
+/* Rescan's click feedback — see buttons.css's nb-feedback-flash-anim-a/-b
+   doc comment for why these need genuinely different animation-name values
+   (not just different class names) and why OnRescan keeps the class
+   entirely absent except right after a click. border-radius above keeps
+   the glow's corners rounded to match rather than a hard rectangle behind
+   this plain-text label. */
+.nb-matching-pane__rescan.nb-feedback-flash-a {
+  animation: nb-feedback-flash-anim-a 1.3s ease-out;
+}
+.nb-matching-pane__rescan.nb-feedback-flash-b {
+  animation: nb-feedback-flash-anim-b 1.3s ease-out;
 }
 
 .nb-matching-pane__test-list {

@@ -231,6 +231,14 @@ namespace NoBorders
         // RestartAsAdmin() with no prompt, since this is a standing
         // preference rather than a fresh decision each launch.
         public bool AlwaysRunAsAdmin { get; set; } = false;
+
+        // Settings > Diagnostics "Verbose logging" — was a static, inert
+        // ToggleSwitch with no backing field at all (that page's own doc
+        // comment: "nothing on this page corresponds to a real AppSettings
+        // field"). Same shape as AlwaysRunAsAdmin: a plain persisted
+        // preference, synced to AppLogger.VerboseEnabled at startup and on
+        // every toggle.
+        public bool VerboseLogging { get; set; } = false;
     }
 
     /// <summary>
@@ -281,6 +289,28 @@ namespace NoBorders
     public enum LogLevel { Info, Ok, Warn, Error }
 
     /// <summary>
+    /// Single source of truth for the version shown in the UI — MainShell's
+    /// titlebar chip and Settings > About both hardcoded a literal "v2.4"
+    /// left over from the original design mockup's own placeholder text,
+    /// which never matched the real build (NoBorders.csproj's &lt;Version&gt;,
+    /// currently 1.0.0) and would only drift further with every future
+    /// release. Reads the assembly's own version instead, so a version bump
+    /// in the .csproj is the only place that ever needs to change.
+    /// </summary>
+    internal static class AppVersion
+    {
+        // AssemblyVersion always carries a 4th (Revision) component even
+        // though the .csproj only sets three (<Version>1.0.0</Version> ->
+        // parsed as 1.0.0.0) — dropped here since this app has no
+        // per-build revision numbering, so showing it would just be a
+        // permanent ".0" with no meaning.
+        public static readonly string Display = "v" + (
+            System.Reflection.Assembly.GetExecutingAssembly().GetName().Version is { } v
+                ? $"{v.Major}.{v.Minor}.{v.Build}"
+                : "0.0.0");
+    }
+
+    /// <summary>
     /// review.md §2.1: games_config.json, noborders.log, and the artwork-cache
     /// folder used to live under AppDomain.CurrentDomain.BaseDirectory — the
     /// app's own install directory. That's fine for a portable dev build, but
@@ -304,6 +334,69 @@ namespace NoBorders
     }
 
     /// <summary>
+    /// A value that changes on every rebuild/republish regardless of
+    /// assembly version (which doesn't get bumped per dev iteration) —
+    /// shared by EmbeddedWwwroot and WebView2CacheGuard so both invalidate
+    /// their own stale caches together on the same "this is a new build"
+    /// signal. Environment.ProcessPath rather than Assembly.Location, which
+    /// is empty for a PublishSingleFile bundle — confirmed live.
+    /// </summary>
+    internal static class ExeBuildStamp
+    {
+        public static readonly string Value = Compute();
+
+        private static string Compute()
+        {
+            string? exePath = Environment.ProcessPath;
+            return exePath != null && File.Exists(exePath)
+                ? File.GetLastWriteTimeUtc(exePath).Ticks.ToString()
+                : "0";
+        }
+    }
+
+    /// <summary>
+    /// WebView2's own HTTP cache — a persistent Chromium profile at
+    /// %LOCALAPPDATA%\NoBorders.WebView2 (its default fallback location,
+    /// since this app's own install directory isn't reliably writable) —
+    /// is keyed by request URL only and survives across every relaunch AND
+    /// rebuild, independent of EmbeddedWwwroot's own extraction cache
+    /// below. Confirmed live: a same-day CSS fix, correctly re-extracted to
+    /// a fresh wwwroot copy, still rendered as the previous day's stale
+    /// build until this profile's Cache/Code Cache folders were cleared —
+    /// WebView2 was serving the old response bytes for the same
+    /// "css/buttons.css" URL without ever re-requesting it. Gated on the
+    /// same exe-mtime stamp as EmbeddedWwwroot, so this is a no-op on every
+    /// ordinary launch and only actually clears anything right after a
+    /// rebuild/republish. Must run before the first BlazorWebView creates
+    /// its WebView2 environment and locks these folders — called from
+    /// Main() right after the single-instance mutex is acquired.
+    /// </summary>
+    internal static class WebView2CacheGuard
+    {
+        public static void ClearIfStaleBuild()
+        {
+            string profileDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "NoBorders.WebView2", "EBWebView", "Default");
+            if (!Directory.Exists(profileDir)) return;
+
+            string markerFile = Path.Combine(AppPaths.AppDataDir, "webview2-cache.stamp");
+            string exeStamp = ExeBuildStamp.Value;
+            if (File.Exists(markerFile) && File.ReadAllText(markerFile) == exeStamp) return;
+
+            foreach (string sub in new[] { "Cache", "Code Cache" })
+            {
+                string dir = Path.Combine(profileDir, sub);
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); }
+                catch { /* best-effort — a locked file here just means the old cache lingers one more launch */ }
+            }
+
+            File.WriteAllText(markerFile, exeStamp);
+            AppLogger.LogVerbose($"WebView2 cache cleared (new build detected, stamp={exeStamp}).");
+        }
+    }
+
+    /// <summary>
     /// Portable single-exe support (see the .csproj's own doc comment on the
     /// wwwroot EmbeddedResource glob): a PublishSingleFile build bundles the
     /// runtime and managed code into NoBorders.exe but never wwwroot —
@@ -312,10 +405,11 @@ namespace NoBorders
     /// real folder under AppPaths.AppDataDir on first run so
     /// ArtworkAwareBlazorWebView's PhysicalFileProvider layers have
     /// something to read even when no physical wwwroot sits next to the
-    /// exe. Versioned by the assembly's own version, so an updated exe
-    /// re-extracts instead of serving a previous install's stale copy —
-    /// every launch after the first for a given version is a single
-    /// File.Exists check, not a re-copy.
+    /// exe. Cached under a folder named for the assembly version, but
+    /// re-extraction is gated on the running exe's own last-write time (see
+    /// Extract()'s doc comment), not just File.Exists — so a rebuild that
+    /// doesn't bump the version still gets its fresh content on next launch
+    /// instead of silently serving a stale previous build's copy forever.
     /// </summary>
     internal static class EmbeddedWwwroot
     {
@@ -329,8 +423,20 @@ namespace NoBorders
             string version = asm.GetName().Version?.ToString() ?? "0.0.0.0";
             string targetDir = Path.Combine(AppPaths.AppDataDir, "wwwroot", version);
             string markerFile = Path.Combine(targetDir, ".extracted");
+            string exeStamp = ExeBuildStamp.Value;
 
-            if (File.Exists(markerFile)) return targetDir;
+            // Bugfix: keying the marker on version alone meant an unversioned
+            // rebuild (same 1.0.0.0 across dev iterations) kept serving
+            // whatever wwwroot got extracted the FIRST time that version was
+            // ever run — confirmed live serving CSS from a build almost a
+            // day stale after a same-day fix, since nothing here ever
+            // changes the version number between iterations. ExeBuildStamp
+            // changes on every rebuild/republish regardless of version,
+            // making the marker self-invalidating without requiring a
+            // manual version bump for every UI-only change.
+            if (File.Exists(markerFile) && File.ReadAllText(markerFile) == exeStamp) return targetDir;
+
+            if (Directory.Exists(targetDir)) Directory.Delete(targetDir, recursive: true);
 
             foreach (string resourceName in asm.GetManifestResourceNames())
             {
@@ -352,7 +458,8 @@ namespace NoBorders
                 resourceStream.CopyTo(fileStream);
             }
 
-            File.WriteAllText(markerFile, string.Empty);
+            File.WriteAllText(markerFile, exeStamp);
+            AppLogger.LogVerbose($"Embedded wwwroot extracted to {targetDir} (new build detected, stamp={exeStamp}).");
             return targetDir;
         }
     }
@@ -366,14 +473,36 @@ namespace NoBorders
         /// — was private until Phase 6.4 needed a reader.</summary>
         public static string LogPath => _path;
 
+        /// <summary>Settings > Diagnostics "Verbose logging" toggle — synced from
+        /// AppSettings.VerboseLogging at startup and on every toggle (see
+        /// MainForm's IMainFormBridge.VerboseLogging setter). Gates LogVerbose
+        /// only; ordinary Log() calls (warnings, errors, routine one-shot
+        /// events) are unaffected regardless of this setting.</summary>
+        public static bool VerboseEnabled = false;
+
+        /// <summary>Settings > Diagnostics "N errors in the last session" —
+        /// was a hardcoded literal with nothing behind it. A plain in-memory
+        /// counter rather than re-parsing the log file: it naturally resets
+        /// to 0 on every process start, which is exactly "this session".</summary>
+        public static int ErrorCountThisSession { get; private set; }
+
         public static void Log(string message, LogLevel level = LogLevel.Info)
         {
+            if (level == LogLevel.Error) ErrorCountThisSession++;
             try { File.AppendAllText(_path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level.ToString().ToUpperInvariant()}] {message}\n"); }
             catch { /* logging a log-write failure would be circular; nothing to do */ }
         }
 
         public static void Log(Exception ex, string context)
             => Log($"ERROR in {context}: {ex.Message}\n{ex.StackTrace}", LogLevel.Error);
+
+        /// <summary>Only writes when VerboseEnabled — the "Records every
+        /// enforcement tick. Larger file." behavior the Diagnostics page's
+        /// toggle describes but, until now, never actually did anything.</summary>
+        public static void LogVerbose(string message)
+        {
+            if (VerboseEnabled) Log(message, LogLevel.Info);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -491,6 +620,62 @@ namespace NoBorders
         [DllImport("user32.dll")]
         private static extern bool PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int maxLength);
+        [DllImport("user32.dll")]
+        private static extern int GetWindowTextLength(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        /// <summary>
+        /// Bugfix: a pinned taskbar icon click (or any second launch while
+        /// already running) relies on the HWND_BROADCAST below to reach the
+        /// hidden/minimized first instance's WndProc — confirmed live that
+        /// this broadcast can silently fail to be delivered at all (the
+        /// window never restores, no error, nothing in noborders.log, since
+        /// the second instance has already exited by the time anyone could
+        /// notice), while posting the exact same message directly to that
+        /// window's own handle works every time. Finds it here instead of
+        /// trusting the broadcast to reach it — title is "NoBorders" or
+        /// "NoBorders (Administrator)" depending on elevation, so this
+        /// matches by prefix rather than requiring an exact FindWindow hit.
+        ///
+        /// Bugfix: title-matching alone isn't enough — confirmed live that
+        /// an unrelated OneCommander window (a file-manager tab happened to
+        /// be titled exactly "NoBorders", presumably a folder name) matched
+        /// first and silently ate the message, since EnumWindows walks every
+        /// top-level window on the desktop, not just this app's own. Now
+        /// also checks the window's owning process is actually named
+        /// "NoBorders", not just its title.
+        /// </summary>
+        private static IntPtr FindRunningInstanceWindow()
+        {
+            IntPtr found = IntPtr.Zero;
+            EnumWindows((hWnd, _) =>
+            {
+                int len = GetWindowTextLength(hWnd);
+                if (len == 0) return true;
+                var sb = new System.Text.StringBuilder(len + 1);
+                GetWindowText(hWnd, sb, sb.Capacity);
+                if (!sb.ToString().StartsWith("NoBorders", StringComparison.Ordinal)) return true;
+
+                GetWindowThreadProcessId(hWnd, out uint pid);
+                try
+                {
+                    using var proc = Process.GetProcessById((int)pid);
+                    if (!proc.ProcessName.Equals("NoBorders", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch { return true; } // process exited mid-enumeration — not it
+
+                found = hWnd;
+                return false; // stop enumerating
+            }, IntPtr.Zero);
+            return found;
+        }
+
         // Exposed so MainForm can release the single-instance lock before
         // spawning an elevated copy of itself (see RestartAsAdmin). Without
         // releasing it first, the new elevated process would see the mutex
@@ -524,6 +709,18 @@ namespace NoBorders
             if (!isNew)
             {
                 int wm = RegisterWindowMessage("WM_SHOWFIRSTINSTANCE_NOBORDERS");
+
+                // Direct-to-window first (see FindRunningInstanceWindow's own
+                // doc comment for why — the broadcast below isn't reliable
+                // enough to be the only delivery path). Still also broadcasts
+                // regardless, cheap insurance for the rare case where the
+                // first instance's window doesn't exist yet (a genuine race
+                // right at startup, before it's created its own window).
+                IntPtr runningWindow = FindRunningInstanceWindow();
+                AppLogger.Log($"Second launch detected while already running — targeted window {(runningWindow == IntPtr.Zero ? "not found, broadcast-only" : runningWindow.ToString())}.");
+                if (runningWindow != IntPtr.Zero)
+                    PostMessage(runningWindow, wm, IntPtr.Zero, IntPtr.Zero);
+
                 PostMessage((IntPtr)0xFFFF, wm, IntPtr.Zero, IntPtr.Zero);
                 return;
             }
@@ -651,6 +848,7 @@ namespace NoBorders
         string ActiveMonitorScope { get; }
         void SelectMonitorScope(string scope);
         void ToggleGameActive();
+        void ReapplyBorderless();
         void LoadMonitorDefaultsForSelectedGame();
         string PendingDisplayName { get; }
         void FetchNameForSelectedGame();
@@ -691,6 +889,7 @@ namespace NoBorders
         bool IsElevated { get; }
         void ConfirmRestartAsAdmin();
         bool AlwaysRunAsAdmin { get; set; }
+        bool VerboseLogging { get; set; }
         void DismissElevationDialog();
         List<string> GetIgnoredProcesses();
         void AddIgnoredProcess(string exeName);
@@ -1262,6 +1461,7 @@ namespace NoBorders
         string IMainFormBridge.ActiveMonitorScope => _activeScope;
         void IMainFormBridge.SelectMonitorScope(string scope) => SelectMonitorScope(scope);
         void IMainFormBridge.ToggleGameActive() => ToggleGameActive();
+        void IMainFormBridge.ReapplyBorderless() => ReapplyBorderlessForSelectedGame();
         void IMainFormBridge.LoadMonitorDefaultsForSelectedGame() => LoadMonitorDefaultsForSelectedGame();
         string IMainFormBridge.PendingDisplayName => _txtGameName.Text;
         void IMainFormBridge.FetchNameForSelectedGame() => FetchNameForSelectedGame();
@@ -1306,6 +1506,11 @@ namespace NoBorders
             get => _settings.AlwaysRunAsAdmin;
             set { _settings.AlwaysRunAsAdmin = value; QueueSave(); _appState.RaiseChanged(); }
         }
+        bool IMainFormBridge.VerboseLogging
+        {
+            get => _settings.VerboseLogging;
+            set { _settings.VerboseLogging = value; AppLogger.VerboseEnabled = value; QueueSave(); _appState.RaiseChanged(); }
+        }
         void IMainFormBridge.DismissElevationDialog() => CloseElevationDialog();
         List<string> IMainFormBridge.GetIgnoredProcesses() => GetIgnoredProcesses();
         void IMainFormBridge.AddIgnoredProcess(string exeName) => AddIgnoredProcess(exeName);
@@ -1345,6 +1550,17 @@ namespace NoBorders
             // lives in OnLoad, which fires after the handle is fully created.
             CheckElevation(); // must run before BuildUI so the title/labels can reflect it
             LoadConfig();
+
+            // Moved here from Main() (still runs before _blazorWebView's own
+            // creation further down, which is the actual ordering constraint
+            // — WebView2 must not have locked its cache folders yet) so that
+            // AppLogger.VerboseEnabled is already synced from LoadConfig
+            // above by the time this runs. Calling it from Main(), before
+            // MainForm even exists, meant the verbose toggle could never be
+            // synced yet at that point, so a rebuild's cache-clear could
+            // never actually respect the user's saved preference.
+            WebView2CacheGuard.ClearIfStaleBuild();
+
             BuildUI();
             SetupTrayIcon();
             RefreshMonitors();
@@ -1474,6 +1690,7 @@ namespace NoBorders
                 _wmShellHook = RegisterWindowMessage("SHELLHOOK");
                 RegisterShellHookWindow(this.Handle);
                 _wmShowFirst = RegisterWindowMessage("WM_SHOWFIRSTINSTANCE_NOBORDERS");
+                AppLogger.LogVerbose($"Shell hook registered (msg={_wmShellHook}, hwnd={this.Handle}).");
             }
             catch (Exception ex) { AppLogger.Log(ex, "RegisterShellHookWindow"); }
 
@@ -3079,6 +3296,37 @@ namespace NoBorders
             _chkActive.Checked = !_chkActive.Checked;
         }
 
+        /// <summary>
+        /// Blazor hero's "Re-Apply" button — previously had no @onclick at
+        /// all (confirmed via grep: no backing handler anywhere in
+        /// program.cs), so clicking it silently did nothing. Re-applies
+        /// borderless to the selected game's currently tracked window, the
+        /// same mechanism HotkeyRefresh already uses for "whatever's in the
+        /// foreground" — this targets the hero's own game instead, matching
+        /// _selectedGame's own no-fallback convention (ToggleGameActive
+        /// above, this button's sibling, does the same).
+        /// </summary>
+        private void ReapplyBorderlessForSelectedGame()
+        {
+            if (_selectedGame == null) return;
+            var game = _selectedGame;
+
+            var entry = _trackedWindows.FirstOrDefault(kv => kv.Value == game);
+            if (entry.Key == IntPtr.Zero)
+            {
+                ShowToast($"{game.GameName} isn't currently running.", success: false);
+                AppLogger.Log($"ReapplyBorderlessForSelectedGame: '{game.GameName}' has no tracked window.", LogLevel.Warn);
+                return;
+            }
+
+            // Force a fresh monitor refresh before applying so that if the
+            // display configuration changed since startup we have current data.
+            RefreshMonitors();
+            ApplyBorderless(entry.Key, game);
+            ShowToast($"Borderless re-applied\n{game.GameName}", success: true, game.IconImagePath);
+            AppLogger.Log($"Borderless re-applied to '{game.GameName}' via Re-Apply button.", LogLevel.Ok);
+        }
+
         private void BtnLoadDefaults_Click(object? sender, EventArgs e)
         {
             if (_selectedGame == null || string.IsNullOrEmpty(_activeScope)) return;
@@ -4481,6 +4729,14 @@ namespace NoBorders
         /// </summary>
         private void EnforceTimer_Tick(object? sender, EventArgs e)
         {
+            // Settings > Diagnostics "Verbose logging" used to log a flat
+            // "N tracked window(s)" heartbeat right here on every tick (every
+            // second, regardless of whether anything actually happened) —
+            // replaced with real one-shot events fired only when this tick's
+            // ApplyBorderless call actually changes a window's style or
+            // position, logged from inside ApplyBorderless itself (see its
+            // own doc comment) rather than a per-second summary here.
+
             // Step 0: refresh which games are currently running so the games
             // list can keep running entries pinned to the top.
             RefreshRunningGames();
@@ -4628,6 +4884,16 @@ namespace NoBorders
                     AppLogger.Log($"SetWindowPos failed for '{g.GameName}' (hwnd={hwnd}), Win32={err}", LogLevel.Warn);
                 }
             }
+
+            // Settings > Diagnostics "Verbose logging" — real, one-shot Win32
+            // interactions (only fires when a style/position change was
+            // actually attempted this call, not every enforcement tick — see
+            // EnforceTimer_Tick's own doc comment for why the old per-second
+            // heartbeat was replaced with this instead).
+            if (!styleCorrect && !styleCallFailed)
+                AppLogger.LogVerbose($"Restyled '{g.GameName}' (hwnd={hwnd}): removed title bar/resize border.");
+            if ((!styleCorrect || !positionCorrect) && !posCallFailed)
+                AppLogger.LogVerbose($"Repositioned '{g.GameName}' (hwnd={hwnd}) to {targetX},{targetY} {profile.Width}x{profile.Height} on monitor '{monId}'.");
 
             // If either Win32 call failed and we're not running elevated, the most
             // likely cause is that the target window belongs to an elevated process
@@ -4899,8 +5165,13 @@ namespace NoBorders
                 {
                     string args = _settings.StartMinimized ? " -minimized" : string.Empty;
                     key.SetValue(APP_NAME, $"\"{Application.ExecutablePath}\"{args}");
+                    AppLogger.LogVerbose($"Registry: set {REG_RUN_KEY}\\{APP_NAME} = \"{Application.ExecutablePath}\"{args}");
                 }
-                else key.DeleteValue(APP_NAME, false);
+                else
+                {
+                    key.DeleteValue(APP_NAME, false);
+                    AppLogger.LogVerbose($"Registry: removed {REG_RUN_KEY}\\{APP_NAME}");
+                }
             }
             catch (Exception ex) { AppLogger.Log(ex, "UpdateRegistryStartup"); }
         }

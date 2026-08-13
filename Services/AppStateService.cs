@@ -137,6 +137,14 @@ namespace NoBorders.Services
         public void ToggleActive() => _bridge.ToggleGameActive();
 
         /// <summary>
+        /// Hero's "Re-Apply" button — previously unwired (no @onclick at
+        /// all). Re-applies borderless to the selected game's currently
+        /// tracked window; no-op with a toast if it isn't currently running,
+        /// same "no fallback game" convention as ToggleActive above.
+        /// </summary>
+        public void ReapplyBorderless() => _bridge.ReapplyBorderless();
+
+        /// <summary>
         /// Loads the current monitor scope's saved default profile onto the
         /// selected game and immediately applies it, exactly as clicking "Load
         /// Monitor Defaults" would (Phase 4.4) — forwards to MainForm's own
@@ -467,6 +475,16 @@ namespace NoBorders.Services
 
         /// <summary>ElevationDialog.razor's "Not Now" button and the first step of its "Restart As Admin" button.</summary>
         public void DismissElevationDialog() => _bridge.DismissElevationDialog();
+
+        /// <summary>
+        /// Settings &gt; Diagnostics "Verbose logging" toggle — was a static
+        /// ToggleSwitch with no backing field or OnToggle at all. Same shape
+        /// as AlwaysRunAsAdmin above.
+        /// </summary>
+        public bool VerboseLogging => _bridge.VerboseLogging;
+
+        /// <summary>Same shape as ToggleAlwaysRunAsAdmin — flips the persisted preference.</summary>
+        public void ToggleVerboseLogging() => _bridge.VerboseLogging = !_bridge.VerboseLogging;
 
         /// <summary>
         /// Phase 8.3: SteamGridDB personal API key, pasted in Settings >

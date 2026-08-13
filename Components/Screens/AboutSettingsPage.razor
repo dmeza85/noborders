@@ -1,4 +1,5 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders
 @* Stub per Phase 2.6's scope ("stub views for Permissions/About") — unlike
    Permissions, there's no existing feature or design mockup to source
    content from here, so this stays deliberately minimal: app identity
@@ -8,13 +9,19 @@
    Icon: Borderless Gaming App UI/icon_export's 64-grid violet mark
    (noborders-256-violet.svg, copied to wwwroot/img/noborders-mark-large.svg)
    — the smooth full-detail source, not the 16-grid pixel mark the header
-   bars use, per that icon set's own README ("Use at 24 px and above"). *@
+   bars use, per that icon set's own README ("Use at 24 px and above").
+
+   Version: reads NoBorders.AppVersion (program.cs) — the real assembly
+   version — instead of a hardcoded string. Was a leftover "v2.4" from the
+   original design mockup that never matched the actual build (1.0.0) and
+   would only drift further with each future release; see AppVersion's own
+   doc comment. *@
 
 <div class="nb-about-page__header">
     <img src="/img/noborders-mark-large.svg" alt="" class="nb-about-page__icon" />
     <div>
         <div class="nb-about-page__title">NoBorders</div>
-        <div class="nb-about-page__version nb-mono">v2.4</div>
+        <div class="nb-about-page__version nb-mono">@AppVersion.Display</div>
     </div>
 </div>
 <div class="nb-about-page__description">A Windows borderless-window manager for games.</div>

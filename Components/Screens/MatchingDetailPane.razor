@@ -74,7 +74,13 @@
    it just had no way to be told "do that again right now" outside of
    whatever re-render State.Changed happened to trigger next. It now just
    forces a re-render, which re-evaluates OpenWindows the same way any
-   other State.Changed-triggered render already does. *@
+   other State.Changed-triggered render already does.
+
+   Click feedback: forcing a re-render has no visible result of its own
+   (OpenWindows' contents usually haven't changed between one click and the
+   next), so Rescan plays wwwroot/css/buttons.css's shared flash/highlight/
+   fade animation on every click as its own confirmation that it actually
+   did something — same treatment MainShell's Re-Apply button uses. *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
@@ -112,7 +118,7 @@
         <div class="nb-matching-pane__test-header">
             <div class="nb-text-label">LIVE TEST · OPEN WINDOWS</div>
             <div class="nb-matching-pane__test-hairline"></div>
-            <div class="nb-matching-pane__rescan" @onclick="() => StateHasChanged()">Rescan</div>
+            <div class="nb-matching-pane__rescan @_rescanFlash.CssClass" @onclick="OnRescan">Rescan</div>
         </div>
 
         <div class="nb-matching-pane__test-list">
@@ -144,7 +150,7 @@
         </div>
 
         <div class="nb-matching-pane__actions">
-            <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveChanges">Save Changes</button>
+            <button type="button" class="nb-btn nb-btn--primary @_saveFlash.CssClass" @onclick="OnSaveChanges">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change" disabled="@(!State.CanUndo)" @onclick="() => State.Undo()">↶ Undo</button>
             <button type="button" class="nb-btn nb-btn--danger-outline" @onclick="OnRemoveGame">Remove Game</button>
         </div>
@@ -152,6 +158,19 @@
 </div>
 
 @code {
+    // Click-confirmation flash — see FlashFeedback.cs. Save Changes gained
+    // this alongside Rescan per user request ("any button that confirms or
+    // saves a setting"); Remove Game/Undo deliberately don't (destructive
+    // and reversal actions, not confirm/save — the removed row itself is
+    // already the confirmation for Remove Game).
+    private readonly FlashFeedback _rescanFlash;
+    private readonly FlashFeedback _saveFlash;
+    public MatchingDetailPane()
+    {
+        _rescanFlash = new FlashFeedback(StateHasChanged);
+        _saveFlash = new FlashFeedback(StateHasChanged);
+    }
+
     protected override void OnInitialized() => State.Changed += OnStateChanged;
     public void Dispose() => State.Changed -= OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
@@ -180,6 +199,8 @@
     // below — nothing MainForm needs to know about until the link is
     // actually clicked.
     private OpenWindowEntry? _selectedWindow;
+
+    private Task OnRescan() => _rescanFlash.Trigger();
 
     private void EnsureSelected()
     {
@@ -219,10 +240,11 @@
         State.SetPendingMatchTarget(mode);
     }
 
-    private void OnSaveChanges()
+    private async Task OnSaveChanges()
     {
         EnsureSelected();
         State.SaveGameChanges();
+        await _saveFlash.Trigger();
     }
 
     private void OnRemoveGame()

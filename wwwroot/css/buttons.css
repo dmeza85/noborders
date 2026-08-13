@@ -25,6 +25,67 @@
   cursor: default;
 }
 
+/* Shared "action triggered" click feedback — flashes a few times, holds a
+   highlighted glow, then slowly fades back to resting. Used by any button
+   that confirms a background action fired (Rescan, Re-Apply) rather than
+   navigating/opening something, where a plain :active press-state isn't
+   enough signal since the visible result (if any) shows up elsewhere.
+
+   Bugfix: the first version of this gave both modifier classes the SAME
+   animation-name (comma-joined into one rule) and toggled between them on
+   every click, reasoning that a different class name would force a
+   restart. Confirmed live this doesn't work: a CSS animation only restarts
+   when the *computed* animation-name value actually changes, and since
+   both classes resolved to the identical rule, the computed value never
+   changed — so the animation only ever played once, the very first time
+   the class appeared at all. Because the Blazor field backing the class
+   defaulted to "on", that first-ever application landed at component
+   mount, not at the first click (visible live as "flashes when entering
+   the menu, not on click" for Rescan; for Re-Apply, mounted even earlier,
+   before the window was ever shown, so it looked like nothing happened at
+   all). Two separate @keyframes with identical content but different
+   names actually changes the computed value on every class swap, so the
+   consuming component now also keeps the class entirely ABSENT except for
+   the ~1.3s right after a click (see MatchingDetailPane/MainShell's own
+   OnRescan/OnReapply) — both fixes needed together: the two-keyframe
+   swap so a rapid re-click mid-animation still restarts it, and starting
+   from "absent" so mounting/re-rendering while idle never triggers it. */
+@keyframes nb-feedback-flash-anim-a {
+  0%   { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+  6%   { filter: brightness(1.6); box-shadow: 0 0 10px 2px rgba(var(--nb-accent-rgb), .55); }
+  14%  { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+  22%  { filter: brightness(1.6); box-shadow: 0 0 10px 2px rgba(var(--nb-accent-rgb), .55); }
+  30%  { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+  40%  { filter: brightness(1.7); box-shadow: 0 0 12px 3px rgba(var(--nb-accent-rgb), .7); }
+  55%  { filter: brightness(1.7); box-shadow: 0 0 12px 3px rgba(var(--nb-accent-rgb), .7); }
+  100% { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+}
+@keyframes nb-feedback-flash-anim-b {
+  0%   { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+  6%   { filter: brightness(1.6); box-shadow: 0 0 10px 2px rgba(var(--nb-accent-rgb), .55); }
+  14%  { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+  22%  { filter: brightness(1.6); box-shadow: 0 0 10px 2px rgba(var(--nb-accent-rgb), .55); }
+  30%  { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+  40%  { filter: brightness(1.7); box-shadow: 0 0 12px 3px rgba(var(--nb-accent-rgb), .7); }
+  55%  { filter: brightness(1.7); box-shadow: 0 0 12px 3px rgba(var(--nb-accent-rgb), .7); }
+  100% { filter: brightness(1);   box-shadow: 0 0 0 0 rgba(var(--nb-accent-rgb), 0); }
+}
+
+/* User request: the same click-confirmation flash extended from Rescan/
+   Re-Apply to every .nb-btn that confirms or saves a setting (Save
+   Changes on both Display/Matching tabs, Load Monitor Defaults, Save
+   Monitor Default, Detect Displays) — not Undo, Remove Game, Cancel, or
+   Back, which reverse/discard/navigate rather than confirm. .nb-btn is
+   the shared class those buttons already use (see this file's own top
+   comment), so one rule here covers all of them instead of duplicating it
+   into each component's own scoped CSS. */
+.nb-btn.nb-feedback-flash-a {
+  animation: nb-feedback-flash-anim-a 1.3s ease-out;
+}
+.nb-btn.nb-feedback-flash-b {
+  animation: nb-feedback-flash-anim-b 1.3s ease-out;
+}
+
 .nb-btn--primary {
   background: var(--nb-accent);
   color: var(--nb-on-accent-fg);

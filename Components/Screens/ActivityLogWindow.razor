@@ -78,7 +78,7 @@
             <div class="nb-log-window__rows" @ref="_rowsRef" @onscroll="OnRowsScroll">
                 @foreach (var entry in FilteredEntries)
                 {
-                    <LogRow @key="entry" Time="@entry.Time.ToString("HH:mm:ss")" Level="@MapLevel(entry.Level)"
+                    <LogRow @key="entry.Seq" Time="@entry.Time.ToString("HH:mm:ss")" Level="@MapLevel(entry.Level)"
                             Source="@entry.Source" Message="@FirstLine(entry.Message)"
                             Selected="@(ReferenceEquals(entry, _selectedEntry))"
                             OnSelect="() => _selectedEntry = entry" />

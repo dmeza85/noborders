@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
+using NoBorders; // AppLogger
 
 namespace NoBorders.Services
 {
@@ -90,6 +91,7 @@ namespace NoBorders.Services
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
                 using var resp = await Http.SendAsync(req);
                 string body = await resp.Content.ReadAsStringAsync();
+                AppLogger.LogVerbose($"SteamGridDB search '{gameName}': HTTP {(int)resp.StatusCode}.");
 
                 using var doc = JsonDocument.Parse(body);
                 if (!doc.RootElement.TryGetProperty("success", out var successEl) || !successEl.GetBoolean())
@@ -108,6 +110,7 @@ namespace NoBorders.Services
                     }
                 }
 
+                AppLogger.LogVerbose($"SteamGridDB search '{gameName}': {candidates.Count} candidate(s).");
                 return candidates.Count == 0
                     ? new ArtworkSearchResult(ArtworkFetchStatus.NoMatch, null, candidates)
                     : new ArtworkSearchResult(ArtworkFetchStatus.Success, null, candidates);
@@ -173,6 +176,7 @@ namespace NoBorders.Services
                 string? heroPath = heroUrl != null ? await DownloadToCache(heroUrl, $"{cacheSlug}-hero") : null;
                 string? iconPath = iconUrl != null ? await DownloadToCache(iconUrl, $"{cacheSlug}-icon") : null;
 
+                AppLogger.LogVerbose($"SteamGridDB download (id={steamGridDbId}): hero={(heroPath != null ? "ok" : "none")}, icon={(iconPath != null ? "ok" : "none")}.");
                 return new ArtworkDownloadResult(ArtworkFetchStatus.Success, null, heroPath, iconPath);
             }
             catch (Exception ex)

@@ -143,8 +143,8 @@
 
     <div class="nb-monitors-page__preview-row">
         <div class="nb-monitors-page__actions">
-            <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveMonitorDefault">Save Monitor Default</button>
-            <button type="button" class="nb-btn nb-btn--outline" @onclick="() => State.DetectDisplays()">Detect Displays</button>
+            <button type="button" class="nb-btn nb-btn--primary @_saveDefaultFlash.CssClass" @onclick="OnSaveMonitorDefault">Save Monitor Default</button>
+            <button type="button" class="nb-btn nb-btn--outline @_detectFlash.CssClass" @onclick="OnDetectDisplays">Detect Displays</button>
         </div>
         <div class="nb-monitors-page__preview-col">
             <ResultPreview MonitorWidth="PreviewMonitorWidth" MonitorHeight="PreviewMonitorHeight"
@@ -156,6 +156,19 @@
 </div>
 
 @code {
+    // Click-confirmation flash — see FlashFeedback.cs. Both genuinely
+    // persist/refresh real state (Save Monitor Default writes AppSettings.
+    // MonitorDefaults; Detect Displays re-scans and refreshes the
+    // Connected/Saved lists) — same "confirm or save a setting" criterion
+    // as Rescan/Re-Apply/Save Changes elsewhere.
+    private readonly FlashFeedback _saveDefaultFlash;
+    private readonly FlashFeedback _detectFlash;
+    public MonitorsSettingsPage()
+    {
+        _saveDefaultFlash = new FlashFeedback(StateHasChanged);
+        _detectFlash = new FlashFeedback(StateHasChanged);
+    }
+
     protected override void OnInitialized() => State.Changed += OnStateChanged;
     public void Dispose() => State.Changed -= OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
@@ -195,10 +208,17 @@
             State.SelectMonitorDefaultScope(DisplayedMonitorName);
     }
 
-    private void OnSaveMonitorDefault()
+    private async Task OnSaveMonitorDefault()
     {
         EnsureMonitorDefaultSelected();
         State.SaveMonitorDefault();
+        await _saveDefaultFlash.Trigger();
+    }
+
+    private async Task OnDetectDisplays()
+    {
+        State.DetectDisplays();
+        await _detectFlash.Trigger();
     }
 
     private void OnAlign(MonitorAlignMode mode)

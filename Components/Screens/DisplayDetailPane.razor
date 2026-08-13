@@ -153,14 +153,28 @@
         </div>
 
         <div class="nb-display-pane__actions">
-            <button type="button" class="nb-btn nb-btn--primary" @onclick="OnSaveChanges">Save Changes</button>
+            <button type="button" class="nb-btn nb-btn--primary @_saveFlash.CssClass" @onclick="OnSaveChanges">Save Changes</button>
             <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" title="Undo last change" disabled="@(!State.CanUndo)" @onclick="() => State.Undo()">↶ Undo</button>
-            <button type="button" class="nb-btn nb-btn--outline" @onclick="OnLoadMonitorDefaults">Load Monitor Defaults</button>
+            <button type="button" class="nb-btn nb-btn--outline @_loadDefaultsFlash.CssClass" @onclick="OnLoadMonitorDefaults">Load Monitor Defaults</button>
         </div>
     </div>
 </div>
 
 @code {
+    // Click-confirmation flash (user request: same effect as Rescan/Re-Apply
+    // on any button that confirms or saves a setting, not cancel/back) —
+    // both of these genuinely persist state (Save Changes commits the
+    // pending profile; Load Monitor Defaults "immediately persists/
+    // enforces it" per this file's own doc comment above), unlike Undo,
+    // which reverses a change rather than confirming one.
+    private readonly FlashFeedback _saveFlash;
+    private readonly FlashFeedback _loadDefaultsFlash;
+    public DisplayDetailPane()
+    {
+        _saveFlash = new FlashFeedback(StateHasChanged);
+        _loadDefaultsFlash = new FlashFeedback(StateHasChanged);
+    }
+
     protected override void OnInitialized() => State.Changed += OnStateChanged;
     public void Dispose() => State.Changed -= OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
@@ -202,10 +216,11 @@
             State.SelectGame(DisplayedGame);
     }
 
-    private void OnLoadMonitorDefaults()
+    private async Task OnLoadMonitorDefaults()
     {
         EnsureSelected();
         State.LoadMonitorDefaults();
+        await _loadDefaultsFlash.Trigger();
     }
 
     // Phase 8.4: Width/Height/Offset X/Y are now real, editable steppers —
@@ -218,10 +233,11 @@
     private void AdjustOffsetX(int delta) { EnsureSelected(); State.AdjustOffsetX(delta); }
     private void AdjustOffsetY(int delta) { EnsureSelected(); State.AdjustOffsetY(delta); }
 
-    private void OnSaveChanges()
+    private async Task OnSaveChanges()
     {
         EnsureSelected();
         State.SaveGameChanges();
+        await _saveFlash.Trigger();
     }
 
     private void OnAlign(MonitorAlignMode mode)

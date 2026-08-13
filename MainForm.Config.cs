@@ -166,6 +166,13 @@ namespace NoBorders
                 AppLogger.Log(ex, "LoadConfig");
                 _settings = new AppSettings();
             }
+
+            // AppLogger.VerboseEnabled is separate static state from
+            // _settings.VerboseLogging (the persisted preference) — needs
+            // syncing here on every load, including the exception fallback
+            // just above, or a prior run's "on" choice wouldn't take effect
+            // until the user re-toggled it.
+            AppLogger.VerboseEnabled = _settings.VerboseLogging;
         }
 
         private void SaveConfig()

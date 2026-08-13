@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.0.1 — 2026-08-13
+
+### New
+
+- **Re-Apply** (main window) and **Rescan** (Matching tab) now flash briefly
+  to confirm the click actually registered. Re-Apply is also fully wired up
+  now — it previously did nothing when clicked.
+- That same click-confirmation flash now appears on every button that saves
+  or confirms a setting: **Save Changes** (Display and Matching tabs),
+  **Load Monitor Defaults**, **Save Monitor Default**, and **Detect
+  Displays**.
+- The pinned taskbar icon now reliably reopens NoBorders if it's already
+  running and minimized to the tray.
+- Settings → Diagnostics: **Verbose logging** is now a real toggle. Turn it
+  on to log window style/position changes, artwork lookups, registry
+  changes, and other background activity to the log file — useful when
+  troubleshooting. The error counter on that page now reflects real errors
+  from the current session instead of a placeholder number.
+
+### Fixed
+
+- The Activity Log window could silently stop responding to clicks (Pause,
+  filters, row selection) after certain repeated warnings appeared in the
+  log.
+- The app's own version number, shown in the title bar and on the About
+  page, was stuck on a placeholder ("v2.4") instead of the real version.
+- The portable `.exe` could keep showing an older version of the interface
+  after an update, due to stale caching — a fresh copy now always reflects
+  the latest build.
+
 ## v1.0.0 — 2026-08-13 (first release)
 
 ### New

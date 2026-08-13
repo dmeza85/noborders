@@ -1,4 +1,5 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders
 @using NoBorders.Services
 @inject AppStateService State
 @implements IDisposable
@@ -59,7 +60,7 @@
     <header class="nb-shell__titlebar" @onmousedown="() => State.BeginWindowDrag()">
         <div class="nb-shell__mark"></div>
         <div class="nb-text-wordmark nb-shell__wordmark">NOBORDERS</div>
-        <div class="nb-text-data nb-shell__version">v2.4</div>
+        <div class="nb-text-data nb-shell__version">@AppVersion.Display</div>
         <div class="nb-shell__spacer"></div>
         <button type="button" class="nb-shell__settings-btn" @onmousedown:stopPropagation="true" @onclick="() => OnOpenSettings.InvokeAsync()">
             <span class="nb-shell__settings-ring"></span>Settings
@@ -88,7 +89,7 @@
                 <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--primary" disabled="@(DisplayedGame == null)" @onclick="OnTogglePrimary">
                     @(IsDisplayedActive ? "Disable Borderless" : "Enable Borderless")
                 </button>
-                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--secondary" disabled="@(DisplayedGame == null)">Re-Apply</button>
+                <button type="button" class="nb-shell__hero-btn nb-shell__hero-btn--secondary @_reapplyFlash.CssClass" disabled="@(DisplayedGame == null)" @onclick="OnReapply">Re-Apply</button>
             </div>
         </div>
     </section>
@@ -146,6 +147,9 @@
 </div>
 
 @code {
+    private readonly FlashFeedback _reapplyFlash;
+    public MainShell() => _reapplyFlash = new FlashFeedback(StateHasChanged);
+
     public enum ShellTab { Display, Matching }
 
     [Parameter] public ShellTab ActiveTab { get; set; } = ShellTab.Display;
@@ -220,6 +224,14 @@
         if (State.SelectedGame == null && DisplayedGame != null)
             State.SelectGame(DisplayedGame);
         State.ToggleActive();
+    }
+
+    private async Task OnReapply()
+    {
+        if (State.SelectedGame == null && DisplayedGame != null)
+            State.SelectGame(DisplayedGame);
+        State.ReapplyBorderless();
+        await _reapplyFlash.Trigger();
     }
 
     // Same fallback chain as DisplayDetailPane.TargetMonitorName — the

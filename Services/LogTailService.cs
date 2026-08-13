@@ -7,8 +7,26 @@ using NoBorders; // LogLevel
 
 namespace NoBorders.Services
 {
-    /// <summary>A single Activity Log row (MIGRATION_PLAN.md Phase 6.4).</summary>
-    public sealed record LogEntry(DateTime Time, LogLevel Level, string Source, string Message);
+    /// <summary>
+    /// A single Activity Log row (MIGRATION_PLAN.md Phase 6.4).
+    ///
+    /// Bugfix: ActivityLogWindow.razor's @foreach keys each LogRow on its
+    /// LogEntry — records use structural equality, so two genuinely
+    /// different entries whose Time (only second-precision — AppLogger's
+    /// "HH:mm:ss" format), Level, Source, and Message all happen to match
+    /// (e.g. the same warning logged twice inside one second, confirmed
+    /// live with a repeated "SetWindowLong failed for 'Dome Keeper'")
+    /// compare equal and collide as the same @key. Blazor's render-tree
+    /// diff builder throws on that ("more than one sibling ... has the
+    /// same key value"), and since that throw happens mid-render, it
+    /// leaves the whole screen's render tree corrupted — every button,
+    /// toggle, and filter in the log window stops responding afterward,
+    /// not because those handlers are broken but because rendering itself
+    /// already crashed once. Seq is assigned once per entry by
+    /// LogTailService and never duplicates, giving @key a real identity
+    /// independent of content.
+    /// </summary>
+    public sealed record LogEntry(long Seq, DateTime Time, LogLevel Level, string Source, string Message);
 
     /// <summary>
     /// DI-registered singleton that tails <c>AppLogger.LogPath</c> (noborders.log)
@@ -52,6 +70,7 @@ namespace NoBorders.Services
         private readonly object _lock = new();
 
         private long _lastLength;
+        private long _nextSeq;
         private readonly List<LogEntry> _entries = new();
         private readonly List<LogEntry> _pending = new(); // buffered while Paused
 
@@ -167,7 +186,7 @@ namespace NoBorders.Services
             void Flush()
             {
                 if (curMessage != null)
-                    target.Add(new LogEntry(curTime, curLevel, curSource, curMessage.ToString().TrimEnd('\r')));
+                    target.Add(new LogEntry(System.Threading.Interlocked.Increment(ref _nextSeq), curTime, curLevel, curSource, curMessage.ToString().TrimEnd('\r')));
             }
 
             foreach (var rawLine in lines)
