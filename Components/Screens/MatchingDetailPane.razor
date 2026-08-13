@@ -24,17 +24,18 @@
    since showing a live validity line for a *different*, still-hardcoded
    pattern would be incoherent.
 
-   Mode chips: GameConfig has no match-target field today — the app has
-   always matched by process/exe name only (every IsProcessMatch call site
-   in program.cs tests it against "<processname>.exe", never a window
-   title). "Process Name" is shown as the real active mode; "Window Title"
-   stays present (the mock's intent — matching by title, not just process
-   name, is plausible future scope) but inactive, since it isn't real
-   functionality yet and building it (a new GameConfig field, a second
-   matching code path, migration for existing saves) is real-feature scope,
-   not a wire-up. review.md §3 fix: it's now explicitly disabled (dimmed,
-   not-allowed cursor, tooltip) instead of just visually unstyled, so it no
-   longer implies a working toggle that happens to do nothing when clicked.
+   Mode chips: review.md §3 follow-up — GameConfig now has a real
+   MatchTarget field (ProcessName/WindowTitle, defaulting to ProcessName so
+   every pre-existing save is unaffected), and every IsMatch call site
+   across program.cs threads a live window title alongside the exe name.
+   Clicking a chip only writes the pending buffer (State.PendingMatchTarget,
+   same shape as PendingRegexPattern) — Save Changes still owns committing
+   it to GameConfig.MatchTarget, and Undo restores it. The live-test list
+   below deliberately keeps testing against the last-*saved* MatchTarget
+   (DisplayedGame.IsMatch), not the pending chip selection — same as it
+   already only tests the last-saved RegexPattern, not PendingRegexPattern,
+   so it always answers "what is enforcement actually doing right now",
+   never a preview of an unsaved edit.
 
    Phase 4.5: the ↺ fetch-name button calls AppStateService.FetchName, which
    forwards to MainForm's real BtnFetchName_Click via PerformClick() — it
@@ -91,8 +92,8 @@
         </div>
 
         <div class="nb-matching-pane__chips">
-            <div class="nb-matching-pane__chip nb-matching-pane__chip--disabled" title="Not yet supported — matching is currently by process name only">Window Title</div>
-            <div class="nb-matching-pane__chip nb-matching-pane__chip--active">Process Name</div>
+            <div class="nb-matching-pane__chip @(CurrentMatchTarget == MatchTargetMode.WindowTitle ? "nb-matching-pane__chip--active" : "")" role="button" @onclick="() => OnSetMatchTarget(MatchTargetMode.WindowTitle)">Window Title</div>
+            <div class="nb-matching-pane__chip @(CurrentMatchTarget == MatchTargetMode.ProcessName ? "nb-matching-pane__chip--active" : "")" role="button" @onclick="() => OnSetMatchTarget(MatchTargetMode.ProcessName)">Process Name</div>
         </div>
 
         <div class="nb-text-label nb-matching-pane__label">EXECUTABLE</div>
@@ -117,7 +118,7 @@
         <div class="nb-matching-pane__test-list">
             @foreach (var w in OpenWindows)
             {
-                var isMatch = DisplayedGame != null && DisplayedGame.IsProcessMatch(w.Exe);
+                var isMatch = DisplayedGame != null && DisplayedGame.IsMatch(w.Exe, w.WindowTitle);
                 var isSelected = _selectedWindow.HasValue && _selectedWindow.Value.Equals(w);
                 <div @key="w" class="nb-match-row @(isMatch ? "nb-match-row--match" : "") @(isSelected ? "nb-match-row--selected" : "")" @onclick="() => _selectedWindow = w">
                     <div class="nb-match-row__thumb"></div>
@@ -168,6 +169,12 @@
     private string DisplayedPattern =>
         State.SelectedGame != null ? State.PendingRegexPattern : (DisplayedGame?.RegexPattern ?? "");
 
+    // Same shape as DisplayedPattern above, for State.PendingMatchTarget —
+    // which chip shows active reflects the pending (possibly just-clicked,
+    // not-yet-saved) selection, same as the pattern/name fields do.
+    private MatchTargetMode CurrentMatchTarget =>
+        State.SelectedGame != null ? State.PendingMatchTarget : (DisplayedGame?.MatchTarget ?? MatchTargetMode.ProcessName);
+
     // Phase 8.3-era addition (review.md §3): which live-test row "Use Title
     // Of Selected" acts on. Local-only UI state, same as _showArtworkModal
     // below — nothing MainForm needs to know about until the link is
@@ -186,23 +193,30 @@
         State.FetchName();
     }
 
-    // review.md §3: "Use Title Of Selected" was previously static/dead. The
-    // original design-handoff mock called for inserting the selected
-    // window's *title* as an escaped literal, but matching in this app is
-    // process/exe-name only (see the "Mode chips" doc comment above) —
-    // GameConfig.IsProcessMatch always tests the pattern against the exe
-    // name, never the title, so a title-based pattern would silently never
-    // match anything real. Using the exe name instead keeps this link
-    // functionally honest: the pattern it writes actually works. Falls back
-    // to the first open window when nothing's been explicitly clicked yet,
-    // same "something honest to show" reasoning as DisplayedMonitorName
+    // review.md §3: "Use Title Of Selected" was previously static/dead, then
+    // wired to always write the exe name — matching was process/exe-name
+    // only at the time, so a title-based pattern would have silently never
+    // matched anything real. Now that Window Title mode is real, this
+    // writes whichever field the pending chip selection actually matches
+    // against, so the link stays functionally honest in both modes. Falls
+    // back to the first open window when nothing's been explicitly clicked
+    // yet, same "something honest to show" reasoning as DisplayedMonitorName
     // elsewhere in this migration.
     private void OnUseSelectedWindow()
     {
         EnsureSelected();
         var w = _selectedWindow ?? OpenWindows.FirstOrDefault();
         if (string.IsNullOrEmpty(w.Exe)) return; // default(OpenWindowEntry) — no open windows at all
-        State.SetPendingRegexPattern(Regex.Escape(w.Exe));
+        string target = CurrentMatchTarget == MatchTargetMode.WindowTitle ? w.WindowTitle : w.Exe;
+        if (string.IsNullOrEmpty(target)) return; // Window Title mode but this window has no title
+        State.SetPendingRegexPattern(Regex.Escape(target));
+    }
+
+    /// <summary>review.md §3: the Window Title/Process Name chips' click handler. EnsureSelected mirrors every other pending-edit action in this pane (OnFetchName, OnUseSelectedWindow) — nothing to select until a game is chosen.</summary>
+    private void OnSetMatchTarget(MatchTargetMode mode)
+    {
+        EnsureSelected();
+        State.SetPendingMatchTarget(mode);
     }
 
     private void OnSaveChanges()
@@ -256,7 +270,7 @@
     private int MatchCount(List<OpenWindowEntry> windows)
     {
         var g = DisplayedGame;
-        return g == null ? 0 : windows.Count(w => g.IsProcessMatch(w.Exe));
+        return g == null ? 0 : windows.Count(w => g.IsMatch(w.Exe, w.WindowTitle));
     }
 
     private string ValidityText()

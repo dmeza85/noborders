@@ -5,10 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -40,13 +42,38 @@ namespace NoBorders
     /// <summary>
     /// Configuration for a single tracked game.
     /// Profiles is keyed by monitor friendly-name (e.g. "Samsung S34J55x").
+    ///
+    /// Deliberately no Equals/GetHashCode override, so every
+    /// HashSet&lt;GameConfig&gt;/Dictionary lookup against it (_runningGames,
+    /// the EnforceTimer_Tick Step 2 untracked-games scan, MainForm.Tray.cs's
+    /// RebuildTrayMenu appliedGames set) compares by reference, not by
+    /// content. That's correct today, not just untested: _settings.Games is
+    /// the single canonical list built once at load, and every one of those
+    /// collections only ever stores references back into that same list —
+    /// never a clone or a freshly-deserialized duplicate representing the
+    /// same logical game — so reference equality and value equality
+    /// coincide everywhere they're actually compared. Would need revisiting
+    /// only if something started constructing a second GameConfig instance
+    /// for a game that's already in _settings.Games and expected it to
+    /// compare equal to the original (nothing does this).
     /// </summary>
+    /// <summary>
+    /// review.md §3: what a game's RegexPattern is tested against.
+    /// ProcessName (the default, and the only mode that ever existed before
+    /// this) tests the exe basename ("game.exe"); WindowTitle tests the
+    /// actual window title text instead. Defaults to ProcessName on
+    /// deserialization for every pre-existing saved game, so this is a
+    /// purely additive schema change — no migration step needed.
+    /// </summary>
+    public enum MatchTargetMode { ProcessName, WindowTitle }
+
     public class GameConfig
     {
         public string GameName     { get; set; } = string.Empty;
         public string RegexPattern { get; set; } = string.Empty;
         public string ExePath      { get; set; } = string.Empty;
         public bool   IsActive     { get; set; } = false;
+        public MatchTargetMode MatchTarget { get; set; } = MatchTargetMode.ProcessName;
         public Dictionary<string, GameDisplayProfile> Profiles { get; set; }
             = new Dictionary<string, GameDisplayProfile>(StringComparer.OrdinalIgnoreCase);
 
@@ -70,8 +97,8 @@ namespace NoBorders
         // the UI thread, so a pathological catastrophic-backtracking pattern
         // (typed by hand, pasted, or arriving via an imported config) would
         // otherwise hang the whole app with no crash and no log line
-        // explaining why. IsProcessMatch below is the only place that
-        // actually calls IsMatch — it catches the resulting
+        // explaining why. GameConfig.IsMatch below is the only place that
+        // actually calls CompiledPattern.IsMatch — it catches the resulting
         // RegexMatchTimeoutException and treats a timeout as "no match"
         // (safe default: never accidentally enforces borderless on the
         // wrong window), so every call site gets this for free instead of
@@ -104,13 +131,20 @@ namespace NoBorders
         /// <summary>Call after editing RegexPattern so the cache is rebuilt.</summary>
         public void InvalidatePattern() => _compiledPattern = null;
 
-        /// <summary>The one real entry point for testing an exe name against this
+        /// <summary>The one real entry point for testing a window against this
         /// game's pattern — every call site should use this instead of touching
         /// CompiledPattern.IsMatch directly, so the ReDoS timeout guard above
-        /// can't accidentally be bypassed by a new call site that skips it.</summary>
-        public bool IsProcessMatch(string exeName)
+        /// can't accidentally be bypassed by a new call site that skips it.
+        /// Tests <paramref name="exeName"/> or <paramref name="windowTitle"/>
+        /// depending on <see cref="MatchTarget"/> — review.md §3's "Window
+        /// Title" mode. <paramref name="windowTitle"/> may be empty (not every
+        /// call site tracks a live window, e.g. dupe-name checks against the
+        /// whole games list); in ProcessName mode (the default) it's never
+        /// even read.</summary>
+        public bool IsMatch(string exeName, string windowTitle = "")
         {
-            try { return CompiledPattern.IsMatch(exeName); }
+            string target = MatchTarget == MatchTargetMode.WindowTitle ? windowTitle : exeName;
+            try { return CompiledPattern.IsMatch(target); }
             catch (RegexMatchTimeoutException) { return false; }
         }
     }
@@ -534,6 +568,8 @@ namespace NoBorders
         void FetchNameForSelectedGame();
         string PendingRegexPattern { get; }
         void SetPendingRegexPattern(string pattern);
+        MatchTargetMode PendingMatchTarget { get; }
+        void SetPendingMatchTarget(MatchTargetMode mode);
         void SaveGameChanges();
         void RemoveSelectedGame();
         bool AddGameFromRunningWindow(OpenWindowEntry entry);
@@ -805,6 +841,15 @@ namespace NoBorders
         private GameConfig? _undoTarget;
         private string _undoGameName = string.Empty;
         private string _undoRegexPattern = string.Empty;
+        private MatchTargetMode _undoMatchTarget;
+
+        // review.md §3: MatchTarget's pending-edit buffer. GameName/RegexPattern
+        // use real hidden WinForms TextBoxes here (_txtGameName/_txtRegex) since
+        // those controls pre-date the Blazor migration and BtnSaveGame_Click
+        // still reads them directly — but MatchTarget never had a WinForms
+        // control to begin with, so a plain field is simpler and just as
+        // correct; there's no legacy handler this needs to stay in lockstep with.
+        private MatchTargetMode _pendingMatchTarget;
         private Dictionary<string, GameDisplayProfile> _undoProfiles = new(StringComparer.OrdinalIgnoreCase);
 
         private readonly string _configPath = Path.Combine(
@@ -1132,6 +1177,8 @@ namespace NoBorders
         void IMainFormBridge.FetchNameForSelectedGame() => FetchNameForSelectedGame();
         string IMainFormBridge.PendingRegexPattern => _txtRegex.Text;
         void IMainFormBridge.SetPendingRegexPattern(string pattern) => SetPendingRegexPattern(pattern);
+        MatchTargetMode IMainFormBridge.PendingMatchTarget => _pendingMatchTarget;
+        void IMainFormBridge.SetPendingMatchTarget(MatchTargetMode mode) => SetPendingMatchTarget(mode);
         void IMainFormBridge.SaveGameChanges() => SaveGameChanges();
         void IMainFormBridge.RemoveSelectedGame() => RemoveSelectedGame();
         bool IMainFormBridge.AddGameFromRunningWindow(OpenWindowEntry entry) => AddGameFromRunningWindow(entry);
@@ -2716,10 +2763,11 @@ namespace NoBorders
                 {
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
                     string exe = (p.ProcessName + ".exe").ToLowerInvariant();
+                    string title = GetWindowTitle(p.MainWindowHandle);
                     foreach (var g in _settings.Games)
                     {
                         if (running.Contains(g)) continue;
-                        if (g.IsProcessMatch(exe)) running.Add(g);
+                        if (g.IsMatch(exe, title)) running.Add(g);
                     }
                 }
                 catch { /* process may have exited */ }
@@ -2888,8 +2936,9 @@ namespace NoBorders
             LoadProfileToUI(_selectedGame, _activeScope);
 
             // Advanced fields
-            _txtGameName.Text = _selectedGame.GameName;
-            _txtRegex.Text    = _selectedGame.RegexPattern;
+            _txtGameName.Text  = _selectedGame.GameName;
+            _txtRegex.Text     = _selectedGame.RegexPattern;
+            _pendingMatchTarget = _selectedGame.MatchTarget;
 
             SetDetailVisible(true);
             _updatingUI = false;
@@ -3029,9 +3078,10 @@ namespace NoBorders
                 {
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
                     if (string.IsNullOrWhiteSpace(p.MainWindowTitle)) continue;
-                    string exe = (p.ProcessName + ".exe").ToLowerInvariant();
-                    if (!_selectedGame.IsProcessMatch(exe)) continue;
-                    found = p.MainWindowTitle.Trim();
+                    string exe   = (p.ProcessName + ".exe").ToLowerInvariant();
+                    string title = p.MainWindowTitle.Trim();
+                    if (!_selectedGame.IsMatch(exe, title)) continue;
+                    found = title;
                     break;
                 }
                 catch { /* process may have exited */ }
@@ -3074,12 +3124,22 @@ namespace NoBorders
             _appState.RaiseChanged();
         }
 
+        /// <summary>Same shape as <see cref="SetPendingRegexPattern"/>, for the
+        /// Window Title/Process Name chips — writes the pending buffer only,
+        /// Save Changes still owns committing it to GameConfig.MatchTarget.</summary>
+        private void SetPendingMatchTarget(MatchTargetMode mode)
+        {
+            _pendingMatchTarget = mode;
+            _appState.RaiseChanged();
+        }
+
         private void BtnSaveGame_Click(object? sender, EventArgs e)
         {
             if (_selectedGame == null) return;
             CaptureUndoSnapshot(_selectedGame); // Phase 4.13 — before any mutation below
             _selectedGame.GameName     = _txtGameName.Text.Trim();
             _selectedGame.RegexPattern = _txtRegex.Text.Trim();
+            _selectedGame.MatchTarget  = _pendingMatchTarget;
             _selectedGame.InvalidatePattern();
             SaveUIToProfile(_activeScope);
             SaveConfig();
@@ -3103,6 +3163,7 @@ namespace NoBorders
             _undoTarget       = game;
             _undoGameName     = game.GameName;
             _undoRegexPattern = game.RegexPattern;
+            _undoMatchTarget  = game.MatchTarget;
             _undoProfiles     = game.Profiles.ToDictionary(
                 kv => kv.Key,
                 kv => new GameDisplayProfile
@@ -3129,6 +3190,7 @@ namespace NoBorders
 
             game.GameName     = _undoGameName;
             game.RegexPattern = _undoRegexPattern;
+            game.MatchTarget  = _undoMatchTarget;
             game.InvalidatePattern();
             game.Profiles.Clear();
             foreach (var kv in _undoProfiles) game.Profiles[kv.Key] = kv.Value;
@@ -3512,12 +3574,70 @@ namespace NoBorders
         /// </returns>
         /// <summary>
         /// review.md §5: the exe-basename cleanup extracted out of AddGame so
-        /// it's testable in isolation — strips common build-variant suffixes
-        /// (debug/shipping/platform tags) so e.g. "HELLDIVERS2-Win64-Shipping"
-        /// and "HELLDIVERS2" are recognized as the same game.
+        /// it's testable in isolation — strips known engine/platform/build
+        /// tags (Unreal Engine's own packaging convention chains them:
+        /// "&lt;Name&gt;-Win64-Shipping.exe", "&lt;Name&gt;-Win64-Test.exe",
+        /// etc.) so e.g. "HELLDIVERS2-Win64-Shipping" and "HELLDIVERS2" are
+        /// recognized as the same game.
+        ///
+        /// Bugfix: a single Regex.Replace call only ever stripped one tag —
+        /// Replace removes non-overlapping matches from the ORIGINAL string
+        /// in one pass, it doesn't re-scan its own output, so
+        /// "HELLDIVERS2-Win64-Shipping" used to lose only "-Shipping",
+        /// leaving "-Win64" behind (previously documented as observed, not
+        /// fixed, in MainFormLogicTests.cs). Now loops to a fixed point so a
+        /// full chain strips, and also strips a leading tag (e.g.
+        /// "Win64-GameName"), not just a trailing one.
+        ///
+        /// Deliberately NOT in the tag list despite being common build
+        /// vocabulary: "release"/"final"/"development" — too likely to
+        /// collide with a real game's actual title ("Final Fantasy" would
+        /// lose "Final" if "final" were a strippable prefix). Only tokens
+        /// that are essentially never real words in a game title made the
+        /// cut. The lone "d" abbreviation stays suffix-only for the same
+        /// reason (as a prefix it would mangle e.g. "D-Day").
         /// </summary>
-        internal static string CleanExeBaseName(string baseName) =>
-            Regex.Replace(baseName, @"(-d|-shipping|-win64|-win32|-test|-debug)$", string.Empty, RegexOptions.IgnoreCase);
+        private static readonly Regex EdgeTagPattern = new(
+            @"^(?:shipping|win64|win32|wingdk|x64|x86|test|debug)[-_]|[-_](?:d|shipping|win64|win32|wingdk|x64|x86|test|debug)$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        internal static string CleanExeBaseName(string baseName)
+        {
+            string result = baseName, previous;
+            do
+            {
+                previous = result;
+                result = EdgeTagPattern.Replace(previous, string.Empty);
+            } while (result != previous);
+            return result;
+        }
+
+        /// <summary>
+        /// Bugfix: a real live game window title ("ARC Raiders") was found to
+        /// contain embedded zero-width Unicode characters (U+FEFF, U+200B,
+        /// U+2005) invisible in the UI but persisted verbatim into
+        /// GameName — confirmed in a real games_config.json. GetWindowText
+        /// returns whatever the OS/game puts in the title bar with no
+        /// guarantee it's "clean" text, and .Trim() only strips leading/
+        /// trailing whitespace, not characters embedded mid-string. Strips
+        /// Unicode format characters (Cf — zero-width joiners, BOM, etc.,
+        /// which have no width so no replacement is needed) and normalizes
+        /// non-standard space separators (Zs other than U+0020, e.g. the
+        /// four-per-em space seen above) to a normal space rather than
+        /// deleting them, so words that were space-separated stay
+        /// separated.
+        /// </summary>
+        internal static string SanitizeDisplayName(string name)
+        {
+            var sb = new StringBuilder(name.Length);
+            foreach (char c in name)
+            {
+                var category = CharUnicodeInfo.GetUnicodeCategory(c);
+                if (category == UnicodeCategory.Format) continue;
+                sb.Append(category == UnicodeCategory.SpaceSeparator && c != ' ' ? ' ' : c);
+            }
+            return sb.ToString().Trim();
+        }
 
         private bool AddGame(string input, bool isFullPath, string? displayName = null)
         {
@@ -3530,7 +3650,7 @@ namespace NoBorders
             // Display name: prefer the window title passed from the picker;
             // fall back to the sanitized exe basename (browse path).
             string gameName  = !string.IsNullOrWhiteSpace(displayName)
-                ? displayName.Trim()
+                ? SanitizeDisplayName(displayName)
                 : cleanName;
 
             // Dupe check against both the display name and the exe basename so
@@ -4036,6 +4156,21 @@ namespace NoBorders
         /// process is elevated and this one isn't (that failure means "not us"
         /// safely, so it's caught and ignored rather than treated as a match).
         /// </summary>
+        /// <summary>
+        /// review.md §3: shared by every window-title-matching call site.
+        /// Fetches the title directly from the window handle rather than
+        /// Process.MainWindowTitle — HotkeyAdd's own doc comment (below) notes
+        /// the latter "can lag or return empty"; GetWindowText talks to the
+        /// window itself instead of relying on the Process object's cached
+        /// snapshot, so it's used everywhere a hwnd is already in hand.
+        /// </summary>
+        private static string GetWindowTitle(IntPtr hwnd)
+        {
+            var sb = new System.Text.StringBuilder(512);
+            GetWindowText(hwnd, sb, sb.Capacity);
+            return sb.ToString().Trim();
+        }
+
         private bool TryGetHotkeyTargetExe(IntPtr hwnd, out string exeName)
         {
             exeName = string.Empty;
@@ -4085,14 +4220,10 @@ namespace NoBorders
 
             try
             {
-                // Fetch the window title directly from the handle — more reliable
-                // than Process.MainWindowTitle which can lag or return empty.
-                var sb = new System.Text.StringBuilder(512);
-                GetWindowText(hwnd, sb, sb.Capacity);
-                string windowTitle = sb.ToString().Trim();
+                string windowTitle = GetWindowTitle(hwnd);
                 AppLogger.Log($"HotkeyAdd: windowTitle=\"{windowTitle}\"");
 
-                bool alreadyTracked = _settings.Games.Any(g => g.IsProcessMatch(exeName));
+                bool alreadyTracked = _settings.Games.Any(g => g.IsMatch(exeName, windowTitle));
                 AppLogger.Log($"HotkeyAdd: alreadyTracked={alreadyTracked}");
 
                 if (!alreadyTracked && this.IsHandleCreated)
@@ -4139,7 +4270,7 @@ namespace NoBorders
                 {
                     // Game is already in the list — apply borderless instead.
                     AppLogger.Log("HotkeyAdd: game already tracked, applying borderless.");
-                    var match = _settings.Games.First(g => g.IsProcessMatch(exeName));
+                    var match = _settings.Games.First(g => g.IsMatch(exeName, windowTitle));
                     _trackedWindows[hwnd] = match;
                     ApplyBorderless(hwnd, match);
                     ShowToast($"Borderless applied\n{match.GameName}", success: true, match.IconImagePath);
@@ -4162,9 +4293,10 @@ namespace NoBorders
 
             try
             {
-                string exeName = exeNameRaw.ToLowerInvariant();
+                string exeName    = exeNameRaw.ToLowerInvariant();
+                string windowTitle = GetWindowTitle(hwnd);
                 var match       = _settings.Games.FirstOrDefault(g =>
-                    g.IsActive && g.IsProcessMatch(exeName));
+                    g.IsActive && g.IsMatch(exeName, windowTitle));
                 if (match == null)
                 {
                     ShowToast("Foreground app is not in the game list.", success: false);
@@ -4206,10 +4338,11 @@ namespace NoBorders
 
         private void MatchAndApply(IntPtr hwnd, Process p)
         {
-            string exe = (p.ProcessName + ".exe").ToLowerInvariant();
+            string exe   = (p.ProcessName + ".exe").ToLowerInvariant();
+            string title = GetWindowTitle(hwnd);
             foreach (var g in _settings.Games)
             {
-                if (g.IsActive && g.IsProcessMatch(exe))
+                if (g.IsActive && g.IsMatch(exe, title))
                 {
                     ApplyBorderless(hwnd, g);
                     _trackedWindows[hwnd] = g;
@@ -4233,12 +4366,13 @@ namespace NoBorders
                         if (GetWindowThreadProcessId(hwnd, out uint pid) == 0 || pid == 0) continue;
                         using var p  = Process.GetProcessById((int)pid);
                         string exe   = (p.ProcessName + ".exe").ToLowerInvariant();
+                        string title = GetWindowTitle(hwnd);
                         GetWindowRect(hwnd, out RECT r);
                         if ((r.Right - r.Left) < 100) continue;
 
                         foreach (var g in _settings.Games)
                         {
-                            if (g.IsActive && g.IsProcessMatch(exe))
+                            if (g.IsActive && g.IsMatch(exe, title))
                             {
                                 ApplyBorderless(hwnd, g);
                                 _trackedWindows[hwnd] = g;
@@ -4266,7 +4400,7 @@ namespace NoBorders
                 try
                 {
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
-                    if (g.IsProcessMatch((p.ProcessName + ".exe").ToLowerInvariant()))
+                    if (g.IsMatch((p.ProcessName + ".exe").ToLowerInvariant(), GetWindowTitle(p.MainWindowHandle)))
                     {
                         ApplyBorderless(p.MainWindowHandle, g);
                         _trackedWindows[p.MainWindowHandle] = g;
@@ -4329,10 +4463,11 @@ namespace NoBorders
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
                     if (_trackedWindows.ContainsKey(p.MainWindowHandle)) continue;
 
-                    string exe = (p.ProcessName + ".exe").ToLowerInvariant();
+                    string exe   = (p.ProcessName + ".exe").ToLowerInvariant();
+                    string title = GetWindowTitle(p.MainWindowHandle);
                     foreach (var g in _settings.Games)
                     {
-                        if (!g.IsActive || !g.IsProcessMatch(exe)) continue;
+                        if (!g.IsActive || !g.IsMatch(exe, title)) continue;
                         if (trackedGames.Contains(g)) continue;
 
                         // Verify the window is sized (not a splash/loading stub)
@@ -4477,8 +4612,9 @@ namespace NoBorders
                 if (pid == 0) { ClipCursor(IntPtr.Zero); return; }
                 using var p   = Process.GetProcessById((int)pid);
                 string exeName = (p.ProcessName + ".exe").ToLowerInvariant();
+                string title   = GetWindowTitle(hwnd);
                 var match      = _settings.Games.FirstOrDefault(g =>
-                    g.IsActive && g.IsProcessMatch(exeName));
+                    g.IsActive && g.IsMatch(exeName, title));
 
                 if (match != null)
                 {
@@ -4966,10 +5102,11 @@ namespace NoBorders
                 try
                 {
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
-                    string exe = (p.ProcessName + ".exe").ToLowerInvariant();
+                    string exe   = (p.ProcessName + ".exe").ToLowerInvariant();
+                    string title = GetWindowTitle(p.MainWindowHandle);
                     foreach (var g in _settings.Games)
                     {
-                        if (!g.IsActive || !g.IsProcessMatch(exe)) continue;
+                        if (!g.IsActive || !g.IsMatch(exe, title)) continue;
                         GetWindowRect(p.MainWindowHandle, out RECT r);
                         AppLogger.Log($"  Found running game '{g.GameName}' (hwnd={p.MainWindowHandle}, rect={r.Left},{r.Top},{r.Right},{r.Bottom})");
                         ApplyBorderless(p.MainWindowHandle, g);

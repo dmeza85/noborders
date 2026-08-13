@@ -80,7 +80,10 @@
 
     <div class="nb-add-app__footer">
         <div class="nb-add-app__tip">
-            Tip: press <span class="nb-mono nb-add-app__tip-key">Ctrl+Shift+A</span> in-game to add the focused window.
+            @if (AddHotkeyHint != null)
+            {
+                <text>Tip: press <span class="nb-mono nb-add-app__tip-key">@AddHotkeyHint</span> in-game to add the focused window.</text>
+            }
             <div class="nb-add-app__browse" @onclick="Browse">Not running? Browse for EXE…</div>
         </div>
         <button type="button" class="nb-btn nb-btn--outline nb-add-app__cancel" @onclick="Cancel" disabled="@_adding">Cancel</button>
@@ -96,7 +99,21 @@
     private OpenWindowEntry? _selected;
     private bool _adding;
 
-    private bool IsTracked(OpenWindowEntry row) => State.Games.Any(g => g.IsProcessMatch(row.Exe));
+    private bool IsTracked(OpenWindowEntry row) => State.Games.Any(g => g.IsMatch(row.Exe, row.WindowTitle));
+
+    // Same bug MainShell.razor's footer had before its Phase 8.8 fix: this
+    // tip hardcoded "Ctrl+Shift+A" (the app's default) instead of the user's
+    // actual configured hotkey, so a real rebind (e.g. to Ctrl+F9) left this
+    // modal showing a shortcut that no longer does anything. Mirrors
+    // MainShell's HintOrNull — hides the tip entirely rather than showing
+    // "press  in-game..." if the hotkey's been cleared.
+    private string? AddHotkeyHint => HintOrNull(State.HotkeyAddApp);
+
+    private static string? HintOrNull(HotkeyConfig cfg)
+    {
+        string text = cfg.ToString();
+        return text == "None" ? null : text;
+    }
 
     private async Task Cancel() => await OnClose.InvokeAsync();
 

@@ -104,6 +104,7 @@
   border: 1px solid var(--nb-border);
   color: var(--nb-text-secondary);
   font: 500 11.5px/1 var(--nb-font-ui);
+  cursor: pointer;
 }
 
 .nb-matching-pane__chip--active {
@@ -111,14 +112,6 @@
   border-color: rgba(var(--nb-accent-rgb), .4);
   color: var(--nb-accent-text);
   font-weight: 600;
-}
-
-/* review.md §3: "Window Title" isn't real functionality yet (see the doc
-   comment above) — visibly inert instead of looking like an unselected-
-   but-clickable option next to --active. */
-.nb-matching-pane__chip--disabled {
-  opacity: .45;
-  cursor: not-allowed;
 }
 
 .nb-matching-pane__exe {

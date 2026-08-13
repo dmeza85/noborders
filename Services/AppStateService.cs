@@ -190,6 +190,17 @@ namespace NoBorders.Services
         public void SetPendingRegexPattern(string pattern) => _bridge.SetPendingRegexPattern(pattern);
 
         /// <summary>
+        /// review.md §3: which of the Matching tab's two chips is selected —
+        /// Process Name (the default, and the only mode that existed before
+        /// this) or Window Title. Same pending/Save-Changes-commits shape as
+        /// <see cref="PendingRegexPattern"/>.
+        /// </summary>
+        public MatchTargetMode PendingMatchTarget => _bridge.PendingMatchTarget;
+
+        /// <summary>Writes the pending buffer only, same as <see cref="SetPendingRegexPattern"/> — Save Changes still owns actually persisting it.</summary>
+        public void SetPendingMatchTarget(MatchTargetMode mode) => _bridge.SetPendingMatchTarget(mode);
+
+        /// <summary>
         /// Commits the pending edits — <see cref="PendingDisplayName"/>, the
         /// match pattern, and the active scope's numeric/lock-cursor fields —
         /// onto the selected game and persists them, exactly as clicking either
