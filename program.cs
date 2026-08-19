@@ -175,6 +175,14 @@ namespace NoBorders
             = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, GameDisplayProfile> MonitorDefaults { get; set; }
             = new Dictionary<string, GameDisplayProfile>(StringComparer.OrdinalIgnoreCase);
+
+        // User request (2026-08-13): the last real resolution seen for each
+        // monitor ID, updated every RefreshMonitors — see MonitorResolution's
+        // own doc comment for why this exists (Display/Monitors' Result
+        // Preview and coverage %% now work for a disconnected monitor
+        // instead of showing "not connected — preview unavailable").
+        public Dictionary<string, MonitorResolution> LastKnownMonitorResolutions { get; set; }
+            = new Dictionary<string, MonitorResolution>(StringComparer.OrdinalIgnoreCase);
         public List<GameConfig> Games              { get; set; } = new List<GameConfig>();
         public bool             MinimizeToTray     { get; set; } = true;
         public bool             StartWithWindows   { get; set; } = false;
@@ -262,6 +270,23 @@ namespace NoBorders
         public int  Height        { get; set; }
         public bool Primary       { get; set; }
         public override string ToString() => ID;
+    }
+
+    /// <summary>
+    /// User request (2026-08-13): a monitor's real resolution, captured the
+    /// last time RefreshMonitors actually saw it connected — unlike
+    /// MonitorItem (never serialized, live-only), this persists to
+    /// games_config.json so the Result Preview/coverage math keeps working
+    /// for a monitor that's since been unplugged, instead of the "not
+    /// connected — preview unavailable" placeholder ResultPreview fell back
+    /// to before this (which was itself a fix for an earlier bug: guessing
+    /// the window's own size as a stand-in for an unknown monitor silently
+    /// produced a wrong, self-contradicting preview).
+    /// </summary>
+    public class MonitorResolution
+    {
+        public int Width  { get; set; }
+        public int Height { get; set; }
     }
 
     /// <summary>
@@ -891,6 +916,12 @@ namespace NoBorders
         bool AlwaysRunAsAdmin { get; set; }
         bool VerboseLogging { get; set; }
         void DismissElevationDialog();
+        bool ToastVisible { get; }
+        string ToastTitle { get; }
+        string ToastDetail { get; }
+        string ToastIconPath { get; }
+        LogLevel ToastLevel { get; }
+        MonitorResolution? GetLastKnownMonitorResolution(string monitorId);
         List<string> GetIgnoredProcesses();
         void AddIgnoredProcess(string exeName);
         void RemoveIgnoredProcess(string exeName);
@@ -1290,6 +1321,13 @@ namespace NoBorders
         // window handle by the time WM_HOTKEY is processed.
         private IntPtr _lastForegroundHwnd = IntPtr.Zero;
         private bool   _wasHiddenBeforeSleep = false; // tracks tray state across sleep/wake
+        // Set when OnWake() re-hides the form to tray after a sleep cycle —
+        // WebView2's compositor can lose its swap chain to the sleep/wake GPU
+        // reset while hidden and never gets a repaint request to recover from
+        // it, so the window comes back as a blank grey rectangle the next
+        // time RestoreFromTray() (MainForm.Tray.cs) makes it visible. Cleared
+        // there once the repaint workaround has run.
+        private bool   _webViewNeedsRepaintAfterWake = false;
         private bool   _isElevated = false; // true if this process is running as Administrator
         // Games we've already shown an elevation-related toast for this session,
         // so the warning fires once per game rather than every enforcement tick.
@@ -1512,6 +1550,13 @@ namespace NoBorders
             set { _settings.VerboseLogging = value; AppLogger.VerboseEnabled = value; QueueSave(); _appState.RaiseChanged(); }
         }
         void IMainFormBridge.DismissElevationDialog() => CloseElevationDialog();
+        bool IMainFormBridge.ToastVisible => _toastVisible;
+        string IMainFormBridge.ToastTitle => _toastTitle;
+        string IMainFormBridge.ToastDetail => _toastDetail;
+        string IMainFormBridge.ToastIconPath => _toastIconPath;
+        LogLevel IMainFormBridge.ToastLevel => _toastLevel;
+        MonitorResolution? IMainFormBridge.GetLastKnownMonitorResolution(string monitorId) =>
+            _settings.LastKnownMonitorResolutions.TryGetValue(monitorId, out var res) ? res : null;
         List<string> IMainFormBridge.GetIgnoredProcesses() => GetIgnoredProcesses();
         void IMainFormBridge.AddIgnoredProcess(string exeName) => AddIgnoredProcess(exeName);
         void IMainFormBridge.RemoveIgnoredProcess(string exeName) => RemoveIgnoredProcess(exeName);
@@ -3314,7 +3359,7 @@ namespace NoBorders
             var entry = _trackedWindows.FirstOrDefault(kv => kv.Value == game);
             if (entry.Key == IntPtr.Zero)
             {
-                ShowToast($"{game.GameName} isn't currently running.", success: false);
+                ShowToast($"{game.GameName} isn't currently running.", LogLevel.Warn);
                 AppLogger.Log($"ReapplyBorderlessForSelectedGame: '{game.GameName}' has no tracked window.", LogLevel.Warn);
                 return;
             }
@@ -3323,7 +3368,7 @@ namespace NoBorders
             // display configuration changed since startup we have current data.
             RefreshMonitors();
             ApplyBorderless(entry.Key, game);
-            ShowToast($"Borderless re-applied\n{game.GameName}", success: true, game.IconImagePath);
+            ShowToast($"Borderless re-applied\n{game.GameName}", LogLevel.Ok, game.IconImagePath);
             AppLogger.Log($"Borderless re-applied to '{game.GameName}' via Re-Apply button.", LogLevel.Ok);
         }
 
@@ -3454,7 +3499,7 @@ namespace NoBorders
             // was never actually visible to a Blazor-UI user, making "Save
             // Changes" look like a no-op even though it was persisting fine.
             // The toast is real, on-screen confirmation.
-            ShowToast($"Changes saved\n{_selectedGame.GameName} — {_activeScope}", success: true, _selectedGame.IconImagePath);
+            ShowToast($"Changes saved\n{_selectedGame.GameName} — {_activeScope}", LogLevel.Ok, _selectedGame.IconImagePath);
         }
 
         /// <summary>Records <paramref name="game"/>'s pre-Save state so <see cref="UndoLastSave"/> can restore it. See the field group's doc comment for the single-level-undo rationale.</summary>
@@ -4265,7 +4310,7 @@ namespace NoBorders
             t.Tick += (ts, te) => { _btnSaveDefault.Text = "Save Monitor Default"; t.Stop(); t.Dispose(); };
             t.Start();
 
-            ShowToast($"Monitor default saved\n{sel}", success: true);
+            ShowToast($"Monitor default saved\n{sel}", LogLevel.Ok);
         }
 
         /// <summary>
@@ -4541,7 +4586,7 @@ namespace NoBorders
                         // dialog saying it wasn't.
                         if (AddGame(exeName, false, nameToUse))
                         {
-                            ShowToast($"Added & borderless applied\n{nameToUse}", success: true);
+                            ShowToast($"Added & borderless applied\n{nameToUse}", LogLevel.Ok);
                             AppLogger.Log($"Added & borderless applied to '{nameToUse}'.", LogLevel.Ok);
 
                             // Phase 8.4: same auto-fetch-artwork-on-add as the
@@ -4573,7 +4618,7 @@ namespace NoBorders
                     var match = _settings.Games.First(g => g.IsMatch(exeName, windowTitle));
                     _trackedWindows[hwnd] = match;
                     ApplyBorderless(hwnd, match);
-                    ShowToast($"Borderless applied\n{match.GameName}", success: true, match.IconImagePath);
+                    ShowToast($"Borderless applied\n{match.GameName}", LogLevel.Ok, match.IconImagePath);
                     AppLogger.Log($"Borderless applied to '{match.GameName}'.", LogLevel.Ok);
                 }
             }
@@ -4599,7 +4644,7 @@ namespace NoBorders
                     g.IsActive && g.IsMatch(exeName, windowTitle));
                 if (match == null)
                 {
-                    ShowToast("Foreground app is not in the game list.", success: false);
+                    ShowToast("Foreground app is not in the game list.", LogLevel.Warn);
                     AppLogger.Log("HotkeyRefresh: foreground app is not in the game list.", LogLevel.Warn);
                     return;
                 }
@@ -4612,7 +4657,7 @@ namespace NoBorders
                 // re-apply using the now-current monitor layout.
                 _trackedWindows[hwnd] = match;
                 ApplyBorderless(hwnd, match);
-                ShowToast($"Borderless re-applied\n{match.GameName}", success: true, match.IconImagePath);
+                ShowToast($"Borderless re-applied\n{match.GameName}", LogLevel.Ok, match.IconImagePath);
                 AppLogger.Log($"Borderless re-applied to '{match.GameName}'.", LogLevel.Ok);
             }
             catch (Exception ex) { AppLogger.Log(ex, "HotkeyRefresh"); }
@@ -4907,7 +4952,7 @@ namespace NoBorders
                 ShowToast(
                     $"Couldn't fully apply borderless to {g.GameName}.\n"
                     + "Try Settings → Restart as Administrator.",
-                    success: false, g.IconImagePath);
+                    LogLevel.Error, g.IconImagePath);
             }
         }
 
@@ -5050,36 +5095,92 @@ namespace NoBorders
             dialog.Dispose();
         }
 
+        // In-app toast state, read by Blazor via IMainFormBridge (below) and
+        // rendered centered in MainShell's own status bar — only used while
+        // MainForm is actually visible (see ShowToast's doc comment).
+        private System.Windows.Forms.Timer? _toastTimer;
+        private string _toastTitle = "";
+        private string _toastDetail = "";
+        private string _toastIconPath = "";
+        private LogLevel _toastLevel = LogLevel.Ok;
+        private bool _toastVisible;
+
         /// <summary>
-        /// Shows a small non-stealing toast notification in the bottom-right corner
-        /// of the primary screen, auto-dismissing after ~6s. Safe to call from
-        /// background threads — marshals to the UI thread.
+        /// Shows a status notification, auto-dismissing after ~6s. Safe to call
+        /// from background threads — marshals to the UI thread.
         ///
-        /// Phase 6.2 (MIGRATION_PLAN.md): reimplemented on top of a dedicated,
-        /// always-on-top BlazorWebView window hosting Components/Screens/Toast.razor
-        /// (screen 1g) instead of the original hand-drawn GDI popup — the
-        /// Adaptation Decision made for this item, since the toast's screen-corner
-        /// position is independent of MainForm (visible even if MainForm is
-        /// minimized/covered), which a docked overlay inside MainForm's own
-        /// BlazorWebView couldn't reproduce. `message` keeps its original shape
-        /// (an optional `\n`-separated "Title\nDetail", as every existing call site
-        /// already passes) so none of the seven call sites needed to change.
+        /// User request (2026-08-13): while MainForm is visible, the message
+        /// now renders centered in MainShell's own status bar instead of a
+        /// screen-corner popup — "most of the actions are performed within the
+        /// app itself," so a docked notification is enough since the user is
+        /// already looking at the window. The dedicated always-on-top popup
+        /// (Phase 6.2's BlazorWebView-hosted Form) is kept, but now used only
+        /// when MainForm is hidden/minimized to tray — a hotkey-triggered add
+        /// or an enforcement failure firing while the window isn't on screen
+        /// at all still needs *some* visible confirmation, which the in-app
+        /// status bar obviously can't provide when nobody can see it. Same
+        /// "hidden" check MainForm.Sleep.cs already uses for
+        /// _wasHiddenBeforeSleep. Also replaces the old binary success/danger
+        /// coloring with the app's existing three-tier LogLevel scheme
+        /// (Ok=green, Info/Warn=yellow, Error=red) in both paths. `message`
+        /// keeps its original shape (an optional `\n`-separated
+        /// "Title\nDetail") so call sites barely changed — only the old `bool
+        /// success` argument became a `LogLevel`.
         /// </summary>
-        private void ShowToast(string message, bool success = true, string iconPath = "")
+        private void ShowToast(string message, LogLevel level = LogLevel.Ok, string iconPath = "")
         {
             if (!this.IsHandleCreated) return;
 
             // Marshal to UI thread if called from a hotkey/background context.
             if (this.InvokeRequired)
             {
-                this.BeginInvoke(new MethodInvoker(() => ShowToast(message, success, iconPath)));
+                this.BeginInvoke(new MethodInvoker(() => ShowToast(message, level, iconPath)));
                 return;
             }
 
             int nl = message.IndexOf('\n');
-            string title  = nl >= 0 ? message[..nl] : (success ? "NoBorders" : "Action failed");
+            string title  = nl >= 0 ? message[..nl] : (level == LogLevel.Error ? "Action failed" : "NoBorders");
             string detail = nl >= 0 ? message[(nl + 1)..] : message;
 
+            bool hidden = !this.Visible || this.WindowState == FormWindowState.Minimized;
+            if (hidden)
+            {
+                ShowPopupToast(title, detail, level, iconPath);
+                return;
+            }
+
+            _toastTitle    = title;
+            _toastDetail   = detail;
+            _toastLevel    = level;
+            _toastIconPath = iconPath;
+            _toastVisible  = true;
+            _appState.RaiseChanged();
+
+            const int holdMs = 6000; // same duration the popup's progress bar animates over
+
+            _toastTimer?.Stop();
+            _toastTimer?.Dispose();
+            _toastTimer = new System.Windows.Forms.Timer { Interval = holdMs };
+            _toastTimer.Tick += (s, e) =>
+            {
+                _toastTimer!.Stop();
+                _toastTimer.Dispose();
+                _toastTimer = null;
+                _toastVisible = false;
+                _appState.RaiseChanged();
+            };
+            _toastTimer.Start();
+        }
+
+        /// <summary>
+        /// The original Phase 6.2 popup: a small non-stealing toast in the
+        /// bottom-right corner of the primary screen, auto-dismissing after
+        /// ~6s, hosted in its own dedicated always-on-top BlazorWebView
+        /// window. Only reached from ShowToast when MainForm itself is
+        /// hidden/minimized — see that method's own doc comment.
+        /// </summary>
+        private void ShowPopupToast(string title, string detail, LogLevel level, string iconPath)
+        {
             const int toastWidth  = 330;
             const int toastHeight = 100; // fits title + 2-line detail, same fixed-size simplification the GDI popup used
             const int cornerGap   = 18;
@@ -5095,7 +5196,7 @@ namespace NoBorders
             {
                 [nameof(Components.Screens.Toast.Title)]   = title,
                 [nameof(Components.Screens.Toast.Detail)]  = detail,
-                [nameof(Components.Screens.Toast.Success)] = success,
+                [nameof(Components.Screens.Toast.Level)]   = level,
                 [nameof(Components.Screens.Toast.IconUrl)] = iconPath
             };
             toastView.RootComponents.Add<Components.Screens.Toast>("#app", parameters);
@@ -5532,6 +5633,7 @@ namespace NoBorders
                 this.Hide();
                 this.ShowInTaskbar = false;
                 this.WindowState   = FormWindowState.Minimized;
+                _webViewNeedsRepaintAfterWake = true;
                 AppLogger.Log("  Form was hidden before sleep — re-hidden after wake.");
             }
             else

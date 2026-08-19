@@ -26,7 +26,22 @@
    (OnInitializedAsync) and the manual one (ConfirmSelected) both go through
    ArtworkService.TryAutoFetchAsync/DownloadAsync + AppStateService.
    ApplyArtwork — same underlying write, just reached without a click when
-   there's an unambiguous match to act on. *@
+   there's an unambiguous match to act on.
+
+   Bugfix (user report, 2026-08-13): "Use this game's own icon instead"
+   looked completely dead for a game with no recorded ExePath (ExtractExeIcon
+   requires a real, existing .exe path — nothing to extract an icon FROM
+   otherwise). It wasn't actually dead: UseExeIconOnly did set _error and
+   call StateHasChanged() correctly, but that error used to render as the
+   LAST item inside .nb-art-picker__body — the scrollable
+   (max-height:360px, overflow-y:auto) candidate-rows container. A search
+   with enough candidates to fill that height (confirmed live, 6 results)
+   pushed the freshly-added error completely below the fold with no
+   scrollbar affordance drawing attention to it and no auto-scroll —
+   confirmed live: the message was there, just invisible, one scroll away.
+   Moved out of the scrollable body entirely, into its own always-visible
+   block between the body and footer, so it can never be scrolled out of
+   view again regardless of how many search results are showing. *@
 
 <ModalOverlay Width="480">
     <div class="nb-art-picker__header">
@@ -76,12 +91,12 @@
                 }
             </div>
         }
-
-        @if (_error != null)
-        {
-            <div class="nb-art-picker__status nb-art-picker__status--error">@_error</div>
-        }
     </div>
+
+    @if (_error != null)
+    {
+        <div class="nb-art-picker__error nb-mono">@_error</div>
+    }
 
     <div class="nb-art-picker__footer">
         <div class="nb-art-picker__fallback" @onclick="UseExeIconOnly">Use this game's own icon instead</div>
@@ -165,6 +180,7 @@
     private async Task UseExeIconOnly()
     {
         string? iconPath = Artwork.ExtractExeIcon(Game.ExePath, Slug);
+        NoBorders.AppLogger.LogVerbose($"ExtractExeIcon('{Game.ExePath}'): {(iconPath ?? "no ExePath on file / extraction failed")}.");
         if (iconPath == null)
         {
             _error = "Couldn't read an icon from this game's .exe.";

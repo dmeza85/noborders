@@ -17,6 +17,17 @@
   color: var(--nb-text-primary);
 }
 
+/* User request: clicking the number swaps the plain div for this input,
+   same box/font otherwise so nothing visibly shifts. */
+.nb-numfield__input {
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+  min-width: 0;
+}
+
 .nb-numfield__stepper {
   display: flex;
   flex-direction: column;

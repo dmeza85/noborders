@@ -76,6 +76,7 @@ namespace NoBorders
                 _settings.HotkeyAddApp    ??= new HotkeyConfig { Modifiers = MOD_CONTROL | MOD_SHIFT, Key = (uint)Keys.A };
                 _settings.HotkeyRefreshApp ??= new HotkeyConfig { Modifiers = MOD_CONTROL | MOD_SHIFT, Key = (uint)Keys.R };
                 _settings.IgnoredProcesses ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _settings.LastKnownMonitorResolutions ??= new Dictionary<string, MonitorResolution>(StringComparer.OrdinalIgnoreCase);
 
                 // Settings > Ignore List (Phase 8.4): _settings.IgnoredProcesses
                 // holds only the user's own additions — the built-in

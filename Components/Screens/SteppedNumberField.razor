@@ -1,4 +1,6 @@
 @namespace NoBorders.Components.Screens
+@using Microsoft.AspNetCore.Components.Web
+@inject IJSRuntime JS
 @* Phase 8.4: real interaction — ▲/▼ step the value by 1, ×10 with Shift
    held, ×100 with Ctrl held, per design-handoff/README.md's documented
    "Arrows step by 1 px · hold Shift for 10 · Ctrl for 100". Reports a
@@ -8,10 +10,33 @@
    live NumericTextBox fields underneath; Save Changes/Save Monitor Default
    already read them, Blazor just never had a way to change them before
    this), so the caller is the one that knows which shadow field to adjust
-   and by how much. *@
+   and by how much.
+
+   User request (2026-08-13): clicking the number itself (not the ▲/▼
+   stepper) now turns it into a real text input with the whole value
+   pre-selected, so typing immediately overwrites it — "having to click on
+   the numbers... is not intuitive" was really "there's no way to type a
+   value at all," since @@Value was a plain, non-interactive div. Still
+   reports through the same OnStep delta callback the arrows use (typed
+   value minus the old Value), not a new absolute-value event, so every
+   caller's existing Adjust*/clamping logic keeps working completely
+   unchanged — this component doesn't need to know anything about valid
+   ranges, same as before. wwwroot/js/numField.js's own doc comment covers
+   the one JS interop call this needs (Blazor has no built-in "select all
+   text in this input" API). *@
 
 <div class="nb-numfield @(BorderSubtle ? "nb-numfield--subtle" : "")">
-    <div class="nb-numfield__value nb-text-field-value">@Value</div>
+    @if (_editing)
+    {
+        <input @ref="_inputRef" class="nb-numfield__value nb-numfield__input nb-text-field-value"
+               value="@_editText" @oninput="OnInput"
+               @onblur="CommitEdit" @onkeydown="OnKeyDown"
+               inputmode="numeric" />
+    }
+    else
+    {
+        <div class="nb-numfield__value nb-text-field-value" @onclick="BeginEdit">@Value</div>
+    }
     <div class="nb-numfield__stepper">
         <button type="button" class="nb-numfield__btn" aria-label="Increase" @onclick="(e) => Step(e, 1)">▲</button>
         <button type="button" class="nb-numfield__btn" aria-label="Decrease" @onclick="(e) => Step(e, -1)">▼</button>
@@ -32,9 +57,60 @@
     /// Minimum/Maximum silently rather than throwing).</summary>
     [Parameter] public EventCallback<int> OnStep { get; set; }
 
-    private Task Step(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int direction)
+    private bool _editing;
+    private bool _focusPending;
+    private string _editText = "";
+    private ElementReference _inputRef;
+
+    private Task Step(MouseEventArgs e, int direction)
     {
         int magnitude = e.CtrlKey ? 100 : e.ShiftKey ? 10 : 1;
         return OnStep.InvokeAsync(direction * magnitude);
+    }
+
+    private void BeginEdit()
+    {
+        _editText = Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _editing = true;
+        _focusPending = true;
+    }
+
+    private void OnInput(ChangeEventArgs e) => _editText = e.Value?.ToString() ?? "";
+
+    private Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") return CommitEdit();
+        if (e.Key == "Escape")
+        {
+            // Reset _editText back to the live value too, not just flip
+            // _editing off — a stray native blur firing right after Escape
+            // (the input unmounting can trigger one) would otherwise still
+            // call CommitEdit with whatever the user had typed before
+            // escaping and silently apply it anyway.
+            _editText = Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _editing = false;
+        }
+        return Task.CompletedTask;
+    }
+
+    private Task CommitEdit()
+    {
+        _editing = false;
+        if (int.TryParse(_editText, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int typed))
+        {
+            int delta = typed - Value;
+            if (delta != 0) return OnStep.InvokeAsync(delta);
+        }
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPending)
+        {
+            _focusPending = false;
+            try { await JS.InvokeVoidAsync("nbNumField.selectAll", _inputRef); }
+            catch (JSDisconnectedException) { /* component/window torn down mid-call */ }
+        }
     }
 }

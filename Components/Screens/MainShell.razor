@@ -137,6 +137,12 @@
             <span>@RefreshHotkeyHint refresh</span>
         }
         <div class="nb-shell__statusbar-spacer"></div>
+        @if (State.ToastVisible)
+        {
+            <div class="nb-shell__statusbar-toast">
+                <StatusBarToast Title="@State.ToastTitle" Detail="@State.ToastDetail" Level="State.ToastLevel" IconUrl="@State.ToastIconPath" />
+            </div>
+        }
         <span>@(State.IsElevated ? "administrator" : "standard user")</span>
     </footer>
 

@@ -11,25 +11,32 @@
 <div class="nb-preview">
     <div class="nb-text-label nb-preview__label">RESULT PREVIEW</div>
     <div class="nb-preview__well">
-        <div class="nb-preview__monitor @(IsFullCoverage ? "" : "nb-preview__monitor--windowed")">
-            @if (!IsFullCoverage)
-            {
-                @if (OffsetX > 0)
+        @if (MonitorUnknown)
+        {
+            <div class="nb-preview__unknown nb-mono">Monitor not connected — preview unavailable</div>
+        }
+        else
+        {
+            <div class="nb-preview__monitor @(IsFullCoverage ? "" : "nb-preview__monitor--windowed")">
+                @if (!IsFullCoverage)
                 {
-                    <div class="nb-preview__band-x" style="@BandXStyle"></div>
+                    @if (OffsetX > 0)
+                    {
+                        <div class="nb-preview__band-x" style="@BandXStyle"></div>
+                    }
+                    @if (OffsetY > 0)
+                    {
+                        <div class="nb-preview__band-y" style="@BandYStyle"></div>
+                    }
+                    <div class="nb-preview__label-x nb-mono" style="@LabelXStyle">X @OffsetX</div>
+                    <div class="nb-preview__label-y nb-mono" style="@LabelYStyle">Y @OffsetY</div>
+                    <div class="nb-preview__label-monitor nb-mono">@MonitorWidth×@MonitorHeight monitor</div>
                 }
-                @if (OffsetY > 0)
-                {
-                    <div class="nb-preview__band-y" style="@BandYStyle"></div>
-                }
-                <div class="nb-preview__label-x nb-mono" style="@LabelXStyle">X @OffsetX</div>
-                <div class="nb-preview__label-y nb-mono" style="@LabelYStyle">Y @OffsetY</div>
-                <div class="nb-preview__label-monitor nb-mono">@MonitorWidth×@MonitorHeight monitor</div>
-            }
-            <div class="nb-preview__window @(IsFullCoverage ? "nb-preview__window--full" : "")" style="@WindowStyle">
-                <span class="nb-mono">@Caption</span>
+                <div class="nb-preview__window @(IsFullCoverage ? "nb-preview__window--full" : "")" style="@WindowStyle">
+                    <span class="nb-mono">@Caption</span>
+                </div>
             </div>
-        </div>
+        }
     </div>
 </div>
 
@@ -48,9 +55,56 @@
     private double ScaleX => MonitorWidth > 0 ? WellWidth / MonitorWidth : 0;
     private double ScaleY => MonitorHeight > 0 ? WellHeight / MonitorHeight : 0;
 
+    // Bugfix (user report, 2026-08-13, second half): callers used to fall
+    // back to the WINDOW's own width/height whenever the target monitor
+    // wasn't connected (DisplayDetailPane/MonitorsSettingsPage's own
+    // `?? State.Width`-style fallbacks) — meaning MonitorWidth==WindowWidth
+    // by construction any time a monitor was disconnected. That fallback
+    // silently broke the geometry: ScaleX*WindowWidth is then always
+    // exactly WellWidth, so the window box rendered at full well size (0
+    // offset) no matter what the profile's real OffsetX/OffsetY actually
+    // were — confirmed live: labels correctly read "X 640 / Y 720" while
+    // the box itself filled the entire well edge-to-edge, contradicting its
+    // own labels. Those callers now pass 0 instead of guessing, matching
+    // the same "honestly say unknown" precedent DisplayDetailPane.
+    // SummaryText already sets for the coverage %/fits-on-screen line
+    // ("monitor not connected, coverage unknown" beats a fabricated
+    // number) — MonitorUnknown extends that same honesty to this preview.
+    private bool MonitorUnknown => MonitorWidth <= 0 || MonitorHeight <= 0;
+
     private bool IsFullCoverage =>
         OffsetX == 0 && OffsetY == 0 &&
         WindowWidth == MonitorWidth && WindowHeight == MonitorHeight;
+
+    // Bugfix (user report, 2026-08-13): a real profile whose window sits far
+    // enough outside its monitor's bounds — confirmed live by switching a
+    // game's target monitor from a small connected display to a much larger
+    // saved one, e.g. "LG TV SSCR2" — showed the purple window box in one
+    // (correctly clamped) spot while the offset bands/labels rendered from
+    // completely different numbers, overlapping it in a way that looked
+    // broken/"offscreen" rather than just an out-of-bounds profile. Root
+    // cause: WindowStyle clamped its own left/top/width/height to the well's
+    // 290×132 bounds, but BandXStyle/BandYStyle/LabelXStyle/LabelYStyle each
+    // independently recomputed raw, UNCLAMPED `OffsetX * ScaleX`-style
+    // values — fine when everything fits, but as soon as the window needed
+    // clamping (exactly the case this component exists to handle), the
+    // bands/labels no longer agreed with where the box actually ended up.
+    // Fixed by computing the clamped geometry once (Geometry) and having
+    // every other style derive from that same rectangle instead of
+    // recalculating its own version of "where is the window."
+    private readonly record struct Rect(double Left, double Top, double Width, double Height);
+
+    private Rect Geometry
+    {
+        get
+        {
+            double width  = Math.Clamp(WindowWidth  * ScaleX, 0, WellWidth);
+            double height = Math.Clamp(WindowHeight * ScaleY, 0, WellHeight);
+            double left   = Math.Clamp(OffsetX * ScaleX, 0, WellWidth  - width);
+            double top    = Math.Clamp(OffsetY * ScaleY, 0, WellHeight - height);
+            return new Rect(left, top, width, height);
+        }
+    }
 
     // Clamped to the well's own 290×132 bounds — a profile whose window is
     // bigger than (or offset past) its target monitor is real, valid data
@@ -66,28 +120,40 @@
         get
         {
             if (IsFullCoverage) return string.Empty;
-
-            double width  = Math.Clamp(WindowWidth  * ScaleX, 0, WellWidth);
-            double height = Math.Clamp(WindowHeight * ScaleY, 0, WellHeight);
-            double left   = Math.Clamp(OffsetX * ScaleX, 0, WellWidth  - width);
-            double top    = Math.Clamp(OffsetY * ScaleY, 0, WellHeight - height);
-
-            return $"left:{Px(left)};top:{Px(top)};width:{Px(width)};height:{Px(height)}";
+            var g = Geometry;
+            return $"left:{Px(g.Left)};top:{Px(g.Top)};width:{Px(g.Width)};height:{Px(g.Height)}";
         }
     }
 
-    private string BandXStyle => $"width:{Px(OffsetX * ScaleX)}";
+    // The "uncovered" strip is everything left of/above the (clamped)
+    // window box — not a second, independently-scaled measurement of the
+    // offset, so it can never disagree with where the box actually is.
+    private string BandXStyle => $"width:{Px(Geometry.Left)}";
 
-    private string BandYStyle =>
-        $"left:{Px(OffsetX * ScaleX)};width:{Px(WindowWidth * ScaleX)};height:{Px(OffsetY * ScaleY)}";
+    private string BandYStyle
+    {
+        get
+        {
+            var g = Geometry;
+            return $"left:{Px(g.Left)};width:{Px(g.Width)};height:{Px(g.Top)}";
+        }
+    }
 
-    // Vertically centered against the window's own height, horizontally
-    // pinned near the well edge — matches the mock's "X 440" placement.
-    private string LabelXStyle => $"top:{Px(OffsetY * ScaleY + (WindowHeight * ScaleY / 2) - 4.5)}";
+    // Vertically centered against the window's own (clamped) height,
+    // horizontally pinned near the well edge — matches the mock's "X 440"
+    // placement.
+    private string LabelXStyle
+    {
+        get
+        {
+            var g = Geometry;
+            return $"top:{Px(g.Top + g.Height / 2 - 4.5)}";
+        }
+    }
 
-    // Pinned just right of the window's left edge, near the well top —
-    // matches the mock's "Y 180" placement.
-    private string LabelYStyle => $"left:{Px(OffsetX * ScaleX + 7)}";
+    // Pinned just right of the window's (clamped) left edge, near the well
+    // top — matches the mock's "Y 180" placement.
+    private string LabelYStyle => $"left:{Px(Geometry.Left + 7)}";
 
     private static string Px(double value) =>
         value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "px";

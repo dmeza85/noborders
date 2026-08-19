@@ -179,10 +179,56 @@ namespace NoBorders
                 this.WindowState   = FormWindowState.Normal;
                 this.Activate();
                 SetForegroundWindow(this.Handle);
+
+                if (_webViewNeedsRepaintAfterWake)
+                {
+                    _webViewNeedsRepaintAfterWake = false;
+                    RepairWebViewAfterWake();
+                }
             }
             finally
             {
                 _isRestoringFromTray = false;
+            }
+        }
+
+        /// <summary>
+        /// Bugfix: PC sleep/wake while the app sat hidden in the tray left
+        /// the window a blank grey rectangle the next time it was restored
+        /// (full app restart was the only workaround). WebView2's compositor
+        /// loses its swap chain to the sleep/wake GPU/driver reset and, since
+        /// the control was never visible to receive a paint message during
+        /// that reset, never gets prompted to recreate it — it just keeps
+        /// showing nothing once the window reappears.
+        ///
+        /// Fix: toggle the WebView2 control's own Visible property off then
+        /// back on now that the form is actually visible again. The WinForms
+        /// WebView2 wrapper doesn't expose CoreWebView2Controller publicly in
+        /// the SDK version this project references, but Visible forwards to
+        /// it internally (confirmed via its private _coreWebView2Controller
+        /// field / OnVisibleChanged override) — toggling
+        /// CoreWebView2Controller.IsVisible is the standard WebView2
+        /// workaround for forcing the compositor to rebind and repaint (see
+        /// WebView2Feedback issues on grey/black screen after GPU device
+        /// loss), and this reaches the same code path through the public
+        /// surface. Cheaper and less disruptive than a full
+        /// CoreWebView2.Reload(), which would also flash the page and lose
+        /// in-memory Blazor state.
+        /// </summary>
+        private void RepairWebViewAfterWake()
+        {
+            try
+            {
+                var webView = _blazorWebView.WebView;
+                if (webView == null) return;
+
+                webView.Visible = false;
+                webView.Visible = true;
+                AppLogger.Log("  WebView2 repainted after wake-from-tray.");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Log(ex, "RepairWebViewAfterWake");
             }
         }
 
@@ -274,14 +320,14 @@ namespace NoBorders
                 _enforceTimer.Stop();
                 _clipTimer.Stop();
                 AppLogger.Log("Enforcement paused via tray menu.");
-                ShowToast("Enforcement paused\nBorderless scanning and re-apply are temporarily off.", success: false);
+                ShowToast("Enforcement paused\nBorderless scanning and re-apply are temporarily off.", LogLevel.Warn);
             }
             else
             {
                 _enforceTimer.Start();
                 _clipTimer.Start();
                 AppLogger.Log("Enforcement resumed via tray menu.");
-                ShowToast("Enforcement resumed", success: true);
+                ShowToast("Enforcement resumed", LogLevel.Ok);
             }
 
             ApplyTrayIconForTheme(IsSystemTaskbarLightTheme());

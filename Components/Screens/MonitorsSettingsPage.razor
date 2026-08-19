@@ -265,15 +265,34 @@
     private MonitorItem? DisplayedConnectedMonitor =>
         State.Monitors.FirstOrDefault(m => m.ID == DisplayedMonitorName);
 
-    // The well needs the monitor's own physical resolution, which is only
-    // knowable while it's connected — a saved-but-disconnected monitor has
-    // no such number on file, so this falls back to the live default
-    // profile's own size (better than a 0×0 well). Live (State.
-    // MonitorDefaultWidth/Height), not the persisted MonitorDefaults entry,
-    // so the well/caption below track in-progress stepper edits the same
-    // way MainShell's hero meta line now tracks the Display tab's.
-    private int PreviewMonitorWidth  => DisplayedConnectedMonitor?.Width  ?? State.MonitorDefaultWidth;
-    private int PreviewMonitorHeight => DisplayedConnectedMonitor?.Height ?? State.MonitorDefaultHeight;
+    // User request (2026-08-13): fall back to the last resolution
+    // RefreshMonitors ever recorded for this monitor ID when it isn't
+    // currently connected, same as DisplayDetailPane's own
+    // KnownMonitorResolution — so the well keeps working instead of going
+    // blank/wrong the moment a monitor is unplugged. Null only when this
+    // monitor has genuinely never been seen connected since the feature
+    // shipped.
+    private (int Width, int Height)? KnownMonitorResolution
+    {
+        get
+        {
+            if (DisplayedConnectedMonitor is { } m) return (m.Width, m.Height);
+            var cached = State.GetLastKnownMonitorResolution(DisplayedMonitorName);
+            return cached != null ? (cached.Width, cached.Height) : null;
+        }
+    }
+
+    // Bugfix (user report, 2026-08-13): this used to fall back to the live
+    // default profile's own size, on the theory that was "better than a
+    // 0×0 well" — turned out to be the opposite: falling back to the
+    // window's own size makes MonitorWidth==WindowWidth by construction,
+    // which silently forces ResultPreview's box to always render at full
+    // size regardless of the real offset (confirmed live: labels read
+    // "X 640 / Y 720" while the box filled the whole well, 0-offset).
+    // Routed through KnownMonitorResolution now instead of a raw 0/guess
+    // fallback.
+    private int PreviewMonitorWidth  => KnownMonitorResolution?.Width  ?? 0;
+    private int PreviewMonitorHeight => KnownMonitorResolution?.Height ?? 0;
 
     private string PreviewCaption
     {

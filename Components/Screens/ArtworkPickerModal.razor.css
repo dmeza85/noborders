@@ -31,6 +31,20 @@
   color: var(--nb-danger-text);
 }
 
+/* Bugfix: was the last item inside .nb-art-picker__body (scrollable,
+   max-height:360px) — a search with enough candidates to fill that height
+   pushed a freshly-set error below the fold with nothing indicating it was
+   there. Its own block between the body and the footer instead, so it's
+   always on screen regardless of how long the candidate list is. */
+.nb-art-picker__error {
+  padding: 10px 20px;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--nb-danger-text);
+  background: rgba(255, 107, 116, .12);
+  border-top: 1px solid var(--nb-danger-border);
+}
+
 .nb-art-picker__rows {
   display: flex;
   flex-direction: column;

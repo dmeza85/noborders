@@ -190,7 +190,7 @@ namespace NoBorders
                     ShowToast(
                         $"{label} hotkey ({config}) is blocked by Windows.\n"
                         + "Try adding Shift or Ctrl in Settings.",
-                        success: false);
+                        LogLevel.Warn);
                 AppLogger.Log($"  Bare key blocked — user should add Ctrl/Shift/Alt modifier.", LogLevel.Warn);
             }
             else if (err == 1409)
@@ -201,7 +201,7 @@ namespace NoBorders
                     ShowToast(
                         $"{label} hotkey ({config}) conflicts with another app.\n"
                         + "Change it in Settings.",
-                        success: false);
+                        LogLevel.Warn);
                 AppLogger.Log($"{label} hotkey ({config}) conflicts with another app.", LogLevel.Warn);
             }
             else

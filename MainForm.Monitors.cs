@@ -52,6 +52,22 @@ namespace NoBorders
                         Primary = screen.Primary
                     });
                     if (!IsIgnoredName(friendly)) _settings.KnownMonitors.Add(friendly);
+
+                    // User request (2026-08-13): remember every connected
+                    // monitor's real resolution so Display/Monitors' Result
+                    // Preview and coverage %% keep working once it's
+                    // unplugged — see MonitorResolution's own doc comment.
+                    // Only writes (and queues a save) when the value is new
+                    // or actually changed, not on every one of RefreshMonitors'
+                    // frequent callers.
+                    if (!_settings.LastKnownMonitorResolutions.TryGetValue(friendly, out var known)
+                        || known.Width != screen.Bounds.Width || known.Height != screen.Bounds.Height)
+                    {
+                        _settings.LastKnownMonitorResolutions[friendly] =
+                            new MonitorResolution { Width = screen.Bounds.Width, Height = screen.Bounds.Height };
+                        AppLogger.LogVerbose($"Monitor resolution remembered: '{friendly}' = {screen.Bounds.Width}x{screen.Bounds.Height}.");
+                        QueueSave();
+                    }
                 }
 
                 // Phase 8.14 (user request): primary monitor first, for

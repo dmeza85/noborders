@@ -246,10 +246,26 @@
         State.AlignOnMonitor(mode);
     }
 
-    // Only known while the target monitor is actually connected — a saved
-    // profile for an unplugged monitor has no physical resolution on file.
+    // Only known live while the target monitor is actually connected.
     private MonitorItem? TargetMonitorConnected =>
         State.Monitors.FirstOrDefault(m => m.ID == TargetMonitorName);
+
+    // User request (2026-08-13): fall back to the last resolution
+    // RefreshMonitors ever recorded for this monitor ID (MainForm.Monitors.cs)
+    // when it isn't currently connected, so the preview/coverage math keeps
+    // working instead of going blank the moment a monitor is unplugged.
+    // Null only when this monitor has genuinely never been seen connected
+    // since the feature shipped — same "honestly unknown" case
+    // ResultPreview's own MonitorUnknown still handles for that case.
+    private (int Width, int Height)? KnownMonitorResolution
+    {
+        get
+        {
+            if (TargetMonitorConnected is { } m) return (m.Width, m.Height);
+            var cached = State.GetLastKnownMonitorResolution(TargetMonitorName);
+            return cached != null ? (cached.Width, cached.Height) : null;
+        }
+    }
 
     // Phase 8.4: live (State.Width/Height/OffsetX/OffsetY — the same shadow
     // NumericTextBox fields the steppers now edit), not the persisted
@@ -257,8 +273,17 @@
     // MainShell's hero meta line fix: reading the persisted value here meant
     // the Result Preview/summary line never moved as you stepped the
     // fields, only after Save Changes.
-    private int PreviewMonitorWidth  => TargetMonitorConnected?.Width  ?? State.Width;
-    private int PreviewMonitorHeight => TargetMonitorConnected?.Height ?? State.Height;
+    //
+    // Bugfix (user report, 2026-08-13): these used to fall back to
+    // State.Width/Height (the WINDOW's own size) when TargetMonitorConnected
+    // is null — but that makes MonitorWidth==WindowWidth by construction any
+    // time the target monitor isn't connected, which silently forces
+    // ResultPreview's box to always render at full size regardless of the
+    // profile's real offset (confirmed live: labels read "X 640 / Y 720"
+    // while the box filled the whole well, 0-offset). Routed through
+    // KnownMonitorResolution now instead of a raw 0/guess fallback.
+    private int PreviewMonitorWidth  => KnownMonitorResolution?.Width  ?? 0;
+    private int PreviewMonitorHeight => KnownMonitorResolution?.Height ?? 0;
 
     private string PreviewCaption
     {
@@ -276,9 +301,9 @@
     {
         get
         {
-            var m = TargetMonitorConnected;
-            if (m == null || m.Width <= 0 || m.Height <= 0) return null;
-            return (int)Math.Round((double)(State.Width * State.Height) / (m.Width * m.Height) * 100);
+            var res = KnownMonitorResolution;
+            if (res is not { } r || r.Width <= 0 || r.Height <= 0) return null;
+            return (int)Math.Round((double)(State.Width * State.Height) / (r.Width * r.Height) * 100);
         }
     }
 
@@ -287,11 +312,11 @@
     {
         get
         {
-            var m = TargetMonitorConnected;
-            if (m == null) return null;
+            var res = KnownMonitorResolution;
+            if (res is not { } r) return null;
             return State.OffsetX >= 0 && State.OffsetY >= 0
-                && State.OffsetX + State.Width <= m.Width
-                && State.OffsetY + State.Height <= m.Height;
+                && State.OffsetX + State.Width <= r.Width
+                && State.OffsetY + State.Height <= r.Height;
         }
     }
 
@@ -305,6 +330,9 @@
         string core = $"{State.Width}×{State.Height} @ {State.OffsetX},{State.OffsetY}";
         if (CoveragePercent is not int pct) return $"{core} — {TargetMonitorName} not connected, coverage unknown";
         string fit = FitsOnScreen == true ? "fits on screen" : "out of bounds";
-        return $"{core} — {pct}% of {TargetMonitorName} · {fit}";
+        // Distinguishes live vs cached data now that a disconnected monitor
+        // can still produce a real percentage (KnownMonitorResolution).
+        string suffix = TargetMonitorConnected == null ? " (last known)" : "";
+        return $"{core} — {pct}% of {TargetMonitorName}{suffix} · {fit}";
     }
 }

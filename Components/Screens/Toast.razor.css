@@ -43,6 +43,14 @@
   flex: none;
 }
 
+/* User request: three-tier coloring (success=green, info/warning=yellow,
+   error/failure=red) instead of the old binary success/danger — see
+   StatusBarToast.razor.css for the exact same three classes/tokens, used
+   by the in-app status-bar version of this same notification. */
+.nb-toast--warning .nb-toast__dot {
+  background: var(--nb-warning);
+}
+
 .nb-toast--danger .nb-toast__dot {
   background: var(--nb-danger);
 }

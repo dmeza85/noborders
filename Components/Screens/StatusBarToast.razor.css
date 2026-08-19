@@ -1,0 +1,80 @@
+/* Centered in MainShell's status bar (MainShell.razor.css positions the
+   wrapper via absolute + translateX(-50%), independent of the bar's own
+   flex content on either side) — user request, 2026-08-13. Fades in/out
+   rather than the old popup's slide/progress-bar treatment, since this is
+   a much smaller, docked element sitting inside content that's already on
+   screen. */
+.nb-status-toast {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--nb-radius-pill);
+  font: 500 10.5px/1 var(--nb-font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60vw;
+  /* forwards is load-bearing, not cosmetic: the keyframes' own
+     translate(-50%, ...) is what centers this element (see MainShell.
+     razor.css's .nb-shell__statusbar-toast, which only sets `left: 50%`
+     and leaves the -50% X-centering to this transform) — without
+     `forwards` the element reverts to no-transform once the animation
+     ends, snapping visibly to the right by half its own width. */
+  animation: nb-status-toast-fade .2s ease-out forwards;
+}
+
+@keyframes nb-status-toast-fade {
+  from { opacity: 0; transform: translate(-50%, 2px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.nb-status-toast__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.nb-status-toast__thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background-image: var(--nb-placeholder-thumb-selected);
+  flex: none;
+}
+
+.nb-status-toast__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Same rgba/token pattern as ActivityLogWindow.razor.css's own
+   __detail-pill--ok/--warn/--error, reused here so toast colors match the
+   rest of the app's existing severity language exactly. */
+.nb-status-toast--success {
+  background: rgba(61, 220, 132, .14);
+  border: 1px solid var(--nb-border);
+  color: var(--nb-success);
+}
+.nb-status-toast--success .nb-status-toast__dot {
+  background: var(--nb-success);
+}
+
+.nb-status-toast--warning {
+  background: rgba(240, 180, 41, .14);
+  border: 1px solid var(--nb-warning-border);
+  color: var(--nb-warning);
+}
+.nb-status-toast--warning .nb-status-toast__dot {
+  background: var(--nb-warning);
+}
+
+.nb-status-toast--danger {
+  background: rgba(255, 107, 116, .14);
+  border: 1px solid var(--nb-danger-border);
+  color: var(--nb-danger);
+}
+.nb-status-toast--danger .nb-status-toast__dot {
+  background: var(--nb-danger);
+}

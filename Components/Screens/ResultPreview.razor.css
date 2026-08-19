@@ -13,6 +13,17 @@
   height: 168px;
 }
 
+/* Shown instead of the geometry box when the target monitor isn't
+   connected — see ResultPreview.razor's MonitorUnknown doc comment for why
+   a fabricated box (using the window's own size as a stand-in for the
+   monitor's) was worse than just saying so. */
+.nb-preview__unknown {
+  color: var(--nb-text-faint);
+  font-size: 11px;
+  text-align: center;
+  max-width: 220px;
+}
+
 .nb-preview__monitor {
   width: 290px;
   height: 132px;

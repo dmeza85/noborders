@@ -352,8 +352,25 @@
   gap: 14px;
   color: var(--nb-text-muted);
   flex: none;
+  position: relative; /* anchors .nb-shell__statusbar-toast below */
 }
 
 .nb-shell__statusbar-spacer {
   flex: 1;
+}
+
+/* User request, 2026-08-13: ShowToast's messages render here — centered in
+   the status bar — while MainForm is visible (StatusBarToast.razor). Only
+   `left: 50%` here; the -50% X half of the centering is baked into
+   StatusBarToast.razor.css's own fade-in transform (its own doc comment
+   explains why) so the two halves of the centering math live together
+   instead of split across two files by coincidence. */
+.nb-shell__statusbar-toast {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  pointer-events: none; /* purely informational — never blocks clicks on whatever's under/around it */
 }

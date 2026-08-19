@@ -487,6 +487,30 @@ namespace NoBorders.Services
         public void ToggleVerboseLogging() => _bridge.VerboseLogging = !_bridge.VerboseLogging;
 
         /// <summary>
+        /// MainShell's status-bar toast (user request, 2026-08-13) — read by
+        /// MainShell.razor and re-rendered on the same Changed event every
+        /// other piece of state here uses. Only populated while MainForm is
+        /// visible; see MainForm.ShowToast's own doc comment for why a
+        /// hidden/minimized window uses the old popup instead.
+        /// </summary>
+        public bool ToastVisible => _bridge.ToastVisible;
+        public string ToastTitle => _bridge.ToastTitle;
+        public string ToastDetail => _bridge.ToastDetail;
+        public string ToastIconPath => _bridge.ToastIconPath;
+        public LogLevel ToastLevel => _bridge.ToastLevel;
+
+        /// <summary>
+        /// User request (2026-08-13): a disconnected monitor's last-known
+        /// real resolution, if RefreshMonitors has ever actually seen it
+        /// connected — see MonitorResolution's own doc comment. Null means
+        /// genuinely never seen (a monitor name added but never connected
+        /// since this feature shipped), same "honestly unknown" case
+        /// ResultPreview's MonitorUnknown already handles.
+        /// </summary>
+        public MonitorResolution? GetLastKnownMonitorResolution(string monitorId) =>
+            _bridge.GetLastKnownMonitorResolution(monitorId);
+
+        /// <summary>
         /// Phase 8.3: SteamGridDB personal API key, pasted in Settings >
         /// Artwork (originally landed in Settings > Diagnostics; moved to its
         /// own nav entry once Hotkeys/Behaviour were split the same way).

@@ -1,4 +1,5 @@
 @namespace NoBorders.Components.Screens
+@using NoBorders
 @using NoBorders.Services
 @* Screen 1g's toast, design-handoff/README.md §"1g".
    Phase 6.2: this is now the live root component of a small, dedicated,
@@ -25,9 +26,16 @@
    BtnSaveGame_Click does (Phase 4.13) — wiring a live "Undo" link to
    nothing would be a dead click target on a real, user-facing popup,
    worse than the mock's static screenshot. Left in the markup, gated
-   behind the parameter, for whenever a real snapshot exists to revert to. *@
+   behind the parameter, for whenever a real snapshot exists to revert to.
 
-<div class="nb-toast @(Success ? "" : "nb-toast--danger")">
+   User request (2026-08-13): this popup is now reached only while MainForm
+   is hidden/minimized (see MainForm.ShowPopupToast) — while the app is
+   visible, StatusBarToast.razor renders in MainShell's own status bar
+   instead. Also switched from a binary Success bool to the app's existing
+   three-tier LogLevel (Ok/Warn·Info/Error — see this file's own Level
+   property below), matching StatusBarToast's coloring exactly. *@
+
+<div class="nb-toast nb-toast--@LevelClass">
     <div class="nb-toast__row">
         <div class="nb-toast__thumb" style="@ThumbStyle"></div>
         <div class="nb-toast__body">
@@ -50,7 +58,7 @@
 @code {
     [Parameter] public string Title { get; set; } = "Borderless applied";
     [Parameter] public string Detail { get; set; } = "Helldivers 2 → 2560×1440 on LG 27GP850";
-    [Parameter] public bool Success { get; set; } = true;
+    [Parameter] public LogLevel Level { get; set; } = LogLevel.Ok;
     [Parameter] public bool ShowUndo { get; set; } = false;
 
     // Phase 8.3: the toast's own game, if any (hotkey-conflict/elevation
@@ -60,4 +68,14 @@
 
     private string ThumbStyle =>
         string.IsNullOrEmpty(IconUrl) ? "" : $"background-image:url('{ArtworkService.CssUrlEscape(IconUrl)}');background-size:cover;background-position:center;";
+
+    // Info/Warn share one "yellow" treatment (user request: "informational/
+    // warning is yellow") — Ok is green, Error is red.
+    private string LevelClass => Level switch
+    {
+        LogLevel.Error => "danger",
+        LogLevel.Warn  => "warning",
+        LogLevel.Info  => "warning",
+        _              => "success",
+    };
 }
