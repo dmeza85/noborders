@@ -1312,6 +1312,16 @@ namespace NoBorders
             // ── Screen Capture & Recording ───────────────────────────────────────
             "obs64.exe",                    // OBS Studio
             "obs32.exe",                    // OBS Studio (32-bit)
+
+            // ── NoBorders itself ─────────────────────────────────────────────────
+            // GetOpenWindowEntries (Add Running App modal, Matching tab's live-test
+            // list) has no PID-based self-check the way TryGetHotkeyTargetExe does
+            // (see its "NoBorders itself" comment below) — NoBorders has a visible
+            // main window and title, so without this it showed up as a pickable
+            // "running app" in its own picker. AssemblyName is "NoBorders"
+            // (NoBorders.csproj), so Process.ProcessName + ".exe" is "NoBorders.exe";
+            // OrdinalIgnoreCase already covers any casing.
+            "noborders.exe",
         };
 
         private readonly Dictionary<string, Image>     _iconCache      = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);

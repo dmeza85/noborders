@@ -21,6 +21,23 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
 
+    <!-- Nothing in this project opts into ahead-of-time compilation, so every
+         method — Blazor's RenderTreeBuilder/diffing, WinForms event plumbing,
+         the first-ever call into any Razor component's @code block — sits
+         entirely on the runtime JIT. Tiered JIT means those first calls run
+         through the slow, unoptimized Tier0 compile, and it's a one-time cost
+         per method: whichever code path a user's first click happens to hit
+         (e.g. opening AddRunningAppModal) pays it live, right after launch,
+         then is fast on every later run of the same path. ReadyToRun
+         precompiles the app's own IL (and matching framework assemblies) at
+         publish time, so that first hit is already native code instead of a
+         cold JIT compile — this is what actually fixes the reported
+         300-500ms first-interaction delay, not just a build-output tweak.
+         Only takes effect on `dotnet publish` (needs SelfContained +
+         RuntimeIdentifier, both already set above); has no effect on
+         `dotnet build`/F5 debugging. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+
     <!-- "Borderless Gaming App UI/icon_export" source assets (README.md
          there) — packed into app.ico via wwwroot/img/MainForm.Tray.cs. This
          is what sets the taskbar/title-bar/Alt-Tab icon; TryExtractIcon
