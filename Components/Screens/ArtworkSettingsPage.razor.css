@@ -10,6 +10,16 @@
   max-width: 440px;
 }
 
+.nb-artwork-page__link,
+.nb-artwork-page__link:visited {
+  color: var(--nb-accent-text);
+  text-decoration: none;
+}
+
+.nb-artwork-page__link:hover {
+  text-decoration: underline;
+}
+
 .nb-artwork-page__field {
   margin-top: 20px;
 }
