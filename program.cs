@@ -961,17 +961,6 @@ namespace NoBorders
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT { public int Left, Top, Right, Bottom; }
 
-        // Only rgrc[0] is touched (see WndProc's WM_NCCALCSIZE handling) —
-        // rgrc[1]/rgrc[2]/lppos are part of the OS's struct layout but unused
-        // by this recipe, so they're declared only to keep the marshaled size
-        // correct, never read or written.
-        [StructLayout(LayoutKind.Sequential)]
-        private struct NCCALCSIZE_PARAMS
-        {
-            public RECT rgrc0, rgrc1, rgrc2;
-            public IntPtr lppos;
-        }
-
         [StructLayout(LayoutKind.Sequential)]
         private struct LUID { public uint LowPart; public int HighPart; }
 
@@ -1075,21 +1064,18 @@ namespace NoBorders
         private const int    WM_DISPLAYCHANGE       = 0x007E;
         private const int    WM_SETTINGCHANGE       = 0x001A; // fires on taskbar/app theme toggle, among other broadcast settings changes
         private const int    HSHELL_WINDOWCREATED   = 1;
-        // Phase 8.9: frameless-chrome custom title bar (see WndProc's
-        // WM_NCCALCSIZE handling, BeginWindowDrag, and WindowControls.razor).
-        // WM_NCCALCSIZE reclaims the native caption's screen space for the
-        // client area (so Blazor's own header row, not Windows, draws that
-        // strip). Dragging that strip does NOT use the classic WM_NCHITTEST-
-        // reports-HTCAPTION recipe — confirmed live that message never
-        // reaches this window once BlazorWebView covers the reclaimed area
-        // (WebView2's own child HWND fields it first) — see BeginWindowDrag's
-        // doc comment for the real mechanism (WM_NCLBUTTONDOWN, sent
-        // explicitly from a genuine Blazor mousedown event instead).
-        // HTCAPTION is still needed as that message's wParam value.
-        private const int    WM_NCCALCSIZE          = 0x0083;
+        // Phase 8.9/9: frameless-chrome custom title bar (see CreateParams'
+        // WS_CAPTION removal, BeginWindowDrag, and WindowControls.razor).
+        // Dragging the Blazor-drawn header does NOT use the classic
+        // WM_NCHITTEST-reports-HTCAPTION recipe — confirmed live that
+        // message never reaches this window once BlazorWebView covers the
+        // client area (WebView2's own child HWND fields it first) — see
+        // BeginWindowDrag's doc comment for the real mechanism
+        // (WM_NCLBUTTONDOWN, sent explicitly from a genuine Blazor mousedown
+        // event instead). HTCAPTION is still needed as that message's
+        // wParam value.
         private const int    WM_NCLBUTTONDOWN       = 0x00A1;
         private const int    HTCAPTION               = 2;
-        private const int    SM_CYCAPTION            = 4;
         private const int    HOTKEY_ID_ADD          = 1001;
         private const int    HOTKEY_ID_REFRESH      = 1002;
         private const uint   MOD_ALT                = 0x0001;
@@ -1117,11 +1103,6 @@ namespace NoBorders
         [DllImport("user32.dll")] private static extern bool   SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")] private static extern bool   GetWindowRect(IntPtr hWnd, out RECT r);
         [DllImport("user32.dll")] private static extern bool   IsWindow(IntPtr hWnd);
-        // Per-monitor-DPI-correct caption height (this app opts into
-        // PerMonitorV2 via Application.SetHighDpiMode) — SystemInformation.
-        // CaptionHeight reflects only the primary monitor's scale, which
-        // would be wrong on a secondary monitor at a different DPI.
-        [DllImport("user32.dll")] private static extern int    GetSystemMetricsForDpi(int nIndex, uint dpi);
         // BeginWindowDrag's mechanism — see its doc comment.
         [DllImport("user32.dll")] private static extern bool   ReleaseCapture();
         [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -2817,8 +2798,8 @@ namespace NoBorders
         /// Phase 8.9 bugfix: WindowControls.razor's drag region (the header
         /// row, minus its own buttons) — replaces a WM_NCHITTEST-based
         /// approach confirmed live NOT to work once BlazorWebView covers the
-        /// whole reclaimed caption area (see the WM_NCCALCSIZE handler's own
-        /// doc comment for how that was diagnosed). Called from a real
+        /// whole client area (see CreateParams' doc comment for the WS_CAPTION
+        /// removal this now runs against). Called from a real
         /// Blazor @onmousedown, which WebView2 DOES deliver normally (it's
         /// ordinary client-area input, not a non-client hit-test query) —
         /// ReleaseCapture() lets go of whatever implicit mouse capture the
@@ -5444,6 +5425,38 @@ namespace NoBorders
             catch (Exception ex) { AppLogger.Log(ex, "OnDisplayConfigChanged"); }
         }
 
+        // Phase 9 bugfix: the previous approach kept the native WS_CAPTION
+        // style and used WM_NCCALCSIZE to visually paper over it with
+        // Blazor's own header row (WindowControls.razor). Confirmed live
+        // that's not enough — WS_CAPTION still being present means Windows
+        // keeps computing real (invisible) native min/max/close hit-test
+        // geometry in the top-right corner, which is what fires Windows 11's
+        // Snap Layout hover flyout there — a second, native set of buttons
+        // overlapping the Blazor ones — and DWM still owns and occasionally
+        // repaints the actual non-client caption background (the white-
+        // when-unfocused/grey-when-focused strip), since nothing actually
+        // removed it. Clearing WS_CAPTION here (before the window handle is
+        // created, so there's no post-creation SetWindowLong/SWP_FRAMECHANGED
+        // flicker) removes the native caption and its hit-test geometry for
+        // good, while leaving WS_THICKFRAME untouched — a window with
+        // WS_THICKFRAME and no WS_CAPTION is still a normal OS-resizable/
+        // Aero-Snappable window, just with no title bar to draw; the same
+        // "still resizable, no caption" combination ApplyBorderless already
+        // relies on elsewhere in this file, just without also stripping
+        // WS_THICKFRAME the way that one does for target game windows.
+        // BeginWindowDrag's WM_NCLBUTTONDOWN(HTCAPTION) trick doesn't need
+        // WS_CAPTION either — DefWndProc runs the same real drag-move loop
+        // regardless of window style.
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.Style &= ~(int)WS_CAPTION;
+                return cp;
+            }
+        }
+
         protected override void WndProc(ref Message m)
         {
             // Ignore all custom messages until the form is fully initialised.
@@ -5465,43 +5478,6 @@ namespace NoBorders
 
             if (_wmShowFirst != 0 && m.Msg == _wmShowFirst)
             { RestoreFromTray(); return; }
-
-            // Phase 8.9: frameless custom title bar — see WindowControls.razor
-            // for the full rationale. Reclaims the native caption's screen
-            // space for the client area (so Blazor's own header row, not
-            // Windows, occupies that strip) while leaving the rest of
-            // DefWndProc's frame math untouched — the resize border stays a
-            // real, OS-hit-tested edge, since it's outside BlazorWebView's
-            // Dock=Fill bounds and unaffected by any of this.
-            //
-            // Bugfix: originally paired this with a WM_NCHITTEST override
-            // (report HTCAPTION for the reclaimed strip, the standard native-
-            // Win32-app recipe for frameless drag/double-click-maximize/Aero
-            // Snap). Confirmed live it never fired — added temporary logging
-            // and captured zero WM_NCHITTEST or even WM_LBUTTONDOWN messages
-            // reaching this WndProc while clicking directly on the header.
-            // Root cause: BlazorWebView (Dock=Fill) now covers the ENTIRE
-            // client area including the reclaimed strip, and WM_NCHITTEST is
-            // dispatched to whichever HWND is directly under the cursor —
-            // WebView2's own child HWND fields it first and never forwards
-            // it up, so MainForm's non-client hit-testing is simply
-            // unreachable for any point inside BlazorWebView's bounds. The
-            // real fix is BeginWindowDrag() below, called from a genuine
-            // Blazor @onmousedown WebView2 DOES deliver normally — see its
-            // doc comment for the mechanism that replaces WM_NCHITTEST here.
-            if (m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero)
-            {
-                base.WndProc(ref m);
-                var p = (NCCALCSIZE_PARAMS)Marshal.PtrToStructure(m.LParam, typeof(NCCALCSIZE_PARAMS))!;
-                uint dpi = (uint)this.DeviceDpi;
-                int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, dpi);
-                var rect = p.rgrc0;
-                rect.Top -= captionHeight; // reclaim just the caption strip; leave the resize-frame insets DefWndProc already computed
-                p.rgrc0 = rect;
-                Marshal.StructureToPtr(p, m.LParam, true);
-                m.Result = IntPtr.Zero;
-                return;
-            }
 
             if (m.Msg == WM_DISPLAYCHANGE)
                 OnDisplayConfigChanged();

@@ -6,9 +6,20 @@
    ("MainForm keeps its native title bar... the mock's window-control glyphs
    and the divider... are intentionally dropped here") — superseded by an
    explicit user request to match the mock instead. MainForm now draws a
-   genuinely frameless custom title bar: WndProc's WM_NCCALCSIZE handling
-   reclaims the native caption's screen space for the client area, so the
-   parent header row (not Windows) occupies that strip.
+   genuinely frameless custom title bar: it clears WS_CAPTION entirely
+   (CreateParams override in program.cs), so there's no native caption left
+   to occupy that strip at all — the parent header row is simply the top of
+   the client area, drawn by Blazor like everything else.
+
+   Phase 9: an earlier version of this kept WS_CAPTION and used
+   WM_NCCALCSIZE to visually paper over it instead of removing it. That
+   wasn't enough — Windows still computed real (invisible) native min/max/
+   close hit-test geometry in the top-right corner, which is what fired
+   Windows 11's Snap Layout hover flyout there (a second, native set of
+   buttons overlapping these ones), and DWM still owned and occasionally
+   repainted the actual non-client caption background (a white-when-
+   unfocused/grey-when-focused strip) since nothing had actually removed it.
+   Clearing WS_CAPTION for real fixes both.
 
    Dragging that strip is NOT the classic WM_NCHITTEST-reports-HTCAPTION
    recipe — confirmed live that message never reaches MainForm once
