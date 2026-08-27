@@ -1,5 +1,39 @@
 # Changelog
 
+Versioning: `major.minor.patch`. Patch bumps are small fixes, minor bumps
+add functionality, major bumps are major releases.
+
+## v1.1.0 — 2026-08-26
+
+### New
+
+- **Status bar toast.** Save/action confirmations now show inline in
+  MainShell's footer while the window is visible, colored by severity
+  (Ok/Warn/Info/Error) instead of a plain success/failure flag. The old
+  popup toast is now reserved for when the window is hidden/minimized to
+  tray.
+- Monitors settings now remember a disconnected monitor's last-known real
+  resolution instead of showing it as unknown.
+- Faster first interaction after launch: the app now precompiles at
+  publish time (ReadyToRun), removing the 300–500ms JIT delay previously
+  noticed the first time you opened the Add Running App modal after a
+  fresh launch.
+- NoBorders no longer offers itself as a pickable "running app" in its
+  own Add Running App picker / Matching tab live-test list.
+- The SteamGridDB API key hint in Settings → Artwork is now a clickable
+  link instead of plain text.
+
+### Fixed
+
+- Waking the PC from sleep while NoBorders was minimized to tray could
+  leave the window rendering as blank grey instead of recovering.
+- The custom title bar could show a second, native set of Windows 11
+  Snap Layout buttons and an occasional white/grey caption strip flicker
+  behind the app's own header — Windows was still tracking real (invisible)
+  native caption geometry underneath. The native caption is now fully
+  removed rather than just painted over, while keeping the window
+  resizable and Aero-Snappable.
+
 ## v1.0.1 — 2026-08-13
 
 ### New
