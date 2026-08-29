@@ -3,6 +3,16 @@
 Versioning: `major.minor.patch`. Patch bumps are small fixes, minor bumps
 add functionality, major bumps are major releases.
 
+## v1.1.1 — 2026-08-29
+
+### Fixed
+
+- The sleep/wake blank-grey-window fix (v1.1.0) only covered NoBorders being
+  minimized to tray at sleep time. Waking the PC while the window was left
+  open on the desktop hit the same WebView2 swap-chain loss and still
+  rendered blank grey, since the repaint only ran on the tray-restore path.
+  It now also runs directly on wake whenever the window was already visible.
+
 ## v1.1.0 — 2026-08-26
 
 ### New

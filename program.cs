@@ -5625,6 +5625,17 @@ namespace NoBorders
             else
             {
                 AppLogger.Log($"  Form visibility restored: visible={this.Visible}, taskbar={this.ShowInTaskbar}");
+
+                // The form was already visible on the desktop across the
+                // sleep/wake cycle (never hidden to tray), so RestoreFromTray
+                // never runs and never fires RepairWebViewAfterWake — the
+                // exact same WebView2 swap-chain loss described on that
+                // method's doc comment still happens here, just with the
+                // window plainly visible instead of tucked in the tray. Run
+                // the same repaint directly rather than only covering the
+                // tray-restore path.
+                if (this.Visible)
+                    RepairWebViewAfterWake();
             }
             }
             catch (Exception ex) { AppLogger.Log(ex, "OnWake"); }
