@@ -3,6 +3,22 @@
 Versioning: `major.minor.patch`. Patch bumps are small fixes, minor bumps
 add functionality, major bumps are major releases.
 
+## v1.2.0 — 2026-08-30
+
+### New
+
+- **Faster keyboard/numpad entry in Width/Height/Offset fields.** Tabbing
+  into these fields now skips past the ▲/▼ stepper entirely and lands
+  directly on the number with it already selected, ready to type over.
+- **Hold-to-ramp on the ▲/▼ steppers.** Holding the mouse down on a stepper
+  arrow now auto-repeats and accelerates the longer it's held, so mouse-only
+  users can cover large (100s of pixels) adjustments without needing the
+  Shift/Ctrl modifiers or clicking dozens of times.
+- Default global hotkeys changed from Ctrl+Shift+A / Ctrl+Shift+R to
+  Ctrl+F10 / Ctrl+F11 — the old combo could trigger accidentally inside
+  games or other apps. Only affects fresh installs; existing saved bindings
+  are untouched.
+
 ## v1.1.1 — 2026-08-29
 
 ### Fixed

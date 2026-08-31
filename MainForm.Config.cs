@@ -73,8 +73,8 @@ namespace NoBorders
 
                 _settings.MonitorDefaults ??= new Dictionary<string, GameDisplayProfile>(StringComparer.OrdinalIgnoreCase);
                 _settings.Games           ??= new List<GameConfig>();
-                _settings.HotkeyAddApp    ??= new HotkeyConfig { Modifiers = MOD_CONTROL | MOD_SHIFT, Key = (uint)Keys.A };
-                _settings.HotkeyRefreshApp ??= new HotkeyConfig { Modifiers = MOD_CONTROL | MOD_SHIFT, Key = (uint)Keys.R };
+                _settings.HotkeyAddApp    ??= new HotkeyConfig { Modifiers = MOD_CONTROL, Key = (uint)Keys.F10 };
+                _settings.HotkeyRefreshApp ??= new HotkeyConfig { Modifiers = MOD_CONTROL, Key = (uint)Keys.F11 };
                 _settings.IgnoredProcesses ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 _settings.LastKnownMonitorResolutions ??= new Dictionary<string, MonitorResolution>(StringComparer.OrdinalIgnoreCase);
 

@@ -187,8 +187,8 @@ namespace NoBorders
         public bool             MinimizeToTray     { get; set; } = true;
         public bool             StartWithWindows   { get; set; } = false;
         public bool             StartMinimized     { get; set; } = false;
-        public HotkeyConfig     HotkeyAddApp       { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x0004 | 0x4000, Key = (uint)Keys.A };
-        public HotkeyConfig     HotkeyRefreshApp   { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x0004 | 0x4000, Key = (uint)Keys.R };
+        public HotkeyConfig     HotkeyAddApp       { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x4000, Key = (uint)Keys.F10 };
+        public HotkeyConfig     HotkeyRefreshApp   { get; set; } = new HotkeyConfig { Modifiers = 0x0002 | 0x4000, Key = (uint)Keys.F11 };
 
         // Phase 8: user's own free SteamGridDB personal API key (obtained at
         // steamgriddb.com/profile/preferences/api), pasted in Settings >

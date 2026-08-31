@@ -1,5 +1,6 @@
 @namespace NoBorders.Components.Screens
 @using Microsoft.AspNetCore.Components.Web
+@implements IDisposable
 @inject IJSRuntime JS
 @* Phase 8.4: real interaction — ▲/▼ step the value by 1, ×10 with Shift
    held, ×100 with Ctrl held, per design-handoff/README.md's documented
@@ -23,7 +24,24 @@
    unchanged — this component doesn't need to know anything about valid
    ranges, same as before. wwwroot/js/numField.js's own doc comment covers
    the one JS interop call this needs (Blazor has no built-in "select all
-   text in this input" API). *@
+   text in this input" API).
+
+   User request (2026-08-30): Tab should skip past the ▲/▼ stepper straight
+   to the number, dropping the reader into edit mode with the value already
+   selected — the same "type over it" flow BeginEdit already gives a click,
+   just reached by keyboard/numpad instead of the mouse. The stepper buttons
+   drop out of tab order (tabindex="-1") since they're mouse-only controls
+   anyway; the value div picks up tabindex="0" plus @@onfocus so tabbing onto
+   it and clicking it both land in the same edit state.
+
+   User request (2026-08-30): holding the mouse down on ▲/▼ now auto-repeats
+   and accelerates instead of requiring one click per pixel — the first step
+   fires immediately (still ×10/×100 under Shift/Ctrl, matching a plain
+   click), then after a short delay (so a normal click doesn't trigger any
+   repeat at all) it keeps stepping every ~60ms with the magnitude ramping
+   up the longer the button stays held, capped at 100 so a few seconds of
+   holding covers "large (100s of pixels)" adjustments with the mouse alone.
+   See StartHold's own comment for the ramp curve. *@
 
 <div class="nb-numfield @(BorderSubtle ? "nb-numfield--subtle" : "")">
     @if (_editing)
@@ -35,11 +53,14 @@
     }
     else
     {
-        <div class="nb-numfield__value nb-text-field-value" @onclick="BeginEdit">@Value</div>
+        <div class="nb-numfield__value nb-text-field-value" tabindex="0"
+             @onclick="BeginEdit" @onfocus="BeginEdit">@Value</div>
     }
     <div class="nb-numfield__stepper">
-        <button type="button" class="nb-numfield__btn" aria-label="Increase" @onclick="(e) => Step(e, 1)">▲</button>
-        <button type="button" class="nb-numfield__btn" aria-label="Decrease" @onclick="(e) => Step(e, -1)">▼</button>
+        <button type="button" class="nb-numfield__btn" tabindex="-1" aria-label="Increase"
+                @onmousedown="(e) => StartHold(e, 1)" @onmouseup="StopHold" @onmouseleave="StopHold">▲</button>
+        <button type="button" class="nb-numfield__btn" tabindex="-1" aria-label="Decrease"
+                @onmousedown="(e) => StartHold(e, -1)" @onmouseup="StopHold" @onmouseleave="StopHold">▼</button>
     </div>
 </div>
 
@@ -62,10 +83,50 @@
     private string _editText = "";
     private ElementReference _inputRef;
 
-    private Task Step(MouseEventArgs e, int direction)
+    /// <summary>Cancels whichever hold-to-repeat loop is currently running —
+    /// at most one at a time (StartHold cancels any previous one first), and
+    /// disposal cancels it too so a held-down click can't keep firing steps
+    /// into a torn-down parent after the user navigates away.</summary>
+    private System.Threading.CancellationTokenSource? _holdCts;
+
+    /// <summary>
+    /// Mousedown on ▲/▼: fires one immediate step (same magnitude a plain
+    /// click always gave — ×10 Shift, ×100 Ctrl), then after a 350ms grace
+    /// period (long enough that a normal click's mouseup — which cancels
+    /// this via StopHold — always lands first) starts auto-repeating every
+    /// 60ms. Magnitude ramps linearly with how long the button's been held
+    /// (elapsed ms / 40, capped at 100) rather than staying fixed, so a
+    /// couple of seconds of holding covers a few hundred pixels without the
+    /// user needing Ctrl/Shift at all.
+    /// </summary>
+    private async Task StartHold(MouseEventArgs e, int direction)
     {
-        int magnitude = e.CtrlKey ? 100 : e.ShiftKey ? 10 : 1;
-        return OnStep.InvokeAsync(direction * magnitude);
+        int baseMagnitude = e.CtrlKey ? 100 : e.ShiftKey ? 10 : 1;
+        await OnStep.InvokeAsync(direction * baseMagnitude);
+
+        _holdCts?.Cancel();
+        var cts = new System.Threading.CancellationTokenSource();
+        _holdCts = cts;
+        var token = cts.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (!token.IsCancellationRequested)
+            {
+                int magnitude = Math.Max(baseMagnitude, Math.Min(100, 1 + (int)(sw.ElapsedMilliseconds / 40)));
+                await OnStep.InvokeAsync(direction * magnitude);
+                await Task.Delay(60, token);
+            }
+        }
+        catch (TaskCanceledException) { /* StopHold fired — hold released or mouse left the button */ }
+    }
+
+    private void StopHold()
+    {
+        _holdCts?.Cancel();
+        _holdCts = null;
     }
 
     private void BeginEdit()
@@ -113,4 +174,6 @@
             catch (JSDisconnectedException) { /* component/window torn down mid-call */ }
         }
     }
+
+    public void Dispose() => _holdCts?.Cancel();
 }
