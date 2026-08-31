@@ -3,6 +3,22 @@
 Versioning: `major.minor.patch`. Patch bumps are small fixes, minor bumps
 add functionality, major bumps are major releases.
 
+## v1.2.1 — 2026-08-31
+
+### Fixed
+
+- Fixed NoBorders showing a permanently blank grey window every time it
+  auto-launched minimized at Windows startup (i.e. every reboot). Root cause
+  was distinct from the sleep/wake blank-grey-window bug (v1.1.0/v1.1.1):
+  minimizing the window while WebView2's controller was still being created
+  aborted that creation outright (confirmed via noborders.log: "Operation
+  aborted (0x80004004 (E_ABORT))" from
+  CoreWebView2Environment.CreateCoreWebView2ControllerAsync), leaving
+  CoreWebView2 permanently null for the rest of the process's life — no
+  repaint could ever fix it, only restarting the app. The minimized/hidden
+  startup sequence now waits for WebView2 to finish initializing before
+  minimizing the window.
+
 ## v1.2.0 — 2026-08-30
 
 ### New

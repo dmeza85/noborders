@@ -1312,11 +1312,15 @@ namespace NoBorders
         // window handle by the time WM_HOTKEY is processed.
         private IntPtr _lastForegroundHwnd = IntPtr.Zero;
         private bool   _wasHiddenBeforeSleep = false; // tracks tray state across sleep/wake
-        // Set when OnWake() re-hides the form to tray after a sleep cycle —
-        // WebView2's compositor can lose its swap chain to the sleep/wake GPU
-        // reset while hidden and never gets a repaint request to recover from
-        // it, so the window comes back as a blank grey rectangle the next
-        // time RestoreFromTray() (MainForm.Tray.cs) makes it visible. Cleared
+        // Set whenever the form goes (or stays) hidden-to-tray in a way that
+        // means WebView2 never got to paint while actually visible: either
+        // OnWake() re-hiding the form after a sleep cycle (its compositor
+        // loses the swap chain to the sleep/wake GPU reset), or OnLoad's
+        // -minimized cold-start Hide() (its compositor never painted a first
+        // frame at all, since a full reboot auto-launches straight into
+        // -minimized before BlazorWebView ever gets shown). Either way the
+        // window comes back as a blank grey rectangle the next time
+        // RestoreFromTray() (MainForm.Tray.cs) makes it visible. Cleared
         // there once the repaint workaround has run.
         private bool   _webViewNeedsRepaintAfterWake = false;
         private bool   _isElevated = false; // true if this process is running as Administrator
@@ -1763,10 +1767,68 @@ namespace NoBorders
             // Must be here rather than the constructor so BeginInvoke is safe.
             if (Environment.GetCommandLineArgs().Contains("-minimized", StringComparer.OrdinalIgnoreCase))
             {
+                HideForMinimizedStartup();
+            }
+        }
+
+        /// <summary>
+        /// Bugfix: -minimized cold-start used to run immediately —
+        /// this.WindowState = Minimized, this.ShowInTaskbar = false,
+        /// Hide(). Confirmed live via a simulated reboot-launch (still
+        /// reproduced with only the ShowInTaskbar/Hide half deferred, which
+        /// ruled that half out — the WindowState assignment alone is
+        /// sufficient): BlazorWebView's CreateCoreWebView2ControllerAsync()
+        /// call, kicked off moments earlier when this.Handle was first
+        /// touched above in this same OnLoad, is still in flight against
+        /// this top-level window at the point WindowState flips to
+        /// Minimized. WebView2 requires its parent window to actually be in
+        /// a normal (non-iconic) state while the controller is being
+        /// created — minimizing it out from under that pending native call
+        /// aborts it (Application.ThreadException logs "Operation aborted
+        /// (0x80004004 (E_ABORT))" from deep inside
+        /// CoreWebView2Environment.CreateCoreWebView2ControllerAsync), and
+        /// nothing ever retries: CoreWebView2 stays permanently null for the
+        /// rest of the process's life, so the window is blank grey forever
+        /// once shown, not just until a repaint. This is what full-PC-reboot
+        /// users were actually hitting — every reboot auto-launches with
+        /// -minimized, so every reboot lost this race.
+        ///
+        /// Fix: don't touch WindowState/ShowInTaskbar/Hide until CoreWebView2
+        /// has actually finished initializing (or already has, on whatever
+        /// future runtime makes this synchronous) — nothing in this class
+        /// depends on -minimized startup being instantaneous, so there is no
+        /// downside to waiting the extra tens-of-milliseconds this takes.
+        /// _webViewNeedsRepaintAfterWake (see its own doc comment) is
+        /// deliberately NOT set here: that flag exists to fix a control that
+        /// initialized fine but lost its already-created swap chain, which
+        /// isn't what happens here — by the time this runs, CoreWebView2 has
+        /// either already succeeded (nothing to repair) or the app never
+        /// reaches this callback at all (still broken, but no worse than
+        /// before — see AppLogger for the underlying WebView2/OS-level
+        /// failure in that case).
+        /// </summary>
+        private void HideForMinimizedStartup()
+        {
+            void DoHide()
+            {
                 this.WindowState   = FormWindowState.Minimized;
                 this.ShowInTaskbar = false;
-                BeginInvoke(new MethodInvoker(this.Hide));
+                this.Hide();
             }
+
+            var webView = _blazorWebView.WebView;
+            if (webView.CoreWebView2 != null)
+            {
+                DoHide();
+                return;
+            }
+
+            void OnInitialized(object? s, object e)
+            {
+                webView.CoreWebView2InitializationCompleted -= OnInitialized;
+                DoHide();
+            }
+            webView.CoreWebView2InitializationCompleted += OnInitialized;
         }
 
         // ════════════════════════════════════════════════════════════════════════
