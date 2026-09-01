@@ -6,15 +6,29 @@
  * button treatments stay local to their own component's scoped CSS.
  */
 
+/* Bugfix: text centered via display:flex/align-items rather than a
+   line-height matching `height` — with box-sizing:border-box (global,
+   type.css), a 1px border (nb-btn--outline/--danger-outline) eats 2px out
+   of the content box that a fixed line-height doesn't know about, so the
+   line box sits flush against the content box's top edge and overflows
+   its bottom by 2px instead of being centered — text on bordered buttons
+   rendered ~1px lower than on the borderless primary/warning variants,
+   which never showed the mismatch since they have no border to eat into
+   the box. Flex centering places the line box in the middle of the
+   content box regardless of border width, so every .nb-btn variant lines
+   up the same regardless of whether (or how much) border it draws. */
 .nb-btn {
   flex: none;
   white-space: nowrap;
   height: var(--nb-control-height-standard-btn);
   padding: 0 16px;
   border-radius: var(--nb-radius-input);
-  font: 600 12.5px/34px var(--nb-font-ui);
+  font: 600 12.5px var(--nb-font-ui);
   border: none;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* README §"Interaction notes": "↶ Undo ... disabled at 50% opacity when
