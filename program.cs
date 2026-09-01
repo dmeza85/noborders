@@ -891,6 +891,7 @@ namespace NoBorders
         void DeleteMonitorDefault(string scope);
         void DetectDisplays();
         void RemoveAllSavedMonitors();
+        void ApplyMonitorDefaultToAllGames();
         bool IsCapturingHotkeyAdd { get; }
         bool IsCapturingHotkeyRefresh { get; }
         void ToggleHotkeyAddCapture();
@@ -1512,6 +1513,7 @@ namespace NoBorders
         void IMainFormBridge.DeleteMonitorDefault(string scope) => DeleteMonitorDefault(scope);
         void IMainFormBridge.DetectDisplays() => DetectDisplays();
         void IMainFormBridge.RemoveAllSavedMonitors() => RemoveAllSavedMonitors();
+        void IMainFormBridge.ApplyMonitorDefaultToAllGames() => ApplyMonitorDefaultToAllGames();
         bool IMainFormBridge.IsCapturingHotkeyAdd => _capturingHotkeyId == HOTKEY_ID_ADD;
         bool IMainFormBridge.IsCapturingHotkeyRefresh => _capturingHotkeyId == HOTKEY_ID_REFRESH;
         void IMainFormBridge.ToggleHotkeyAddCapture() => ToggleHotkeyAddCapture();
@@ -2067,7 +2069,25 @@ namespace NoBorders
             // Blazor screens being built in MIGRATION_PLAN.md Phase 2, which are
             // authored at 1120px wide per design-handoff/README.md and aren't
             // responsive below that yet.
-            this.MinimumSize     = new Size(1150, 720);
+            // Design minimum from the 1120px-wide Blazor content plus chrome. On a
+            // screen whose work area is smaller than this — a sub-1080p laptop panel,
+            // or a higher DPI scale factor shrinking the effective work area below it
+            // even on a 1080p+ display — enforcing this as a hard floor would push part
+            // of the window off-screen, forcing the user to manually move or maximize
+            // it just to see everything. Shrink the floor to fit the target screen
+            // instead; content may need internal scrolling at the smaller size, but the
+            // whole window stays reachable without manual intervention.
+            var designMinimum = new Size(1150, 720);
+            bool hasSavedPosition = _settings.WindowX != int.MinValue && _settings.WindowY != int.MinValue;
+            var savedLocation = new Point(_settings.WindowX, _settings.WindowY);
+            var targetScreen = hasSavedPosition
+                ? Screen.FromPoint(savedLocation)
+                : (Screen.PrimaryScreen ?? Screen.AllScreens[0]);
+            var workArea = targetScreen.WorkingArea;
+
+            this.MinimumSize     = new Size(
+                Math.Min(designMinimum.Width,  workArea.Width),
+                Math.Min(designMinimum.Height, workArea.Height));
             this.MaximumSize     = Size.Empty; // no maximum — freely resizable/maximizable
 
             // Phase 8.4: restore the last real (non-minimized) size/position if one
@@ -2076,12 +2096,12 @@ namespace NoBorders
             // otherwise open the window off-screen, unreachable without Windows'
             // own "move window" keyboard recovery. Falls back to the original
             // fixed 1200×800 CenterScreen default on first run, or whenever the
-            // saved position doesn't check out against Screen.AllScreens.
+            // saved position doesn't check out against Screen.AllScreens. Also
+            // capped to the target screen's work area so the window never opens
+            // larger than the screen it's about to appear on.
             var savedSize = new Size(
-                Math.Max(_settings.WindowWidth,  this.MinimumSize.Width),
-                Math.Max(_settings.WindowHeight, this.MinimumSize.Height));
-            bool hasSavedPosition = _settings.WindowX != int.MinValue && _settings.WindowY != int.MinValue;
-            var savedLocation = new Point(_settings.WindowX, _settings.WindowY);
+                Math.Min(Math.Max(_settings.WindowWidth,  this.MinimumSize.Width), workArea.Width),
+                Math.Min(Math.Max(_settings.WindowHeight, this.MinimumSize.Height), workArea.Height));
             bool savedPositionOnScreen = hasSavedPosition &&
                 Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(new Rectangle(savedLocation, savedSize)));
 
@@ -2089,7 +2109,13 @@ namespace NoBorders
             if (savedPositionOnScreen)
             {
                 this.StartPosition = FormStartPosition.Manual;
-                this.Location      = savedLocation;
+                // Clamp so a saved position near a screen edge can't leave part of
+                // the (possibly larger, since-changed) window hanging off-screen.
+                var maxX = workArea.Right  - savedSize.Width;
+                var maxY = workArea.Bottom - savedSize.Height;
+                this.Location = new Point(
+                    Math.Max(workArea.Left, Math.Min(savedLocation.X, maxX)),
+                    Math.Max(workArea.Top,  Math.Min(savedLocation.Y, maxY)));
             }
             else
             {
@@ -4375,6 +4401,81 @@ namespace NoBorders
         {
             EnsureSettingsTabActive();
             _btnSaveDefault.PerformClick();
+        }
+
+        /// <summary>
+        /// "Apply to All Games" — for when a monitor's resolution changed
+        /// permanently, or the user just wants every tracked game/program to
+        /// share one behavior on this monitor, instead of hand-editing each
+        /// game's profile individually. Saves the currently-shown Width/Height/
+        /// Offset X/Y/Constrain values as this monitor's default (same as Save
+        /// Monitor Default) and then overwrites — or creates — every game's
+        /// per-monitor profile for this scope to match, same shape as
+        /// RemoveAllSavedMonitors's per-game sweep but writing instead of
+        /// removing. Confirmed first since it clobbers any existing
+        /// per-game customization for this monitor.
+        /// </summary>
+        private void ApplyMonitorDefaultToAllGames()
+        {
+            string sel = _cmbSetMonitor.SelectedItem?.ToString() ?? string.Empty;
+            if (string.IsNullOrEmpty(sel))
+            {
+                ShowStatus("No monitor selected.");
+                return;
+            }
+
+            if (_settings.Games.Count == 0)
+            {
+                ShowStatus("No tracked games/programs to apply to.");
+                return;
+            }
+
+            var profile = new GameDisplayProfile
+            {
+                Width          = (int)_numSetWidth.Value,
+                Height         = (int)_numSetHeight.Value,
+                OffsetX        = (int)_numSetOffsetX.Value,
+                OffsetY        = (int)_numSetOffsetY.Value,
+                ConstrainMouse = _chkSetConstrain.Checked
+            };
+
+            int existingProfiles = _settings.Games.Count(g => g.Profiles.ContainsKey(sel));
+            string impactLine = existingProfiles > 0
+                ? $"\n\n{existingProfiles} game(s) already have their own profile for this monitor — those will be overwritten."
+                : string.Empty;
+
+            var result = MessageBox.Show(
+                $"Apply {profile.Width}×{profile.Height} @ {profile.OffsetX},{profile.OffsetY} on \"{sel}\" to all {_settings.Games.Count} tracked game(s)/program(s)?{impactLine}\n\n" +
+                "This cannot be undone.",
+                "Apply to All Games",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            if (result != DialogResult.Yes) return;
+
+            _settings.MonitorDefaults[sel] = profile;
+            foreach (var g in _settings.Games)
+            {
+                g.Profiles[sel] = new GameDisplayProfile
+                {
+                    Width          = profile.Width,
+                    Height         = profile.Height,
+                    OffsetX        = profile.OffsetX,
+                    OffsetY        = profile.OffsetY,
+                    ConstrainMouse = profile.ConstrainMouse
+                };
+            }
+
+            SaveConfig();
+            AppLogger.Log($"Applied monitor default for '{sel}' to all {_settings.Games.Count} game(s).");
+
+            if (_selectedGame != null)
+            {
+                int idx = _lstGames.SelectedIndex;
+                if (idx >= 0) LstGames_SelectedIndexChanged(this, EventArgs.Empty);
+            }
+
+            ShowStatus($"Applied \"{sel}\" settings to {_settings.Games.Count} game(s).");
+            ShowToast($"Applied to {_settings.Games.Count} game(s)\n{sel}", LogLevel.Ok);
+            _appState.RaiseChanged();
         }
 
         /// <summary>

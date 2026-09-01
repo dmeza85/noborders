@@ -287,6 +287,18 @@ namespace NoBorders.Services
         public void SaveMonitorDefault() => _bridge.SaveMonitorDefault();
 
         /// <summary>
+        /// "Apply to All Games" — saves the active monitor default scope's
+        /// current fields (same as SaveMonitorDefault) and then overwrites every
+        /// tracked game's per-monitor profile for that scope to match. For when
+        /// a monitor's resolution changed permanently, or the user wants one
+        /// behavior across every game on this monitor rather than hand-editing
+        /// each game individually. Forwards to MainForm's
+        /// ApplyMonitorDefaultToAllGames, native confirmation MessageBox and all
+        /// — same pattern as RemoveAllSavedMonitors.
+        /// </summary>
+        public void ApplyMonitorDefaultToAllGames() => _bridge.ApplyMonitorDefaultToAllGames();
+
+        /// <summary>
         /// Deletes a monitor's saved default profile exactly as selecting it and
         /// clicking the WinForms "✕" would (Phase 4.10) — forwards to MainForm's
         /// `DeleteMonitorDefault`, which selects the scope then calls

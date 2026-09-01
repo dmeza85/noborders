@@ -144,6 +144,7 @@
     <div class="nb-monitors-page__preview-row">
         <div class="nb-monitors-page__actions">
             <button type="button" class="nb-btn nb-btn--primary @_saveDefaultFlash.CssClass" @onclick="OnSaveMonitorDefault">Save Monitor Default</button>
+            <button type="button" class="nb-btn nb-btn--outline @_applyAllFlash.CssClass" @onclick="OnApplyToAllGames">Apply to All Games</button>
             <button type="button" class="nb-btn nb-btn--outline @_detectFlash.CssClass" @onclick="OnDetectDisplays">Detect Displays</button>
         </div>
         <div class="nb-monitors-page__preview-col">
@@ -162,10 +163,12 @@
     // Connected/Saved lists) — same "confirm or save a setting" criterion
     // as Rescan/Re-Apply/Save Changes elsewhere.
     private readonly FlashFeedback _saveDefaultFlash;
+    private readonly FlashFeedback _applyAllFlash;
     private readonly FlashFeedback _detectFlash;
     public MonitorsSettingsPage()
     {
         _saveDefaultFlash = new FlashFeedback(StateHasChanged);
+        _applyAllFlash = new FlashFeedback(StateHasChanged);
         _detectFlash = new FlashFeedback(StateHasChanged);
     }
 
@@ -219,6 +222,20 @@
     {
         State.DetectDisplays();
         await _detectFlash.Trigger();
+    }
+
+    // Applies this scope's current Width/Height/Offset X/Y/Constrain fields to
+    // every tracked game/program's per-monitor profile for this monitor — the
+    // native confirmation MessageBox (State.ApplyMonitorDefaultToAllGames ->
+    // MainForm.ApplyMonitorDefaultToAllGames) is what actually gates the
+    // write, same as Delete/Remove All elsewhere on this page; the flash only
+    // fires as visual feedback after the call returns, whether or not the
+    // user confirmed (harmless no-op flash on cancel, same as those).
+    private async Task OnApplyToAllGames()
+    {
+        EnsureMonitorDefaultSelected();
+        State.ApplyMonitorDefaultToAllGames();
+        await _applyAllFlash.Trigger();
     }
 
     private void OnAlign(MonitorAlignMode mode)
