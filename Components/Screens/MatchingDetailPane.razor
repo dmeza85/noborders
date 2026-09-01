@@ -30,12 +30,17 @@
    across program.cs threads a live window title alongside the exe name.
    Clicking a chip only writes the pending buffer (State.PendingMatchTarget,
    same shape as PendingRegexPattern) — Save Changes still owns committing
-   it to GameConfig.MatchTarget, and Undo restores it. The live-test list
-   below deliberately keeps testing against the last-*saved* MatchTarget
-   (DisplayedGame.IsMatch), not the pending chip selection — same as it
-   already only tests the last-saved RegexPattern, not PendingRegexPattern,
-   so it always answers "what is enforcement actually doing right now",
-   never a preview of an unsaved edit.
+   it to GameConfig.MatchTarget, and Undo restores it.
+
+   User report (2026-09-01): clicking a chip only changed the chip's own
+   highlight — the live-test MATCH/NO list still evaluated against the
+   last-*saved* MatchTarget (DisplayedGame.IsMatch's default overload), so
+   a click looked like a no-op unless you'd already clicked Save Changes.
+   The list now previews the pending chip selection instead, via
+   GameConfig's new IsMatch(exe, title, targetOverride) overload passed
+   CurrentMatchTarget — RegexPattern itself still previews from the last
+   *saved* text (unchanged; that half of the original design still holds,
+   only MatchTarget needed to go live).
 
    Phase 4.5: the ↺ fetch-name button calls AppStateService.FetchName, which
    forwards to MainForm's real BtnFetchName_Click via PerformClick() — it
@@ -100,6 +105,7 @@
         <div class="nb-matching-pane__chips">
             <div class="nb-matching-pane__chip @(CurrentMatchTarget == MatchTargetMode.WindowTitle ? "nb-matching-pane__chip--active" : "")" role="button" @onclick="() => OnSetMatchTarget(MatchTargetMode.WindowTitle)">Window Title</div>
             <div class="nb-matching-pane__chip @(CurrentMatchTarget == MatchTargetMode.ProcessName ? "nb-matching-pane__chip--active" : "")" role="button" @onclick="() => OnSetMatchTarget(MatchTargetMode.ProcessName)">Process Name</div>
+            <span class="nb-matching-pane__info-icon" tabindex="0" title="Window Title matches the text in the window's title bar (what you'd see in Alt+Tab) — use this when the game's exe name is generic or shared (e.g. a launcher), but its window title is distinctive. Process Name matches the .exe file name instead — use this when the title changes (menus, levels, song names) but the exe stays constant. Changing this only updates the preview on the right until you click Save Changes.">ⓘ</span>
         </div>
 
         <div class="nb-text-label nb-matching-pane__label">EXECUTABLE</div>
@@ -124,7 +130,7 @@
         <div class="nb-matching-pane__test-list">
             @foreach (var w in OpenWindows)
             {
-                var isMatch = DisplayedGame != null && DisplayedGame.IsMatch(w.Exe, w.WindowTitle);
+                var isMatch = DisplayedGame != null && DisplayedGame.IsMatch(w.Exe, w.WindowTitle, CurrentMatchTarget);
                 var isSelected = _selectedWindow.HasValue && _selectedWindow.Value.Equals(w);
                 <div @key="w" class="nb-match-row @(isMatch ? "nb-match-row--match" : "") @(isSelected ? "nb-match-row--selected" : "")" @onclick="() => _selectedWindow = w">
                     <div class="nb-match-row__thumb"></div>
@@ -292,7 +298,7 @@
     private int MatchCount(List<OpenWindowEntry> windows)
     {
         var g = DisplayedGame;
-        return g == null ? 0 : windows.Count(w => g.IsMatch(w.Exe, w.WindowTitle));
+        return g == null ? 0 : windows.Count(w => g.IsMatch(w.Exe, w.WindowTitle, CurrentMatchTarget));
     }
 
     private string ValidityText()

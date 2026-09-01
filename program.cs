@@ -141,9 +141,16 @@ namespace NoBorders
         /// call site tracks a live window, e.g. dupe-name checks against the
         /// whole games list); in ProcessName mode (the default) it's never
         /// even read.</summary>
-        public bool IsMatch(string exeName, string windowTitle = "")
+        public bool IsMatch(string exeName, string windowTitle = "") => IsMatch(exeName, windowTitle, MatchTarget);
+
+        /// <summary>Same as <see cref="IsMatch(string, string)"/>, but tests against an
+        /// explicitly-given target mode instead of this game's saved <see cref="MatchTarget"/> —
+        /// lets the Matching tab's live-test list preview the pending (not-yet-saved)
+        /// Window Title/Process Name chip selection instead of only ever answering for
+        /// what's currently enforced.</summary>
+        public bool IsMatch(string exeName, string windowTitle, MatchTargetMode targetOverride)
         {
-            string target = MatchTarget == MatchTargetMode.WindowTitle ? windowTitle : exeName;
+            string target = targetOverride == MatchTargetMode.WindowTitle ? windowTitle : exeName;
             try { return CompiledPattern.IsMatch(target); }
             catch (RegexMatchTimeoutException) { return false; }
         }

@@ -93,9 +93,31 @@
 
 .nb-matching-pane__chips {
   display: flex;
+  align-items: center;
   gap: 7px;
   margin-bottom: 18px;
   flex-wrap: wrap;
+}
+
+/* Native-title-tooltip info affordance, same pattern as the ↺ fetch-name
+   button's own `title` attribute — no custom popover, just a discoverable
+   hover/focus target for the Window Title vs. Process Name explanation. */
+.nb-matching-pane__info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--nb-text-secondary);
+  cursor: help;
+}
+
+.nb-matching-pane__info-icon:hover,
+.nb-matching-pane__info-icon:focus-visible {
+  color: var(--nb-text-body);
 }
 
 .nb-matching-pane__chip {
