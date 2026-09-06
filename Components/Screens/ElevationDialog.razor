@@ -23,7 +23,7 @@
 <div class="nb-elevation">
     <div class="nb-elevation__header">
         <div class="nb-elevation__icon">!</div>
-        <div class="nb-elevation__title">Administrator rights needed</div>
+        <div class="nb-elevation__title">@TitleText</div>
     </div>
     <div class="nb-elevation__body">@BodyText</div>
     @if (!string.IsNullOrEmpty(DetailLine))
@@ -33,7 +33,7 @@
     <div class="nb-elevation__actions">
         <div class="nb-elevation__spacer"></div>
         <button type="button" class="nb-btn nb-btn--outline nb-btn--compact" @onclick="() => State.DismissElevationDialog()">Not Now</button>
-        <button type="button" class="nb-btn nb-btn--warning" @onclick="OnRestartClick">Restart As Admin</button>
+        <button type="button" class="nb-btn nb-btn--warning" @onclick="OnRestartClick">@ButtonText</button>
     </div>
 </div>
 
@@ -41,25 +41,45 @@
     // Empty means the generic "Settings > Permissions" trigger
     // (ConfirmRestartAsAdmin); non-empty means the automatic elevation-
     // blocked-on-add trigger (PromptRestartAsAdmin), which gets a more
-    // specific message naming the game.
+    // specific message naming the game. Ignored when ToStandardUser is true
+    // (that direction has no per-game trigger).
     [Parameter] public string GameName { get; set; } = "";
 
-    private string BodyText => string.IsNullOrEmpty(GameName)
-        ? "NoBorders will restart with Administrator privileges. This helps with games that run elevated (common with anti-cheat software like Vanguard, EAC, or BattlEye), which a non-elevated copy of NoBorders cannot modify."
-        : $"NoBorders added “{GameName}”, but couldn’t fully apply borderless mode to its window — it (or its anti-cheat) is running with Administrator privileges while NoBorders is not.";
+    // Statusbar user-type indicator (MainShell.razor), clicked while already
+    // elevated — the reverse direction of the GameName-driven flows above.
+    // There's no per-game trigger for this one, hence no equivalent parameter.
+    [Parameter] public bool ToStandardUser { get; set; } = false;
 
-    private string DetailLine => string.IsNullOrEmpty(GameName)
-        ? ""
-        : "Windows blocks a non-elevated app from modifying an elevated window.";
+    private string TitleText => ToStandardUser
+        ? "Restart without Administrator rights?"
+        : "Administrator rights needed";
 
-    // Restarting closes this window's process outright (RestartAsAdmin's
-    // successful path calls Application.Exit()), but the cancelled-UAC-
-    // prompt and failed-relaunch paths don't — dismiss explicitly first so
-    // a declined/failed restart doesn't leave this dialog sitting open
-    // over whatever ShowStatus/ShowToast feedback those paths show instead.
+    private string BodyText => ToStandardUser
+        ? "NoBorders will restart without Administrator privileges. Games or anti-cheat software running elevated may no longer be affected by borderless mode until you restart as Administrator again."
+        : string.IsNullOrEmpty(GameName)
+            ? "NoBorders will restart with Administrator privileges. This helps with games that run elevated (common with anti-cheat software like Vanguard, EAC, or BattlEye), which a non-elevated copy of NoBorders cannot modify."
+            : $"NoBorders added “{GameName}”, but couldn’t fully apply borderless mode to its window — it (or its anti-cheat) is running with Administrator privileges while NoBorders is not.";
+
+    private string DetailLine => ToStandardUser
+        ? "Windows can't drop this process's own elevated rights — NoBorders relaunches itself instead."
+        : string.IsNullOrEmpty(GameName)
+            ? ""
+            : "Windows blocks a non-elevated app from modifying an elevated window.";
+
+    private string ButtonText => ToStandardUser ? "Restart Without Admin" : "Restart As Admin";
+
+    // Restarting closes this window's process outright (RestartAsAdmin's/
+    // RestartAsStandardUser's successful path calls Application.Exit()), but
+    // the cancelled-UAC-prompt and failed-relaunch paths don't — dismiss
+    // explicitly first so a declined/failed restart doesn't leave this
+    // dialog sitting open over whatever ShowStatus/ShowToast feedback those
+    // paths show instead.
     private void OnRestartClick()
     {
         State.DismissElevationDialog();
-        State.RestartAsAdmin();
+        if (ToStandardUser)
+            State.RestartAsStandardUser();
+        else
+            State.RestartAsAdmin();
     }
 }

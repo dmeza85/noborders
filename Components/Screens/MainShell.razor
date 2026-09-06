@@ -143,7 +143,9 @@
                 <StatusBarToast Title="@State.ToastTitle" Detail="@State.ToastDetail" Level="State.ToastLevel" IconUrl="@State.ToastIconPath" />
             </div>
         }
-        <span>@(State.IsElevated ? "administrator" : "standard user")</span>
+        <span class="nb-shell__usertype" role="button" tabindex="0"
+              title="@(State.IsElevated ? "Restart without Administrator rights" : "Restart as Administrator")"
+              @onclick="OnUserTypeClick">@(State.IsElevated ? "administrator" : "standard user")</span>
     </footer>
 
     @if (_showAddModal)
@@ -174,6 +176,20 @@
     // decisions, so opening/closing it is just this component's own state,
     // not anything MainForm needs to know about.
     private bool _showAddModal;
+
+    // Statusbar user-type indicator, made clickable as a quick admin/standard
+    // toggle: each direction reuses ElevationDialog's existing confirm-then-
+    // restart flow (ConfirmAndRestartAsAdmin already backed Settings >
+    // Permissions; ConfirmAndRestartAsStandardUser is the new reverse path)
+    // rather than restarting immediately on a single click, since either
+    // direction closes and relaunches the whole app.
+    private void OnUserTypeClick()
+    {
+        if (State.IsElevated)
+            State.ConfirmAndRestartAsStandardUser();
+        else
+            State.ConfirmAndRestartAsAdmin();
+    }
 
     protected override void OnInitialized() => State.Changed += OnStateChanged;
     public void Dispose() => State.Changed -= OnStateChanged;

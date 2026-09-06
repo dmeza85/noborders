@@ -359,6 +359,16 @@
   flex: 1;
 }
 
+/* Quick admin/standard-user toggle — see MainShell.razor's OnUserTypeClick. */
+.nb-shell__usertype {
+  cursor: pointer;
+}
+
+.nb-shell__usertype:hover,
+.nb-shell__usertype:focus-visible {
+  color: var(--nb-text-primary);
+}
+
 /* User request, 2026-08-13: ShowToast's messages render here — centered in
    the status bar — while MainForm is visible (StatusBarToast.razor). Only
    `left: 50%` here; the -50% X half of the centering is baked into

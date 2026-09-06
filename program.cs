@@ -912,6 +912,7 @@ namespace NoBorders
         void QueueSave();
         void SaveConfig();
         void RestartAsAdmin();
+        void RestartAsStandardUser();
         string ArtworkApiKey { get; }
         void SetSteamGridDbApiKey(string key);
         void ApplyArtwork(string heroPath, string iconPath);
@@ -921,6 +922,7 @@ namespace NoBorders
         void ToggleConstrainMouseDefault();
         bool IsElevated { get; }
         void ConfirmRestartAsAdmin();
+        void ConfirmRestartAsStandardUser();
         bool AlwaysRunAsAdmin { get; set; }
         bool VerboseLogging { get; set; }
         void DismissElevationDialog();
@@ -1534,6 +1536,7 @@ namespace NoBorders
         void IMainFormBridge.QueueSave() => QueueSave();
         void IMainFormBridge.SaveConfig() => SaveConfig();
         void IMainFormBridge.RestartAsAdmin() => RestartAsAdmin();
+        void IMainFormBridge.RestartAsStandardUser() => RestartAsStandardUser();
         string IMainFormBridge.ArtworkApiKey => _settings.SteamGridDbApiKey;
         void IMainFormBridge.SetSteamGridDbApiKey(string key) => SetSteamGridDbApiKey(key);
         void IMainFormBridge.ApplyArtwork(string heroPath, string iconPath) => ApplyArtwork(heroPath, iconPath);
@@ -1543,6 +1546,7 @@ namespace NoBorders
         void IMainFormBridge.ToggleConstrainMouseDefault() => ToggleConstrainMouseDefault();
         bool IMainFormBridge.IsElevated => _isElevated;
         void IMainFormBridge.ConfirmRestartAsAdmin() => ConfirmRestartAsAdmin();
+        void IMainFormBridge.ConfirmRestartAsStandardUser() => ConfirmRestartAsStandardUser();
         bool IMainFormBridge.AlwaysRunAsAdmin
         {
             get => _settings.AlwaysRunAsAdmin;
@@ -1908,6 +1912,11 @@ namespace NoBorders
         /// </summary>
         private void ConfirmRestartAsAdmin() => ShowElevationDialog();
 
+        /// <summary>Statusbar user-type indicator's click handler while already
+        /// elevated (MainShell.razor) — same ElevationDialog host Form as
+        /// ConfirmRestartAsAdmin, just the reverse direction.</summary>
+        private void ConfirmRestartAsStandardUser() => ShowElevationDialog(toStandardUser: true);
+
         private void RestartAsAdmin()
         {
             try
@@ -2034,6 +2043,100 @@ namespace NoBorders
             {
                 AppLogger.Log(ex, "RestartAsAdmin");
                 ShowStatus("Couldn't restart as Administrator — see noborders.log for details.");
+            }
+        }
+
+        /// <summary>
+        /// Statusbar user-type indicator's "restart without Administrator
+        /// rights" flow — the reverse of RestartAsAdmin above. Windows gives a
+        /// running process no way to drop its own elevated token, so this
+        /// can't just be RestartAsAdmin without the "runas" verb: launching
+        /// exePath directly, even with UseShellExecute and no verb, still
+        /// inherits THIS process's elevated token. Instead it asks the
+        /// already-running (non-elevated) explorer.exe shell to launch the
+        /// target on our behalf — the well-known de-elevation trick, same
+        /// effect as right-click > "Run as different user" minus the prompt —
+        /// so the new process gets explorer's medium-integrity token instead.
+        /// </summary>
+        private void RestartAsStandardUser()
+        {
+            try
+            {
+                string exePath = Application.ExecutablePath;
+                AppLogger.Log($"RestartAsStandardUser: Application.ExecutablePath = '{exePath}'");
+
+                string fileName = Path.GetFileNameWithoutExtension(exePath);
+                if (!File.Exists(exePath) ||
+                    fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Log($"RestartAsStandardUser: resolved path looks wrong (fileName='{fileName}', exists={File.Exists(exePath)}). Aborting restart.");
+                    MessageBox.Show(
+                        "NoBorders couldn't determine the correct file to relaunch " +
+                        $"(resolved path: \"{exePath}\").\n\n" +
+                        "As a workaround, close NoBorders, then start NoBorders.exe normally from File Explorer (without \"Run as administrator\").",
+                        "Restart Failed",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // explorer.exe, not exePath — see the method doc comment above.
+                // Arguments are quoted individually then joined, same
+                // CreateProcess-correct-escaping intent as RestartAsAdmin's
+                // ArgumentList (ProcessStartInfo.Arguments here instead
+                // because the target being launched, exePath, is itself one
+                // of explorer.exe's own arguments and needs its own
+                // quoting — ArgumentList only escapes for the process actually
+                // being started, which here is explorer.exe, not NoBorders).
+                var psi = new ProcessStartInfo("explorer.exe")
+                {
+                    UseShellExecute  = true,
+                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
+                };
+                var relaunchArgs = Environment.GetCommandLineArgs().Skip(1)
+                    .Select(a => "\"" + a.Replace("\"", "\\\"") + "\"");
+                psi.Arguments = string.Join(" ", new[] { "\"" + exePath + "\"" }.Concat(relaunchArgs));
+                AppLogger.Log($"RestartAsStandardUser: relaunch via explorer.exe, args = '{psi.Arguments}'");
+
+                // Same flush-then-release sequencing as RestartAsAdmin — see
+                // that method's comments for why each step is ordered this way.
+                _saveDebounce.Stop();
+                CaptureWindowBounds();
+                SaveConfig();
+                AppLogger.Log("RestartAsStandardUser: config flushed to disk before restart.");
+
+                try
+                {
+                    Program.AppMutex?.ReleaseMutex();
+                    Program.AppMutex?.Dispose();
+                    AppLogger.Log("RestartAsStandardUser: single-instance mutex released and disposed.");
+                }
+                catch (Exception relEx)
+                {
+                    AppLogger.Log(relEx, "RestartAsStandardUser: mutex release (may already be released, non-fatal)");
+                }
+
+                Process? proc = Process.Start(psi);
+
+                // Unlike RestartAsAdmin's runas launch, a null Process here is
+                // NOT necessarily a failure: when explorer.exe is already
+                // running (the normal case), CreateProcess forwards the
+                // request to that existing instance via DDE instead of
+                // starting a genuinely new process, and Process.Start
+                // legitimately returns null for that path even on success.
+                AppLogger.Log(proc == null
+                    ? "RestartAsStandardUser: Process.Start returned null (expected for an explorer.exe handoff — not necessarily a failure)."
+                    : $"RestartAsStandardUser: explorer.exe handoff process PID={proc.Id}.");
+
+                _settings.AlwaysRunAsAdmin = false;
+                SaveConfig();
+
+                _forceClose = true;
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Log(ex, "RestartAsStandardUser");
+                ShowStatus("Couldn't restart without Administrator rights — see noborders.log for details.");
             }
         }
 
@@ -5195,12 +5298,12 @@ namespace NoBorders
         /// trigger; non-empty means the automatic elevation-blocked-on-add
         /// trigger, which gets a message naming that game.
         /// </summary>
-        private void ShowElevationDialog(string gameName = "")
+        private void ShowElevationDialog(string gameName = "", bool toStandardUser = false)
         {
             if (!this.IsHandleCreated) return;
             if (this.InvokeRequired)
             {
-                this.BeginInvoke(new MethodInvoker(() => ShowElevationDialog(gameName)));
+                this.BeginInvoke(new MethodInvoker(() => ShowElevationDialog(gameName, toStandardUser)));
                 return;
             }
 
@@ -5214,11 +5317,12 @@ namespace NoBorders
             {
                 HostPage = "wwwroot\\index.html",
                 Dock     = DockStyle.Fill,
-                Services = _blazorServices // same DI container as the main window; State.DismissElevationDialog/RestartAsAdmin need AppStateService
+                Services = _blazorServices // same DI container as the main window; State.DismissElevationDialog/RestartAsAdmin/RestartAsStandardUser need AppStateService
             };
             var parameters = new Dictionary<string, object?>
             {
-                [nameof(Components.Screens.ElevationDialog.GameName)] = gameName
+                [nameof(Components.Screens.ElevationDialog.GameName)]       = gameName,
+                [nameof(Components.Screens.ElevationDialog.ToStandardUser)] = toStandardUser
             };
             dialogView.RootComponents.Add<Components.Screens.ElevationDialog>("#app", parameters);
 

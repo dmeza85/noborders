@@ -456,6 +456,15 @@ namespace NoBorders.Services
         /// </summary>
         public void RestartAsAdmin() => _bridge.RestartAsAdmin();
 
+        /// <summary>
+        /// Statusbar user-type indicator's (MainShell.razor) click handler
+        /// while already elevated — reverse direction of RestartAsAdmin.
+        /// Real and irreversible (closes this instance and relaunches
+        /// without Administrator rights), only ever invoked on an explicit
+        /// user click via ElevationDialog's "Restart Without Admin" button.
+        /// </summary>
+        public void RestartAsStandardUser() => _bridge.RestartAsStandardUser();
+
         /// <summary>MainForm's `_isElevated` — set once by `CheckElevation()` at
         /// startup, before BuildUI runs. Drives Settings &gt; Permissions'
         /// status line and whether its "Restart as Administrator" button/hint
@@ -473,6 +482,13 @@ namespace NoBorders.Services
         /// dialog's own button.
         /// </summary>
         public void ConfirmAndRestartAsAdmin() => _bridge.ConfirmRestartAsAdmin();
+
+        /// <summary>
+        /// MainShell.razor's statusbar user-type indicator, clicked while
+        /// already elevated — same ElevationDialog confirmation shape as
+        /// ConfirmAndRestartAsAdmin, just the reverse direction.
+        /// </summary>
+        public void ConfirmAndRestartAsStandardUser() => _bridge.ConfirmRestartAsStandardUser();
 
         /// <summary>
         /// Settings &gt; Permissions "Always start as Administrator" checkbox.
