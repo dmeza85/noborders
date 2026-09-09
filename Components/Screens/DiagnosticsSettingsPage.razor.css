@@ -89,3 +89,35 @@
   white-space: nowrap;
   cursor: pointer;
 }
+
+.nb-diagnostics-page__reset-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 13px 14px;
+  border: 1px solid var(--nb-danger-border);
+  border-radius: var(--nb-radius-card);
+  background: var(--nb-field);
+}
+
+.nb-diagnostics-page__reset-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.nb-diagnostics-page__reset-title {
+  font: 600 13.5px/1 var(--nb-font-ui);
+  color: var(--nb-text-primary);
+}
+
+.nb-diagnostics-page__reset-sub {
+  font: 400 11.5px/1.4 var(--nb-font-ui);
+  color: var(--nb-text-secondary);
+  margin-top: 5px;
+}
+
+.nb-diagnostics-page__reset-btn {
+  flex: none;
+  white-space: nowrap;
+}

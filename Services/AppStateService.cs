@@ -591,6 +591,14 @@ namespace NoBorders.Services
         public void ConfirmClearIgnoredProcesses() => _bridge.ConfirmClearIgnoredProcesses();
 
         /// <summary>
+        /// Settings > Diagnostics "Full Reset" — shows a native confirmation
+        /// before wiping every persisted setting (games, resolutions,
+        /// hotkeys, ignore list, API key, etc.) and the artwork cache, then
+        /// restarts NoBorders as if freshly installed.
+        /// </summary>
+        public void ConfirmFullReset() => _bridge.ConfirmFullReset();
+
+        /// <summary>
         /// Phase 8.4: the Display tab's Width/Height/Offset X/Y stepper
         /// fields — live reads of MainForm's real `_numWidth`/`_numHeight`/
         /// `_numOffsetX`/`_numOffsetY` (NumericTextBox shadow controls, same

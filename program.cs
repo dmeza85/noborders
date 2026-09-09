@@ -437,11 +437,24 @@ namespace NoBorders
     /// real folder under AppPaths.AppDataDir on first run so
     /// ArtworkAwareBlazorWebView's PhysicalFileProvider layers have
     /// something to read even when no physical wwwroot sits next to the
-    /// exe. Cached under a folder named for the assembly version, but
-    /// re-extraction is gated on the running exe's own last-write time (see
-    /// Extract()'s doc comment), not just File.Exists — so a rebuild that
-    /// doesn't bump the version still gets its fresh content on next launch
-    /// instead of silently serving a stale previous build's copy forever.
+    /// exe.
+    ///
+    /// Single fixed folder (not one named per assembly version): re-extraction
+    /// is gated entirely on the running exe's own last-write time (see
+    /// Extract()'s doc comment on the marker file), which already correctly
+    /// detects "this is a different build" independent of whatever the
+    /// assembly version number says — a rebuild that doesn't bump the
+    /// version still gets fresh content on next launch instead of silently
+    /// serving a stale previous build's copy forever. A per-version folder
+    /// name added nothing on top of that (the marker file is what actually
+    /// does the invalidation), it just meant every version bump left its
+    /// predecessor's folder sitting on disk forever with nothing left to
+    /// ever clean it up — confirmed live: 5 stale version folders
+    /// accumulated across releases before this was simplified to reuse one
+    /// folder and just overwrite it in place. WebView2's own separate
+    /// HTTP-level cache (same "old build, same URL" staleness risk, one
+    /// layer up) is unaffected by any of this either way — see
+    /// WebView2CacheGuard just above, gated on the same ExeBuildStamp.
     /// </summary>
     internal static class EmbeddedWwwroot
     {
@@ -452,8 +465,7 @@ namespace NoBorders
         private static string Extract()
         {
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
-            string version = asm.GetName().Version?.ToString() ?? "0.0.0.0";
-            string targetDir = Path.Combine(AppPaths.AppDataDir, "wwwroot", version);
+            string targetDir = Path.Combine(AppPaths.AppDataDir, "wwwroot");
             string markerFile = Path.Combine(targetDir, ".extracted");
             string exeStamp = ExeBuildStamp.Value;
 
@@ -936,6 +948,7 @@ namespace NoBorders
         void AddIgnoredProcess(string exeName);
         void RemoveIgnoredProcess(string exeName);
         void ConfirmClearIgnoredProcesses();
+        void ConfirmFullReset();
         int Width { get; }
         void AdjustWidth(int delta);
         int Height { get; }
@@ -1569,6 +1582,7 @@ namespace NoBorders
         void IMainFormBridge.AddIgnoredProcess(string exeName) => AddIgnoredProcess(exeName);
         void IMainFormBridge.RemoveIgnoredProcess(string exeName) => RemoveIgnoredProcess(exeName);
         void IMainFormBridge.ConfirmClearIgnoredProcesses() => ConfirmClearIgnoredProcesses();
+        void IMainFormBridge.ConfirmFullReset() => ConfirmFullReset();
         int IMainFormBridge.Width => (int)_numWidth.Value;
         void IMainFormBridge.AdjustWidth(int delta) => AdjustWidth(delta);
         int IMainFormBridge.Height => (int)_numHeight.Value;
@@ -4056,6 +4070,110 @@ namespace NoBorders
             _appState.RaiseChanged();
         }
 
+        /// <summary>
+        /// Settings > Diagnostics "Full Reset" button's entry point — wipes
+        /// every persisted NoBorders setting (tracked games, custom
+        /// resolutions/monitor defaults, hotkeys, ignore list, SteamGridDB key,
+        /// window bounds, toggles) and the artwork cache, leaving the user's
+        /// AppData folder as if the app had just been installed. Confirms
+        /// first (same irreversible-action shape as ConfirmClearIgnoredProcesses/
+        /// RemoveAllSavedMonitors) since there is no undo. Unlike those two,
+        /// this can't just mutate _settings in place and keep running: stale
+        /// in-memory state (registered hotkeys, WinForms controls already
+        /// populated from the old settings, BlazorWebView's own component
+        /// state) would drift from the fresh AppSettings, so instead this
+        /// relaunches the process — same "flush, release the mutex, spawn,
+        /// exit" shape as RestartAsAdmin, just without the elevation change
+        /// (no "runas" verb, AlwaysRunAsAdmin/elevation untouched either way).
+        /// </summary>
+        private void ConfirmFullReset()
+        {
+            var confirm = MessageBox.Show(
+                "This will permanently erase ALL NoBorders settings — every tracked " +
+                "game, custom resolution, hotkey, ignore-list entry and your " +
+                "SteamGridDB API key — and restart the app as if it had just been " +
+                "installed.\n\nThis can't be undone.",
+                "Full Reset",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (confirm != DialogResult.Yes) return;
+
+            try
+            {
+                AppLogger.Log("ConfirmFullReset: user-initiated full reset.");
+                _saveDebounce.Stop();
+
+                // Restore any windows currently stripped of their title bar back
+                // to normal before wiping _settings out from under them —
+                // otherwise a game left running through the reset would stay
+                // stuck borderless (nothing left tracking it to ever restore it).
+                foreach (var g in _trackedWindows.Values.Distinct().ToList())
+                    RemoveGameTracking(g);
+                _trackedWindows.Clear();
+                _runningGames.Clear();
+
+                _settings = new AppSettings();
+                UpdateRegistryStartup(); // removes the Run key — fresh StartWithWindows is false
+
+                if (File.Exists(_configPath)) File.Delete(_configPath);
+
+                string cacheDir = Path.Combine(AppPaths.AppDataDir, "artwork-cache");
+                if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, recursive: true);
+
+                AppLogger.Log("ConfirmFullReset: settings and artwork cache wiped. Relaunching.");
+
+                string exePath = Application.ExecutablePath;
+                string fileName = Path.GetFileNameWithoutExtension(exePath);
+                if (!File.Exists(exePath) || fileName.Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogger.Log($"ConfirmFullReset: resolved path looks wrong (fileName='{fileName}', exists={File.Exists(exePath)}). Aborting relaunch.");
+                    MessageBox.Show(
+                        "Settings were reset, but NoBorders couldn't relaunch itself " +
+                        $"(resolved path: \"{exePath}\").\n\nPlease close and reopen NoBorders manually.",
+                        "Full Reset",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var psi = new ProcessStartInfo(exePath)
+                {
+                    UseShellExecute  = true,
+                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
+                };
+                foreach (var a in Environment.GetCommandLineArgs().Skip(1))
+                    psi.ArgumentList.Add(a);
+
+                // Same mutex handoff as RestartAsAdmin — release AND dispose
+                // before spawning, or the new instance's own single-instance
+                // check finds it still held and just no-ops.
+                try
+                {
+                    Program.AppMutex?.ReleaseMutex();
+                    Program.AppMutex?.Dispose();
+                }
+                catch (Exception relEx) { AppLogger.Log(relEx, "ConfirmFullReset: mutex release (may already be released, non-fatal)"); }
+
+                Process? proc = Process.Start(psi);
+                if (proc == null)
+                {
+                    AppLogger.Log("ConfirmFullReset: Process.Start returned null — the new instance did not launch. Keeping this instance open.");
+                    ShowStatus("Reset, but restart may have failed — check noborders.log for details.");
+                    return;
+                }
+
+                AppLogger.Log($"ConfirmFullReset: new instance launched successfully, PID={proc.Id}. Closing this instance.");
+                _forceClose = true;
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Log(ex, "ConfirmFullReset");
+                MessageBox.Show(
+                    "Full reset failed — see noborders.log for details.",
+                    "Full Reset",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void BtnAddBrowse_Click(object? sender, EventArgs e)
         {
             using var ofd = new OpenFileDialog
@@ -5055,7 +5173,32 @@ namespace NoBorders
             foreach (var hwnd in _trackedWindows.Keys.ToList())
             {
                 if (!IsWindow(hwnd)) { _trackedWindows.Remove(hwnd); continue; }
-                try { ApplyBorderless(hwnd, _trackedWindows[hwnd]); }
+
+                var g = _trackedWindows[hwnd];
+
+                // Bugfix: _trackedWindows holds its own GameConfig reference per
+                // window handle, independent of _settings.Games — if the game
+                // was removed from the list (or a Full Reset wiped it) while its
+                // window stayed open, this loop would otherwise keep re-applying
+                // borderless to it forever, since nothing here previously
+                // re-validated the game still exists. Only Step 2 below ever
+                // checked _settings.Games. Restore the title bar once and stop
+                // tracking it instead.
+                if (!_settings.Games.Contains(g))
+                {
+                    try
+                    {
+                        bool wasActive = g.IsActive;
+                        g.IsActive = false; // routes ApplyBorderless into its restore-title-bar branch
+                        ApplyBorderless(hwnd, g);
+                        g.IsActive = wasActive;
+                    }
+                    catch (Exception ex) { AppLogger.Log(ex, "EnforceTimer_Tick: restoring orphaned tracked window"); }
+                    _trackedWindows.Remove(hwnd);
+                    continue;
+                }
+
+                try { ApplyBorderless(hwnd, g); }
                 catch (Exception ex)
                 {
                     AppLogger.Log(ex, "EnforceTimer_Tick");

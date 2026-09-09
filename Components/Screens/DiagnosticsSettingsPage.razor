@@ -42,7 +42,15 @@
    field. It's since moved to its own Settings > Artwork page/nav entry
    (see ArtworkSettingsPage.razor), alongside the Hotkeys/Behaviour split,
    so this page is back to being purely the log/verbose-logging content
-   described above. *@
+   described above.
+
+   "Full Reset" row added on top of that: wipes AppSettings entirely
+   (games, resolutions, hotkeys, ignore list, API key, everything) plus the
+   artwork cache, then restarts NoBorders — see MainForm.ConfirmFullReset's
+   own doc comment for why a restart, not just an in-place _settings swap.
+   Styled with the same nb-btn--danger-outline class as Ignore List's
+   "Clear All"/MatchingDetailPane's "Remove Game", this page's closest
+   existing precedent for an irreversible, confirmation-gated action. *@
 
 <div class="nb-diagnostics-page__log-row">
     <div class="nb-diagnostics-page__log-info">
@@ -63,6 +71,14 @@
 <div class="nb-diagnostics-page__footer">
     <div class="nb-diagnostics-page__footer-text nb-mono">@ErrorCountText</div>
     <button type="button" class="nb-diagnostics-page__export">Export Log</button>
+</div>
+
+<div class="nb-diagnostics-page__reset-row">
+    <div class="nb-diagnostics-page__reset-info">
+        <div class="nb-diagnostics-page__reset-title">Full Reset</div>
+        <div class="nb-diagnostics-page__reset-sub">Erases every setting, tracked game, custom resolution and hotkey, and restarts NoBorders as if it were freshly installed. Can't be undone.</div>
+    </div>
+    <button type="button" class="nb-btn nb-btn--danger-outline nb-diagnostics-page__reset-btn" @onclick="() => State.ConfirmFullReset()">Full Reset</button>
 </div>
 
 @code {

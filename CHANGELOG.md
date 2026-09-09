@@ -3,6 +3,30 @@
 Versioning: `major.minor.patch`. Patch bumps are small fixes, minor bumps
 add functionality, major bumps are major releases.
 
+## v1.2.3 — 2026-09-09
+
+### New
+
+- **Settings > Diagnostics "Full Reset"** — wipes every persisted setting
+  (tracked games, custom resolutions/monitor defaults, hotkeys, ignore list,
+  SteamGridDB API key, window bounds, toggles) and the artwork cache, then
+  restarts NoBorders as if freshly installed. Confirms first; can't be
+  undone.
+
+### Fixed
+
+- Fixed a game staying stuck borderless after being removed from the games
+  list while its window was still open. The per-second enforcement loop
+  only re-validated newly-launched windows against the games list, not
+  windows it was already tracking — an orphaned tracked window kept getting
+  re-stripped of its title bar forever, independent of the games list.
+- Fixed NoBorders leaving every previous version's extracted wwwroot folder
+  behind under `%LOCALAPPDATA%\NoBorders\wwwroot` forever, one per update,
+  since nothing ever cleaned up an old version once it stopped being the
+  running exe's version. The per-version folder wasn't actually needed —
+  rebuild/stale-content detection already runs off the exe's own build
+  stamp — so extraction now reuses one fixed folder instead.
+
 ## v1.2.1 — 2026-08-31
 
 ### Fixed
