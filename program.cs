@@ -1351,6 +1351,21 @@ namespace NoBorders
         // so the warning fires once per game rather than every enforcement tick.
         private readonly HashSet<string> _elevationWarnedGames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Thrash guard: a game whose in-engine settings got reset (resolution
+        // changed, window mode toggled, etc.) while its NoBorders profile stayed
+        // active can end up fighting us — the engine keeps restoring its own
+        // style/size and we keep stripping it right back, every single
+        // enforcement tick. That repeated SetWindowLong/SetWindowPos churn during
+        // the engine's own mode-switch (menus, intro videos) has been observed to
+        // wedge the video driver hard enough to require a reboot. These track how
+        // many *consecutive* ticks in a row needed a real change for a given
+        // window, and — once backed off — until when we should stop touching it.
+        private readonly Dictionary<IntPtr, int>      _consecutiveEnforceChanges = new Dictionary<IntPtr, int>();
+        private readonly Dictionary<IntPtr, DateTime> _enforceBackoffUntil       = new Dictionary<IntPtr, DateTime>();
+        private readonly HashSet<string> _thrashWarnedGames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private const int      ThrashTickThreshold = 4;                 // consecutive changed ticks before backing off
+        private static readonly TimeSpan ThrashBackoff = TimeSpan.FromSeconds(15);
+
         // ── Hotkey capture session state ────────────────────────────────────────
         // Set while the user has clicked "Set Hotkey" and the app is waiting for
         // a new key combination. While non-zero, the corresponding global hotkey
@@ -3824,6 +3839,7 @@ namespace NoBorders
 
             _runningGames.Remove(g);
             _elevationWarnedGames.Remove(g.GameName);
+            _thrashWarnedGames.Remove(g.GameName);
         }
 
         // ════════════════════════════════════════════════════════════════════════
@@ -5172,7 +5188,13 @@ namespace NoBorders
             // This corrects any style resets the game engine may have done.
             foreach (var hwnd in _trackedWindows.Keys.ToList())
             {
-                if (!IsWindow(hwnd)) { _trackedWindows.Remove(hwnd); continue; }
+                if (!IsWindow(hwnd))
+                {
+                    _trackedWindows.Remove(hwnd);
+                    _consecutiveEnforceChanges.Remove(hwnd);
+                    _enforceBackoffUntil.Remove(hwnd);
+                    continue;
+                }
 
                 var g = _trackedWindows[hwnd];
 
@@ -5256,7 +5278,19 @@ namespace NoBorders
                     SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                 }
+                _consecutiveEnforceChanges.Remove(hwnd);
+                _enforceBackoffUntil.Remove(hwnd);
                 return;
+            }
+
+            // Thrash guard — if we're currently backed off this window (see
+            // below), leave it alone entirely rather than fighting whatever the
+            // engine is doing to it right now.
+            if (_enforceBackoffUntil.TryGetValue(hwnd, out DateTime backoffUntil))
+            {
+                if (DateTime.UtcNow < backoffUntil) return;
+                _enforceBackoffUntil.Remove(hwnd);
+                _consecutiveEnforceChanges.Remove(hwnd);
             }
 
             // Determine which monitor the window is currently on.
@@ -5299,6 +5333,43 @@ namespace NoBorders
                 (cur.Right  - cur.Left) == profile.Width  &&
                 (cur.Bottom - cur.Top)  == profile.Height;
             bool styleCorrect = (style & (int)(WS_CAPTION | WS_THICKFRAME)) == 0;
+            bool needsChange  = !styleCorrect || !positionCorrect;
+
+            // Thrash guard — a game whose engine keeps fighting us (resetting its
+            // own style/size every frame, e.g. right after its in-game settings
+            // were reset while our profile stayed active) will need a real change
+            // here on every single tick. Repeatedly slamming SetWindowLong/
+            // SetWindowPos into a window while the engine is mid mode-switch
+            // (menus, intro videos) has been observed to wedge the GPU driver
+            // hard enough to require a reboot, so if this keeps happening several
+            // ticks in a row, stop touching the window for a while instead of
+            // escalating the fight.
+            if (needsChange)
+            {
+                int consecutive = _consecutiveEnforceChanges.TryGetValue(hwnd, out int c) ? c + 1 : 1;
+                _consecutiveEnforceChanges[hwnd] = consecutive;
+                if (consecutive >= ThrashTickThreshold)
+                {
+                    _enforceBackoffUntil[hwnd] = DateTime.UtcNow.Add(ThrashBackoff);
+                    _consecutiveEnforceChanges.Remove(hwnd);
+                    AppLogger.Log(
+                        $"ApplyBorderless: '{g.GameName}' (hwnd={hwnd}) needed re-enforcement on "
+                        + $"{consecutive} consecutive ticks — backing off for {ThrashBackoff.TotalSeconds:0}s "
+                        + "to avoid fighting the game's own window changes.", LogLevel.Warn);
+                    if (_thrashWarnedGames.Add(g.GameName))
+                    {
+                        ShowToast(
+                            $"{g.GameName} keeps resetting its own window — pausing borderless\n"
+                            + "enforcement briefly so it doesn't fight the game.",
+                            LogLevel.Warn, g.IconImagePath);
+                    }
+                    return;
+                }
+            }
+            else
+            {
+                _consecutiveEnforceChanges.Remove(hwnd);
+            }
 
             // Always re-strip window styles if the game has reset them (common
             // during engine init). Only skip the SetWindowPos call if the window

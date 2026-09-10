@@ -11,9 +11,9 @@
     <AssemblyName>NoBorders</AssemblyName>
     <RootNamespace>NoBorders</RootNamespace>
 
-    <Version>1.2.3</Version>
-    <AssemblyVersion>1.2.3.0</AssemblyVersion>
-    <FileVersion>1.2.3.0</FileVersion>
+    <Version>1.2.4</Version>
+    <AssemblyVersion>1.2.4.0</AssemblyVersion>
+    <FileVersion>1.2.4.0</FileVersion>
 
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -63,7 +63,9 @@
     for "Borderless Gaming App UI" — the icon set's source SVGs/PNGs/README,
     kept for reference but not meant to be compiled/published as-is (the
     pieces actually used were copied into wwwroot/img, Resources/, and
-    app.ico).
+    app.ico) — and for ThrashTestHarness, a standalone fake-game exe (its
+    own .csproj) used to manually test the enforcement thrash-guard; it is
+    never referenced by or shipped with NoBorders itself.
   -->
   <ItemGroup>
     <Compile Remove="NoBorders.Tests\**\*.cs" />
@@ -71,6 +73,9 @@
     <None Remove="NoBorders.Tests\**" />
     <Content Remove="Borderless Gaming App UI\**" />
     <None Remove="Borderless Gaming App UI\**" />
+    <Compile Remove="ThrashTestHarness\**\*.cs" />
+    <Content Remove="ThrashTestHarness\**" />
+    <None Remove="ThrashTestHarness\**" />
   </ItemGroup>
 
   <!-- Tray icon's theme-adaptive mono variants (MainForm.Tray.cs) — embedded
