@@ -152,6 +152,39 @@
   </Target>
 
   <!--
+    Confirmed live (noborders.log): a plain `dotnet build` output — as
+    opposed to `dotnet publish` — always gets a sidecar
+    NoBorders.staticwebassets.runtime.json dropped next to the exe by the
+    SDK's own AddStaticWebAssetsManifest target (Microsoft.NET.Sdk.
+    StaticWebAssets.targets, wired unconditionally into
+    GetCopyToOutputDirectoryItemsDependsOn — publish output never gets it,
+    since that same SDK target marks it CopyToPublishDirectory="Never").
+    That manifest hardcodes whichever machine last built the project's
+    absolute paths — this dev machine's NuGet package cache, even its
+    Z:\...\wwwroot source folder. BlazorWebView's internal
+    StaticWebAssetsLoader unconditionally builds a PhysicalFileProvider for
+    every content root listed in it the moment the WebView2 control is
+    created; on any other machine — or this same one after a clean Windows
+    reinstall wipes %USERPROFILE%\.nuget — those paths don't exist,
+    PhysicalFileProvider's constructor throws, and the window never finishes
+    drawing (logged as "ERROR in Application.ThreadException" from
+    PhysicalFileProvider..ctor via BlazorWebView.StartWebViewCoreIfPossible).
+    This app already ships and serves all of wwwroot itself via embedded
+    resources (the EmbeddedResource ItemGroup above, plus
+    ArtworkAwareBlazorWebView), so the manifest is unused and actively
+    dangerous — deleting it right after Build is simpler and safer than
+    disabling StaticWebAssetsEnabled outright, which was tried first and
+    turned out to also silently remove BundleScopedCssFiles, breaking the
+    NoBorders.styles.css bundle EmbedScopedCssBundle depends on above.
+  -->
+  <Target Name="RemoveStaticWebAssetsRuntimeManifest" AfterTargets="Build">
+    <ItemGroup>
+      <_StaleStaticWebAssetsManifest Include="$(OutDir)$(TargetName).staticwebassets.runtime.json" />
+    </ItemGroup>
+    <Delete Files="@(_StaleStaticWebAssetsManifest)" Condition="Exists('$(OutDir)$(TargetName).staticwebassets.runtime.json')" />
+  </Target>
+
+  <!--
     review.md §4.6: Microsoft.Web.WebView2 (pulled in transitively by the
     WindowsForms WebView package above) ships lib DLLs for every UI framework
     it supports — Core, WinForms, AND Wpf — and its buildTransitive targets
