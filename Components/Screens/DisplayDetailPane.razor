@@ -63,7 +63,11 @@
    the real shadow `_numWidth`/`_numHeight`/`_numOffsetX`/`_numOffsetY`
    NumericTextBox fields SaveUIToProfile already reads). Lock-cursor got the
    same treatment earlier (AppStateService.ConstrainMouse/ToggleConstrainMouse)
-   via a checkbox instead of a stepper.
+   via a checkbox instead of a stepper — unlike the steppers, though, toggling
+   it now auto-saves immediately (MainForm.ChkConstrain_CheckedChanged, wired
+   directly to `_chkConstrain.CheckedChanged`) rather than staying pending
+   until Save Changes, per user request: a per-game setting people expect to
+   take effect the moment they click it, not require a separate commit step.
 
    Phase 4.13: ↶ Undo calls AppStateService.Undo — net-new per the README
    (no prior WinForms UI/handler existed for this). Disabled
@@ -130,7 +134,7 @@
 
         <div class="nb-text-subline nb-display-pane__hint">Arrows step by 1 px · hold Shift for 10 · Ctrl for 100</div>
 
-        <label class="nb-display-pane__check" @onclick="() => State.ToggleConstrainMouse()">
+        <label class="nb-display-pane__check" @onclick="OnToggleConstrainMouse">
             <span class="nb-display-pane__check-box @(State.ConstrainMouse ? "nb-display-pane__check-box--checked" : "")">@(State.ConstrainMouse ? "✓" : "")</span>
             <span>Lock cursor to window bounds</span>
         </label>
@@ -232,6 +236,13 @@
     private void AdjustHeight(int delta) { EnsureSelected(); State.AdjustHeight(delta); }
     private void AdjustOffsetX(int delta) { EnsureSelected(); State.AdjustOffsetX(delta); }
     private void AdjustOffsetY(int delta) { EnsureSelected(); State.AdjustOffsetY(delta); }
+
+    // Toggling now auto-saves (MainForm.ChkConstrain_CheckedChanged), so this
+    // needs the same EnsureSelected()-first guard as every other write action
+    // above — without it, a click before any real selection exists would flip
+    // the checkbox visually but never persist, same class of bug Phase 8.4
+    // already fixed for the steppers.
+    private void OnToggleConstrainMouse() { EnsureSelected(); State.ToggleConstrainMouse(); }
 
     private async Task OnSaveChanges()
     {

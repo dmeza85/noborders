@@ -2465,6 +2465,7 @@ namespace NoBorders
             // ── Constrain mouse ──────────────────────────────────────────────────
             _chkConstrain.Text     = "Lock mouse cursor to window bounds";
             _chkConstrain.AutoSize = true;
+            _chkConstrain.CheckedChanged += ChkConstrain_CheckedChanged;
             tbl.Controls.Add(MakeDetailRow(string.Empty, _chkConstrain));
 
             // ── Action buttons ───────────────────────────────────────────────────
@@ -3476,6 +3477,25 @@ namespace NoBorders
             _updatingUI = false;
         }
 
+        /// <summary>
+        /// Saves and applies the "Lock mouse cursor to window bounds" toggle the
+        /// moment it changes — same auto-save shape as <see cref="ChkActive_CheckedChanged"/>
+        /// (Active toggle) rather than requiring a separate Save Changes click.
+        /// Guarded by `_updatingUI` so programmatic `_chkConstrain.Checked =`
+        /// assignments made while loading a profile onto the UI (LoadProfileToUI,
+        /// CmbMonitor_SelectedIndexChanged) don't themselves trigger a save.
+        /// </summary>
+        private void ChkConstrain_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (_updatingUI || _selectedGame == null) return;
+            SaveUIToProfile(_activeScope);
+            SaveConfig();
+            if (_selectedGame.IsActive) EnforceGame(_selectedGame);
+            ShowStatus(_chkConstrain.Checked
+                ? $"{_selectedGame.GameName} — mouse locked to window bounds."
+                : $"{_selectedGame.GameName} — mouse lock disabled.");
+        }
+
         private void LoadProfileToUI(GameConfig g, string scope)
         {
             if (string.IsNullOrEmpty(scope)) return;
@@ -3519,7 +3539,13 @@ namespace NoBorders
             if (_updatingUI || _selectedGame == null) return;
             SaveUIToProfile(_activeScope);
             _activeScope = _cmbMonitor.SelectedItem?.ToString() ?? string.Empty;
+            // Guard against LoadProfileToUI's own _chkConstrain.Checked = ...
+            // assignment re-triggering ChkConstrain_CheckedChanged's auto-save —
+            // this is just displaying the newly-selected scope's already-saved
+            // value, not a user edit.
+            _updatingUI = true;
             LoadProfileToUI(_selectedGame, _activeScope);
+            _updatingUI = false;
         }
 
         /// <summary>
@@ -3595,12 +3621,18 @@ namespace NoBorders
             if (_selectedGame == null || string.IsNullOrEmpty(_activeScope)) return;
             if (_settings.MonitorDefaults.TryGetValue(_activeScope, out var def))
             {
-                // Load values into the UI fields
+                // Load values into the UI fields. _updatingUI suppresses
+                // ChkConstrain_CheckedChanged's own auto-save for this
+                // programmatic assignment — the explicit persist right below
+                // already covers it, avoiding a redundant double SaveConfig/
+                // EnforceGame.
+                _updatingUI = true;
                 _numWidth.Value       = Clamp(def.Width,   0, 16384);
                 _numHeight.Value      = Clamp(def.Height,  0, 16384);
                 _numOffsetX.Value     = Clamp(def.OffsetX, -16384, 16384);
                 _numOffsetY.Value     = Clamp(def.OffsetY, -16384, 16384);
                 _chkConstrain.Checked = def.ConstrainMouse;
+                _updatingUI = false;
 
                 // Immediately persist to the game's profile and apply to any
                 // running window — no separate Save Changes click required.
