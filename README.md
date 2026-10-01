@@ -33,11 +33,6 @@ coverage preview.
 
 ![Games tab — Display](docs/images/games-display.png)
 
-**Games — Matching**: how NoBorders finds this game's window, with a live
-test against everything currently open.
-
-![Games tab — Matching](docs/images/games-matching.png)
-
 **Settings — Monitors**: per-monitor baseline defaults new games inherit,
 including monitors that aren't currently connected.
 

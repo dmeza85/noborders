@@ -1,6 +1,17 @@
 bin/
 obj/
 *.user
+*.suo
+*.log
 .vs/
 .claude/
 ThrashTestHarness/
+temp/
+
+# Reference-only design source, excluded from compilation (NoBorders.csproj)
+# and not needed in a lean checkout - app.ico/wwwroot already have the
+# pieces actually used.
+Borderless Gaming App UI/
+
+# Internal dev planning log, not meant for a public-facing checkout.
+MIGRATION_PLAN.md
