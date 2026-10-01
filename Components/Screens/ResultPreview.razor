@@ -1,12 +1,4 @@
 @namespace NoBorders.Components.Screens
-@* Reusable "Result Preview" block — design-handoff/README.md screen 3a
-   ("Result preview states") documents the two states rendered here; both
-   screen 2a and screen 1e embed this exact block (1e: "same component as
-   2a"). The geometry math (scale to the 290×132 well, band/label
-   positions) is genuinely computed from the parameters, not hardcoded
-   sample values, since this is meant to be reused once real data is wired
-   up in a later phase — only the *values passed in* are hardcoded per
-   Phase 2's "static shell" scope. *@
 
 <div class="nb-preview">
     <div class="nb-text-label nb-preview__label">RESULT PREVIEW</div>
@@ -55,43 +47,12 @@
     private double ScaleX => MonitorWidth > 0 ? WellWidth / MonitorWidth : 0;
     private double ScaleY => MonitorHeight > 0 ? WellHeight / MonitorHeight : 0;
 
-    // Bugfix (user report, 2026-08-13, second half): callers used to fall
-    // back to the WINDOW's own width/height whenever the target monitor
-    // wasn't connected (DisplayDetailPane/MonitorsSettingsPage's own
-    // `?? State.Width`-style fallbacks) — meaning MonitorWidth==WindowWidth
-    // by construction any time a monitor was disconnected. That fallback
-    // silently broke the geometry: ScaleX*WindowWidth is then always
-    // exactly WellWidth, so the window box rendered at full well size (0
-    // offset) no matter what the profile's real OffsetX/OffsetY actually
-    // were — confirmed live: labels correctly read "X 640 / Y 720" while
-    // the box itself filled the entire well edge-to-edge, contradicting its
-    // own labels. Those callers now pass 0 instead of guessing, matching
-    // the same "honestly say unknown" precedent DisplayDetailPane.
-    // SummaryText already sets for the coverage %/fits-on-screen line
-    // ("monitor not connected, coverage unknown" beats a fabricated
-    // number) — MonitorUnknown extends that same honesty to this preview.
     private bool MonitorUnknown => MonitorWidth <= 0 || MonitorHeight <= 0;
 
     private bool IsFullCoverage =>
         OffsetX == 0 && OffsetY == 0 &&
         WindowWidth == MonitorWidth && WindowHeight == MonitorHeight;
 
-    // Bugfix (user report, 2026-08-13): a real profile whose window sits far
-    // enough outside its monitor's bounds — confirmed live by switching a
-    // game's target monitor from a small connected display to a much larger
-    // saved one, e.g. "LG TV SSCR2" — showed the purple window box in one
-    // (correctly clamped) spot while the offset bands/labels rendered from
-    // completely different numbers, overlapping it in a way that looked
-    // broken/"offscreen" rather than just an out-of-bounds profile. Root
-    // cause: WindowStyle clamped its own left/top/width/height to the well's
-    // 290×132 bounds, but BandXStyle/BandYStyle/LabelXStyle/LabelYStyle each
-    // independently recomputed raw, UNCLAMPED `OffsetX * ScaleX`-style
-    // values — fine when everything fits, but as soon as the window needed
-    // clamping (exactly the case this component exists to handle), the
-    // bands/labels no longer agreed with where the box actually ended up.
-    // Fixed by computing the clamped geometry once (Geometry) and having
-    // every other style derive from that same rectangle instead of
-    // recalculating its own version of "where is the window."
     private readonly record struct Rect(double Left, double Top, double Width, double Height);
 
     private Rect Geometry
@@ -106,15 +67,6 @@
         }
     }
 
-    // Clamped to the well's own 290×132 bounds — a profile whose window is
-    // bigger than (or offset past) its target monitor is real, valid data
-    // (the "X% of monitor · out of bounds" summary line already says so in
-    // words), but the raw scaled geometry can be many times the well's size.
-    // `.nb-preview__monitor`'s own `overflow: hidden` is the hard backstop
-    // against that spilling into the rest of the page, but clamping here
-    // too means a wildly oversized window reads as a box filling the whole
-    // well — a clearer signal than whatever sliver happened to survive
-    // clipping in a corner would be.
     private string WindowStyle
     {
         get
@@ -125,9 +77,6 @@
         }
     }
 
-    // The "uncovered" strip is everything left of/above the (clamped)
-    // window box — not a second, independently-scaled measurement of the
-    // offset, so it can never disagree with where the box actually is.
     private string BandXStyle => $"width:{Px(Geometry.Left)}";
 
     private string BandYStyle
@@ -139,9 +88,6 @@
         }
     }
 
-    // Vertically centered against the window's own (clamped) height,
-    // horizontally pinned near the well edge — matches the mock's "X 440"
-    // placement.
     private string LabelXStyle
     {
         get
@@ -151,8 +97,6 @@
         }
     }
 
-    // Pinned just right of the window's (clamped) left edge, near the well
-    // top — matches the mock's "Y 180" placement.
     private string LabelYStyle => $"left:{Px(Geometry.Left + 7)}";
 
     private static string Px(double value) =>

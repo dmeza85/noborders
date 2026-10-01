@@ -1,67 +1,9 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
-@* Phase 8.9: the mock's inline window-control glyphs (— ▢ ✕, design-handoff
-   §5a and others), previously dropped everywhere per Adaptation Decision #1
-   ("MainForm keeps its native title bar... the mock's window-control glyphs
-   and the divider... are intentionally dropped here") — superseded by an
-   explicit user request to match the mock instead. MainForm now draws a
-   genuinely frameless custom title bar: it clears WS_CAPTION entirely
-   (CreateParams override in program.cs), so there's no native caption left
-   to occupy that strip at all — the parent header row is simply the top of
-   the client area, drawn by Blazor like everything else.
-
-   Phase 9: an earlier version of this kept WS_CAPTION and used
-   WM_NCCALCSIZE to visually paper over it instead of removing it. That
-   wasn't enough — Windows still computed real (invisible) native min/max/
-   close hit-test geometry in the top-right corner, which is what fired
-   Windows 11's Snap Layout hover flyout there (a second, native set of
-   buttons overlapping these ones), and DWM still owned and occasionally
-   repainted the actual non-client caption background (a white-when-
-   unfocused/grey-when-focused strip) since nothing had actually removed it.
-   Clearing WS_CAPTION for real fixes both.
-
-   Dragging that strip is NOT the classic WM_NCHITTEST-reports-HTCAPTION
-   recipe — confirmed live that message never reaches MainForm once
-   BlazorWebView covers the reclaimed area (its own WebView2 child HWND
-   fields it first, never forwarding it up). Each parent header instead
-   wires a real @@onmousedown to State.BeginWindowDrag(), which WebView2
-   DOES deliver normally (ordinary client-area input), and MainForm's
-   handler explicitly sends the OS the WM_NCLBUTTONDOWN(HTCAPTION) message
-   it would have generated itself had hit-testing worked — same real,
-   native drag-move/Aero-Snap/restore-from-maximized behavior, just
-   triggered explicitly instead of passively. See MainForm.BeginWindowDrag's
-   own doc comment for the full mechanism. This component's three buttons
-   stop that mousedown from bubbling to the header (below) so pressing them
-   doesn't ALSO start a drag on the same click.
-
-   Double-click-to-maximize (also part of a normal title bar, per the
-   mock's own "double-click toggles maximize") was tried the same way
-   (@@ondblclick on the header calling ToggleMaximizeWindow) and dropped —
-   confirmed live it doesn't fire reliably, apparently because each click's
-   mousedown already kicked off BeginWindowDrag's own native (synchronous,
-   blocking) drag-loop, which seems to disrupt Chromium's own click-
-   sequence tracking enough that a genuine "dblclick" DOM event doesn't
-   consistently follow. Not something the user actually asked for (only the
-   three buttons were), so left as a known gap rather than chased further —
-   the maximize button covers the same outcome reliably.
-
-   One instance of this component is dropped into each of the three
-   top-level screens' own header row (MainShell/SettingsShell/
-   ActivityLogWindow) — they don't share a common layout wrapper today (each
-   already independently draws its own "wordmark" styling per screen, e.g.
-   MainShell's "NOBORDERS" vs SettingsShell's "SETTINGS"), so three small,
-   identical insertions matches that existing convention rather than
-   introducing a new shared chrome wrapper for this alone. All three forward
-   to the same MainForm-level window, since there's only ever the one real
-   OS window regardless of which "screen" is currently showing. *@
 
 <div class="nb-wctl__divider"></div>
 <div class="nb-wctl">
-    @* @onmousedown:stopPropagation — the parent header's own @onmousedown starts a
-       native window drag (BeginWindowDrag); without stopping it here, pressing any
-       of these buttons would ALSO kick off a drag on the same mousedown, since it
-       bubbles, which swallows the click before it ever completes as a button press. *@
     <button type="button" class="nb-wctl__btn" aria-label="Minimize" @onmousedown:stopPropagation="true" @onclick="() => State.MinimizeWindow()">—</button>
     <button type="button" class="nb-wctl__btn" aria-label="@(State.IsWindowMaximized ? "Restore" : "Maximize")" @onmousedown:stopPropagation="true" @onclick="() => State.ToggleMaximizeWindow()">@(State.IsWindowMaximized ? "❐" : "▢")</button>
     <button type="button" class="nb-wctl__btn nb-wctl__btn--close" aria-label="Close" @onmousedown:stopPropagation="true" @onclick="() => State.CloseWindow()">✕</button>

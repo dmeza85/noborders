@@ -1,11 +1,4 @@
 @namespace NoBorders.Components.Screens
-@* Settings — composes SettingsShell with whichever section's page is
-   active. Hotkeys and Behaviour used to share one page/mock ("1f", with
-   "Hotkeys" as the active nav item and a Behaviour section further down
-   the same page — no separate mockup ever existed for a "Behaviour-only"
-   state) but now route to their own independent pages, same as every
-   other nav item. Artwork (the SteamGridDB API key) similarly has its own
-   page rather than living inside Diagnostics. *@
 
 <SettingsShell Section="Section" OnBack="OnBack" OnSectionChange="OnSectionChange">
     @switch (Section)
@@ -40,9 +33,6 @@
 @code {
     [Parameter] public SettingsShell.SettingsSection Section { get; set; } = SettingsShell.SettingsSection.Monitors;
 
-    // Phase 7.0: real navigation — plain pass-through to SettingsShell/
-    // DiagnosticsSettingsPage; this component owns no navigation state
-    // itself, same as before (Section is still driven from outside).
     [Parameter] public EventCallback OnBack { get; set; }
     [Parameter] public EventCallback<SettingsShell.SettingsSection> OnSectionChange { get; set; }
     [Parameter] public EventCallback OnOpenLog { get; set; }

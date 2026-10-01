@@ -1,31 +1,4 @@
 @namespace NoBorders.Components.Screens
-@* Monitor card, screen 1e — three visual variants (selected-connected,
-   connected, saved-but-disconnected/removable).
-
-   Phase 4.10: the card body is clickable (selects this monitor as the
-   Settings > Monitors baseline-default target); Saved cards' "✕" removes
-   it — @onclick:stopPropagation keeps that click from also selecting the
-   card it sits on.
-
-   review.md §4.3: "✕" was a plain <div>, not in the keyboard tab order
-   and with no accessible name at all (not even a title). Now a real
-   <button> with aria-label="Remove {Name}" — the card body itself stays a
-   div, since its visible Name/Detail text already gives it an accessible
-   name the "✕" glyph alone never had.
-
-   Phase 8.14 (user request): a small green dot flags whichever connected
-   monitor Windows currently reports as primary (State.Monitors' own
-   Primary flag — same fact MainForm.GetPrimaryMonitorId already uses
-   elsewhere, not recomputed here) — "primary" is a live-OS concept, so
-   this only ever applies to connected cards; a Saved (disconnected) card
-   never gets one even if it happens to share a name with what used to be
-   the primary monitor. Reuses --nb-success, the same green already used
-   for "CONNECTED" and the borderless-applied status dot, per the ask to
-   match the app's existing color scheme rather than introduce a new
-   green. Revised per feedback: originally an absolutely-positioned badge
-   straddling the card's left border; now sized to the name's own font
-   (1em, so it tracks --nb-monitor-card__name's 12.5px exactly) and sits
-   inline just before the name, inside the card. *@
 
 <div class="nb-monitor-card @VariantClass" @onclick="OnCardClick">
     <div class="nb-monitor-card__body">
@@ -53,14 +26,6 @@
     [Parameter] public EventCallback OnSelect { get; set; }
     [Parameter] public EventCallback OnRemove { get; set; }
 
-    // Bugfix: Saved short-circuited before Selected was ever checked, so a
-    // disconnected card never showed any selected highlight at all —
-    // clicking it visually did nothing even though State.
-    // ActiveMonitorDefaultScope genuinely changed underneath it. Saved and
-    // Selected are independent facts (a card can be both), so both classes
-    // apply together; MonitorCard.razor.css's combined selector dials the
-    // highlight down for the saved case rather than reusing the full
-    // connected--selected treatment verbatim.
     private string VariantClass =>
         (Saved ? "nb-monitor-card--saved " : "") +
         (Saved && Selected ? "nb-monitor-card--saved-selected" : !Saved && Selected ? "nb-monitor-card--selected" : "");

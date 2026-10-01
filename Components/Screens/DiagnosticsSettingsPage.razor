@@ -3,54 +3,6 @@
 @using NoBorders.Services
 @inject AppStateService State
 @implements IDisposable
-@* Screen 4b — Settings: Diagnostics. The mock frames this as an isolated
-   520px card with its own "SETTINGS · DIAGNOSTICS" title bar, but 1e/1f
-   both show the full shell-with-nav treatment and the README says every
-   Settings view is "reachable from the existing Settings entry point" —
-   so this is just this page's content, hosted in the same SettingsShell
-   as the others (see SettingsView.razor).
-
-   Phase 3.5 scope note (now resolved): unlike 1e/1f, nothing on this page
-   used to correspond to a real AppSettings field or other tracked app
-   state — AppLogger.Log() was an unconditional flat-file writer with no
-   verbose/quiet levels to back a "Verbose logging" toggle, and there was
-   no in-memory error counter behind "N errors in the last session". Both
-   are now real: the toggle flips AppSettings.VerboseLogging (mirrors
-   AlwaysRunAsAdmin's own wiring) and gates AppLogger.LogVerbose; the count
-   reads AppLogger.ErrorCountThisSession, a plain in-memory counter that's
-   naturally 0 at every process start ("this session").
-
-   What LogVerbose actually covers as of this pass: real one-shot system
-   interactions that had zero visibility before, not a per-second
-   heartbeat — that was tried first (EnforceTimer_Tick logging a flat "N
-   tracked window(s)" line every tick) and explicitly walked back per
-   feedback that verbose should surface events, not noise. Current call
-   sites: ApplyBorderless's actual SetWindowLong/SetWindowPos successes
-   (program.cs — only failures were ever logged before), the registry
-   Run-key write/removal for Start with Windows (UpdateRegistryStartup),
-   shell hook registration (OnLoad), the WebView2 cache guard and embedded-
-   wwwroot extractor actually firing (both program.cs, only on a fresh
-   build — most launches never trigger either), and SteamGridDB search/
-   download requests (Services/ArtworkService.cs). Ordinary Log() calls
-   (warnings, errors, hotkey/tracking events, etc.) are unaffected either
-   way — this only adds a second, opt-in tier alongside them.
-
-   Export Log still doesn't do anything — narrower, unrelated fix. Open Log
-   is real as of Phase 7.0 (navigates to the Activity Log screen).
-
-   Phase 8.3 added a real "Game artwork" row here — the SteamGridDB API key
-   field. It's since moved to its own Settings > Artwork page/nav entry
-   (see ArtworkSettingsPage.razor), alongside the Hotkeys/Behaviour split,
-   so this page is back to being purely the log/verbose-logging content
-   described above.
-
-   "Full Reset" row added on top of that: wipes AppSettings entirely
-   (games, resolutions, hotkeys, ignore list, API key, everything) plus the
-   artwork cache, then restarts NoBorders — see MainForm.ConfirmFullReset's
-   own doc comment for why a restart, not just an in-place _settings swap.
-   Styled with the same nb-btn--danger-outline class as Ignore List's
-   "Clear All"/MatchingDetailPane's "Remove Game", this page's closest
-   existing precedent for an irreversible, confirmation-gated action. *@
 
 <div class="nb-diagnostics-page__log-row">
     <div class="nb-diagnostics-page__log-info">
@@ -82,7 +34,6 @@
 </div>
 
 @code {
-    // Phase 7.0: real navigation to the Activity Log screen.
     [Parameter] public EventCallback OnOpenLog { get; set; }
 
     protected override void OnInitialized() => State.Changed += OnStateChanged;

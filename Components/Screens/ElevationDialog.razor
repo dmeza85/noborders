@@ -1,24 +1,6 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
-@* Real, wired-up revival of the Phase 2.9 elevation-prompt mockup (screen
-   1g) — the original was static ("Not Now/Restart As Admin don't do
-   anything yet") and was deleted rather than wired, in favor of a native
-   MessageBox at the time. Moves that notification back into the app's own
-   Blazor-rendered surface instead.
-
-   Hosted in its own dedicated always-on-top Form (MainForm.ShowElevationDialog),
-   same technique as Toast.razor/MainForm.ShowToast — not a docked
-   ModalOverlay inside the main BlazorWebView, since this needs to stay
-   visible even when the main window is minimized/hidden or a game is
-   running fullscreen exclusive, exactly why the MessageBox it replaces
-   used ShowTopmostMessageBox. This window IS the dialog, so — like
-   Toast.razor — there's no outer backdrop/positioning here, just the
-   card's own background/border/radius filling the host Form.
-
-   Both buttons close the host Form immediately (MainForm wires OnNotOw/
-   OnRestart to do so) — same one-shot interaction shape as the MessageBox
-   Yes/No it replaces, rather than staying open after a choice is made. *@
 
 <div class="nb-elevation">
     <div class="nb-elevation__header">
@@ -38,16 +20,11 @@
 </div>
 
 @code {
-    // Empty means the generic "Settings > Permissions" trigger
-    // (ConfirmRestartAsAdmin); non-empty means the automatic elevation-
-    // blocked-on-add trigger (PromptRestartAsAdmin), which gets a more
-    // specific message naming the game. Ignored when ToStandardUser is true
-    // (that direction has no per-game trigger).
+    // Empty means the generic restart-as-admin trigger; non-empty names the
+    // specific game that triggered an automatic elevation prompt. Ignored
+    // when ToStandardUser is true (that direction has no per-game trigger).
     [Parameter] public string GameName { get; set; } = "";
 
-    // Statusbar user-type indicator (MainShell.razor), clicked while already
-    // elevated — the reverse direction of the GameName-driven flows above.
-    // There's no per-game trigger for this one, hence no equivalent parameter.
     [Parameter] public bool ToStandardUser { get; set; } = false;
 
     private string TitleText => ToStandardUser
@@ -68,12 +45,10 @@
 
     private string ButtonText => ToStandardUser ? "Restart Without Admin" : "Restart As Admin";
 
-    // Restarting closes this window's process outright (RestartAsAdmin's/
-    // RestartAsStandardUser's successful path calls Application.Exit()), but
-    // the cancelled-UAC-prompt and failed-relaunch paths don't — dismiss
-    // explicitly first so a declined/failed restart doesn't leave this
-    // dialog sitting open over whatever ShowStatus/ShowToast feedback those
-    // paths show instead.
+    // A successful restart exits the process outright, but a cancelled UAC
+    // prompt or failed relaunch doesn't — dismiss explicitly first so a
+    // declined/failed restart doesn't leave this dialog sitting open over
+    // whatever status/toast feedback those paths show instead.
     private void OnRestartClick()
     {
         State.DismissElevationDialog();

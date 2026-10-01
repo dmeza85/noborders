@@ -1,16 +1,6 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders
 @using NoBorders.Services
-@* MainShell's status-bar toast (user request, 2026-08-13): while MainForm
-   is visible, ShowToast's messages render here — centered in the status
-   bar — instead of the old screen-corner popup (Toast.razor), which is now
-   reserved for when the window is hidden/minimized (see MainForm.
-   ShowToast's own doc comment for the full "why"). Same three-tier
-   LogLevel coloring as that popup (Ok=green, Info/Warn=yellow, Error=red),
-   reusing the exact rgba/token pattern ActivityLogWindow's own level pills
-   already established (ActivityLogWindow.razor.css's
-   __detail-pill--error/--warn/--ok), so this reads as "the same app,"
-   not a new visual language. *@
 
 <div class="nb-status-toast nb-status-toast--@LevelClass">
     @if (!string.IsNullOrEmpty(IconUrl))
@@ -30,15 +20,8 @@
     private string ThumbStyle =>
         string.IsNullOrEmpty(IconUrl) ? "" : $"background-image:url('{ArtworkService.CssUrlEscape(IconUrl)}');background-size:cover;background-position:center;";
 
-    // Detail can carry an embedded "\n" (e.g. the elevation-warning toast's
-    // two-sentence message) — collapsed to a single space here since this
-    // renders as one line in the status bar, unlike the old popup's
-    // multi-line body.
     private string CompactDetail => Detail.Replace("\n", " ");
 
-    // Info/Warn share one "yellow" treatment (user request: "informational/
-    // warning is yellow") — Ok is green, Error is red. Same mapping as
-    // Toast.razor's own LevelClass.
     private string LevelClass => Level switch
     {
         LogLevel.Error => "danger",

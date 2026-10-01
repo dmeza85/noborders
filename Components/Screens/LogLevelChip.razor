@@ -1,13 +1,4 @@
 @namespace NoBorders.Components.Screens
-@* Log-level filter chip, screen 4a. Only "All" is shown selected in the
-   mock; Info/Warn/Error each have their own resting color when not
-   selected. No other selected-state example exists, so Selected="true"
-   uses the same violet/accent treatment the rest of the design uses for
-   "this is the active choice" (rail selection, active tab, active nav
-   item) — a reasonable inference, not a transcribed value.
-
-   Phase 6.4: clickable — ActivityLogWindow owns which one is selected
-   (single-select, like the mock's tabs) and passes Selected/OnClick down. *@
 
 <div class="nb-log-chip @(Selected ? "nb-log-chip--selected" : LevelClass)" @onclick="() => OnClick.InvokeAsync()">@Label</div>
 

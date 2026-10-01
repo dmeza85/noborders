@@ -1,25 +1,4 @@
 @namespace NoBorders.Components.Screens
-@* Phase 8.6: replaces the old static/single "Center On Monitor" text link
-   (DisplayDetailPane) and its Phase 8.5 copy (MonitorsSettingsPage) with
-   four icon buttons — one per MonitorAlignMode. Shared here since both
-   pages need the identical icon/markup/style four times each rather than
-   duplicating the SVG.
-
-   Icon and interaction states came out of a live mockup round (align_buttons
-   candidates A/B/C/D): a small monitor-outline + filled-window-rect diagram,
-   positioned per Position, drawn with `currentColor` for both shapes so the
-   button's own CSS `color` drives the icon tint through every state —
-   quiet at rest, MonitorAlignButton.razor.css's :hover lifts it (Candidate
-   A's field→raised/border→border-strong pair) to signal it's clickable, and
-   :active flashes Candidate A's .is-active palette (accent border/tint/icon)
-   for the click instant, since these are one-shot actions, not a persisted
-   selection.
-
-   review.md §4.3: was a <div @onclick>, not in the keyboard tab order and
-   with no accessible name exposed to assistive tech (title alone is
-   unreliable — invisible until hovered, and many screen readers don't
-   announce it). Now a real <button> with aria-label="@Title"; title stays
-   too, for the visible hover tooltip sighted mouse users already get. *@
 
 <button type="button" class="nb-align-btn" title="@Title" aria-label="@Title" @onclick="() => OnClick.InvokeAsync()">
     <svg width="20" height="15" viewBox="0 0 32 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -37,7 +16,7 @@
     {
         MonitorAlignMode.Left  => 2,
         MonitorAlignMode.Right => 16,
-        _                      => 9, // Center, Bottom
+        _                      => 9,
     };
 
     private int WindowY => Position == MonitorAlignMode.Bottom ? 12 : 7;

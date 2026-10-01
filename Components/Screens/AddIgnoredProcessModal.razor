@@ -1,22 +1,6 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
-@* Settings > Ignore List's "Add Program" picker (Phase 8.4) — deliberately
-   reuses the exact same picker experience as AddRunningAppModal.razor (the
-   "Add a running app" modal, screen 1d): both list AppStateService.
-   GetOpenWindows() rows with a click-to-select/confirm-to-commit shape, per
-   the request that this reuse "the same process picker as the game
-   settings". Kept as its own component rather than parameterizing
-   AddRunningAppModal itself, since the two confirm actions commit
-   fundamentally different things (a new tracked game vs. an ignore-list
-   entry) and AddRunningAppModal's "TRACKED" badge/Browse-for-EXE affordance
-   don't apply here — a process already on the ignore list can't appear in
-   this list at all (GetOpenWindowEntries already filters it out), so
-   there's nothing parallel to "TRACKED" to show.
-
-   Confirming calls AppStateService.AddIgnoredProcess with the selected
-   row's Exe (not its window title) — the same field GetOpenWindowEntries/
-   TryGetHotkeyTargetExe match against. *@
 
 <ModalOverlay Width="560">
     <div class="nb-add-ignore__header">

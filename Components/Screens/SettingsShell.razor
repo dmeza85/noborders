@@ -1,29 +1,6 @@
 @namespace NoBorders.Components.Screens
 @using NoBorders.Services
 @inject AppStateService State
-@*
-    Shared shell for the Settings views (1e Monitors, 1f Hotkeys &
-    Behaviour — now split into their own pages, Artwork, 4b Diagnostics,
-    plus the Permissions/About stubs) — title strip + 180px left nav +
-    content area.
-
-    Adaptation note (extends MIGRATION_PLAN.md Decision #1): the mock
-    frames every Settings screen as its own 700px OS window with a title
-    bar carrying window-control glyphs (— ▢ ✕). Per Decision #2, Settings
-    is reached by navigating *within* the single BlazorWebView, not by
-    opening a second OS window — a "← Back" control stands in for what
-    would be closing that separate window (not in the mock, since the mock
-    assumes a closable window; this is the necessary in-app equivalent).
-
-    2026-08-11: WindowControls.razor (— ▢ ✕) is back, though — the glyphs
-    were originally dropped for the same reason MainShell dropped them
-    (single real OS window, no per-screen window to control), but now that
-    MainForm itself is a genuinely frameless custom-chrome window (see
-    WindowControls.razor's doc comment), every screen needs its own copy of
-    those buttons since there's no native title bar left to fall back on
-    anywhere in the app, Settings included. It still controls the one real
-    MainForm window, same as MainShell's copy — Settings isn't a separate
-    window even now, just a different Blazor "page." *@
 
 <div class="nb-settings">
     <header class="nb-settings__titlebar" @onmousedown="() => State.BeginWindowDrag()">
@@ -52,8 +29,6 @@
     [Parameter] public SettingsSection Section { get; set; } = SettingsSection.Monitors;
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    // Phase 7.0: real navigation — previously static (SettingsView's own doc
-    // comment: "nav clicks don't navigate yet").
     [Parameter] public EventCallback OnBack { get; set; }
     [Parameter] public EventCallback<SettingsSection> OnSectionChange { get; set; }
 

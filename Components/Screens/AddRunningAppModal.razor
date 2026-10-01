@@ -2,48 +2,6 @@
 @using NoBorders.Services
 @inject AppStateService State
 @inject ArtworkService Artwork
-@* Screen 1d — Add Running App picker, design-handoff/README.md §"1d — Add
-   Running App picker".
-
-   Phase 4.8: rows come from AppStateService.GetOpenWindows() (the same
-   blocklist-respecting MainForm.GetOpenWindowEntries() the Matching tab's
-   live-test list uses, Phase 3.4). "TRACKED" reflects a real check —
-   whether any existing game's CompiledPattern already matches that
-   window's exe, the same predicate the enforcement/tray code uses
-   elsewhere. Row click sets a local pending selection (nothing is added
-   until "Add Game" — this modal's own selection is never written to
-   MainForm until confirmed, same non-mutating-until-confirmed shape as
-   every other Phase 4 pending-edit field). "Add Game" calls
-   AppStateService.AddGameFromRunningWindow, which forwards straight to
-   MainForm's AddGame — see that method's doc comment for why this is the
-   one Phase 4 sub-item that doesn't trigger a native WinForms control:
-   Phase 1/2 already replaced BtnAddRunning_Click's native dialog with this
-   in-app modal. Search stays static (real window count only) — filtering
-   isn't part of this sub-item's scope.
-
-   Phase 4.9: "Browse for EXE…" calls AppStateService.BrowseForExe, which
-   forwards to MainForm's real BtnAddBrowse_Click via PerformClick() — a
-   genuine native OS file picker, not a Blazor view (there's nothing to
-   replace here the way 4.8 replaced the running-app dialog). The mock has
-   no dedicated affordance for this at all (design-handoff/README.md never
-   mentions "browse"), so it's placed as a secondary link next to the tip
-   text rather than inventing rail iconography the mock doesn't specify.
-
-   Phase 8.4: both AddSelected and Browse now try
-   ArtworkService.TryAutoFetchAsync once, automatically, right after a game
-   is genuinely added (AddGameFromRunningWindow/BrowseForExe now return
-   whether one actually was — false on a cancelled dialog or duplicate pick,
-   in which case there's nothing to fetch for). Awaited before this modal
-   closes, not fire-and-forget: while this overlay is up nothing else is
-   clickable, so State.SelectedGame is guaranteed to still be the game that
-   was just added by the time the fetch resolves — a background fetch that
-   outlived the modal could otherwise race a user picking a different game
-   and misapply art via AppStateService.ApplyArtwork (which always targets
-   "whichever game is currently selected", not a specific game reference).
-   A direct name match applies immediately and silently; anything less just
-   leaves the new game's art blank, same as before this existed — the
-   user's own "Fetch Artwork" button on the Display/Matching tab is still
-   there for it. *@
 
 <ModalOverlay Width="560">
     <div class="nb-add-app__header">
@@ -101,12 +59,6 @@
 
     private bool IsTracked(OpenWindowEntry row) => State.Games.Any(g => g.IsMatch(row.Exe, row.WindowTitle));
 
-    // Same bug MainShell.razor's footer had before its Phase 8.8 fix: this
-    // tip hardcoded "Ctrl+Shift+A" (the app's default) instead of the user's
-    // actual configured hotkey, so a real rebind (e.g. to Ctrl+F9) left this
-    // modal showing a shortcut that no longer does anything. Mirrors
-    // MainShell's HintOrNull — hides the tip entirely rather than showing
-    // "press  in-game..." if the hotkey's been cleared.
     private string? AddHotkeyHint => HintOrNull(State.HotkeyAddApp);
 
     private static string? HintOrNull(HotkeyConfig cfg)

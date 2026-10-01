@@ -15,3 +15,8 @@ Borderless Gaming App UI/
 
 # Internal dev planning log, not meant for a public-facing checkout.
 MIGRATION_PLAN.md
+
+# Local-only engineering knowledge distilled from source comments stripped
+# on 2026-10-01 (frozen systems, hard-won bugfixes, non-obvious gotchas) -
+# for continuing development, not for a public-facing checkout.
+DEV_NOTES.md

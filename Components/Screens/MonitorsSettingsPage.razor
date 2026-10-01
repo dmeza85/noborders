@@ -2,66 +2,6 @@
 @using NoBorders.Services
 @inject AppStateService State
 @implements IDisposable
-@* Screen 1e — Settings: Monitors & defaults. design-handoff/README.md
-   explicitly notes the RESULT PREVIEW block here is "the same component
-   as 2a", so this reuses ResultPreview.razor rather than re-implementing
-   it.
-
-   Phase 3.5: wired to real data. "Connected" is MainForm._monitors
-   (Screen.AllScreens, refreshed by RefreshMonitors); "Saved · not
-   connected" is AppSettings.KnownMonitors minus whatever's currently
-   connected. Real monitors don't carry a persisted resolution once
-   unplugged (Screen.AllScreens only reports connected displays), so a
-   saved-disconnected card's subline shows its saved default profile size
-   (MonitorDefaults[name]) labeled "default" rather than implying it's the
-   monitor's native resolution — those are two different numbers that can
-   legitimately disagree.
-
-   Phase 4.10: monitor cards are clickable — @onclick calls
-   State.SelectMonitorDefaultScope, which forwards to MainForm's
-   SelectMonitorDefaultScope(), which sets `_cmbSetMonitor.SelectedItem` so
-   the real, unchanged `CmbSetMonitor_SelectedIndexChanged` handler runs.
-   DisplayedMonitorName now prefers the real State.ActiveMonitorDefaultScope
-   once it's been set, falling back to the same display-only pick (primary
-   connected, else first connected, else first saved name) only before any
-   card has ever been clicked. Saved cards' "✕" calls
-   State.DeleteMonitorDefault, which selects that scope then triggers the
-   real, unchanged BtnDeleteMonitor_Click — native confirmation MessageBoxes
-   and all (not replaced with Blazor UI, same as 4.9's native file picker).
-   "Save Monitor Default" calls State.SaveMonitorDefault
-   (BtnSaveDefault_Click).
-
-   review.md §3 fix: "Detect Displays" now calls State.DetectDisplays(),
-   which forwards to MainForm's own RefreshMonitors() — the same
-   enumeration OnDisplayConfigChanged already runs automatically — plus an
-   explicit RaiseChanged() since this isn't routed through a hidden
-   WinForms button's Click event the way most other actions here are.
-   "Remove All" now calls State.RemoveAllSavedMonitors(), MainForm's new
-   RemoveAllSavedMonitors() — same permanently-delete-with-confirmation
-   shape as the existing single-monitor "✕" (BtnDeleteMonitor_Click),
-   applied to every saved-disconnected monitor at once.
-
-   Phase 8.4: Width/Height/Offset X/Y are real, editable SteppedNumberField
-   steppers (State.MonitorDefaultWidth/etc.), same ±1/Shift±10/Ctrl±100
-   shape as DisplayDetailPane's — committed by Save Monitor Default same as
-   always.
-
-   Phase 8.5: Save Monitor Default now also raises a real toast in addition
-   to its pre-existing ShowStatus/button-text-flash, both of which land on
-   legacy WinForms controls invisibly covered by the BlazorWebView since
-   Phase 7.0 and were never actually visible.
-
-   Phase 8.6: four MonitorAlignButton icon buttons (Left/Center/Bottom/
-   Right) replace Phase 8.5's single "Center On Monitor" text link — new to
-   this page (didn't exist here before Phase 8.5 either) — each computes
-   Offset X/Y via AppStateService.AlignOnMonitorDefault(mode) from the
-   selected scope's real connected resolution.
-
-   Phase 8.10 (user request, layout only — no behavior changed): the align
-   row moved into the same row as "Lock cursor to window bounds by
-   default" (empty space to its right at this page's width), and Save
-   Monitor Default/Detect Displays moved beside Result Preview instead of
-   below it, to cut the panel's overall height. *@
 
 <div class="nb-monitors-page">
     <div class="nb-monitors-page__title">Monitor baseline defaults</div>
@@ -157,11 +97,6 @@
 </div>
 
 @code {
-    // Click-confirmation flash — see FlashFeedback.cs. Both genuinely
-    // persist/refresh real state (Save Monitor Default writes AppSettings.
-    // MonitorDefaults; Detect Displays re-scans and refreshes the
-    // Connected/Saved lists) — same "confirm or save a setting" criterion
-    // as Rescan/Re-Apply/Save Changes elsewhere.
     private readonly FlashFeedback _saveDefaultFlash;
     private readonly FlashFeedback _applyAllFlash;
     private readonly FlashFeedback _detectFlash;
@@ -176,35 +111,14 @@
     public void Dispose() => State.Changed -= OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
-    // Phase 8.11 (user request): collapsed by default — saved/disconnected
-    // monitors are edited far less often than connected ones (the whole
-    // point of "saved" is that they're just sitting there until
-    // reconnected), so hiding their grid + caption by default saves the
-    // vertical space those rarely-touched cards would otherwise always
-    // cost. The header row (arrow/count/hairline/Remove All) stays visible
-    // either way — only the card grid and its caption collapse.
     private bool _savedExpanded = false;
 
-    // Display-only fallback (same rationale as MainShell.DisplayedGame):
-    // prefers the real State.ActiveMonitorDefaultScope once a card has been
-    // clicked (Phase 4.10); before that, picks the primary connected
-    // monitor, then the first connected, then the first saved-disconnected
-    // name — purely to have something honest to show.
     private string DisplayedMonitorName =>
         !string.IsNullOrEmpty(State.ActiveMonitorDefaultScope) ? State.ActiveMonitorDefaultScope :
         (State.Monitors.FirstOrDefault(m => m.Primary) ?? State.Monitors.FirstOrDefault())?.ID
         ?? SavedDisconnected.FirstOrDefault()
         ?? string.Empty;
 
-    // Phase 8.4: shared by OnSaveMonitorDefault and the Width/Height/Offset
-    // steppers below — establishes the real ActiveMonitorDefaultScope first
-    // (same rationale as DisplayDetailPane's EnsureSelected: before any
-    // card's ever been clicked, State.ActiveMonitorDefaultScope is empty
-    // even though DisplayedMonitorName is showing a fallback pick, and
-    // _numSetWidth/etc. were last loaded for whatever CmbSetMonitor_
-    // SelectedIndexChanged most recently ran for — which may not be this
-    // monitor at all — so a stepper click needs the real scope selected
-    // first, exactly like Save Monitor Default already did).
     private void EnsureMonitorDefaultSelected()
     {
         if (string.IsNullOrEmpty(State.ActiveMonitorDefaultScope) && !string.IsNullOrEmpty(DisplayedMonitorName))
@@ -224,13 +138,6 @@
         await _detectFlash.Trigger();
     }
 
-    // Applies this scope's current Width/Height/Offset X/Y/Constrain fields to
-    // every tracked game/program's per-monitor profile for this monitor — the
-    // native confirmation MessageBox (State.ApplyMonitorDefaultToAllGames ->
-    // MainForm.ApplyMonitorDefaultToAllGames) is what actually gates the
-    // write, same as Delete/Remove All elsewhere on this page; the flash only
-    // fires as visual feedback after the call returns, whether or not the
-    // user confirmed (harmless no-op flash on cancel, same as those).
     private async Task OnApplyToAllGames()
     {
         EnsureMonitorDefaultSelected();
@@ -244,19 +151,6 @@
         State.AlignOnMonitorDefault(mode);
     }
 
-    // Phase 8.13 (user request): this page's align buttons switched from the
-    // shared MonitorAlignButton component (Candidate D from the align-
-    // buttons mockup, still used as-is on the Display tab) to a standalone,
-    // Candidate-C-styled set — the 2×2... here 4-wide grid of labeled 76px
-    // tiles, per the user's explicit pick of "Candidate C" from that mockup.
-    // Inlined here rather than factored into a shared component since it's
-    // now deliberately different from DisplayDetailPane's copy, unlike
-    // before. Icon geometry/colors (#4a4a58 stroke, #5c5c6e fill — one-off,
-    // don't map to any named token, same reasoning as the mockup itself)
-    // match the mockup's monitorIcon() helper exactly, non-reactive (no
-    // hover/active color swap) — Candidate C never got the hover/click
-    // polish pass Candidate D did, and the user asked for Candidate C as
-    // presented, not a hybrid.
     private static readonly (MonitorAlignMode Mode, string Label, string Title)[] AlignOptions =
     {
         (MonitorAlignMode.Left,   "Left + centered",   "Align left, centered vertically"),
@@ -269,7 +163,7 @@
     {
         MonitorAlignMode.Left  => 2,
         MonitorAlignMode.Right => 16,
-        _                      => 9, // Center, Bottom
+        _                      => 9,
     };
 
     private static int AlignIconY(MonitorAlignMode mode) => mode == MonitorAlignMode.Bottom ? 12 : 7;
@@ -282,13 +176,6 @@
     private MonitorItem? DisplayedConnectedMonitor =>
         State.Monitors.FirstOrDefault(m => m.ID == DisplayedMonitorName);
 
-    // User request (2026-08-13): fall back to the last resolution
-    // RefreshMonitors ever recorded for this monitor ID when it isn't
-    // currently connected, same as DisplayDetailPane's own
-    // KnownMonitorResolution — so the well keeps working instead of going
-    // blank/wrong the moment a monitor is unplugged. Null only when this
-    // monitor has genuinely never been seen connected since the feature
-    // shipped.
     private (int Width, int Height)? KnownMonitorResolution
     {
         get
@@ -299,15 +186,6 @@
         }
     }
 
-    // Bugfix (user report, 2026-08-13): this used to fall back to the live
-    // default profile's own size, on the theory that was "better than a
-    // 0×0 well" — turned out to be the opposite: falling back to the
-    // window's own size makes MonitorWidth==WindowWidth by construction,
-    // which silently forces ResultPreview's box to always render at full
-    // size regardless of the real offset (confirmed live: labels read
-    // "X 640 / Y 720" while the box filled the whole well, 0-offset).
-    // Routed through KnownMonitorResolution now instead of a raw 0/guess
-    // fallback.
     private int PreviewMonitorWidth  => KnownMonitorResolution?.Width  ?? 0;
     private int PreviewMonitorHeight => KnownMonitorResolution?.Height ?? 0;
 
