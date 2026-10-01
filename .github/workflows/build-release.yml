@@ -26,12 +26,6 @@ jobs:
       - name: Restore
         run: dotnet restore NoBorders.csproj
 
-      - name: Restore tests
-        run: dotnet restore NoBorders.Tests/NoBorders.Tests.csproj
-
-      - name: Run tests
-        run: dotnet test NoBorders.Tests/NoBorders.Tests.csproj --configuration Release --no-restore --verbosity normal
-
       - name: Publish
         run: dotnet publish NoBorders.csproj --configuration Release --no-restore
 

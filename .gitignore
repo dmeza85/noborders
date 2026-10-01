@@ -20,3 +20,6 @@ MIGRATION_PLAN.md
 # on 2026-10-01 (frozen systems, hard-won bugfixes, non-obvious gotchas) -
 # for continuing development, not for a public-facing checkout.
 DEV_NOTES.md
+
+# Test project - kept locally for development, not pushed.
+NoBorders.Tests/
