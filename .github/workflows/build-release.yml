@@ -20,22 +20,23 @@ jobs:
           dotnet-version: '10.0.x'
       
       - name: Restore dependencies
-        run: dotnet restore
-      
-      - name: Build project
-        run: dotnet build --configuration Release --no-restore
-      
+        run: dotnet restore NoBorders.csproj
+
+      - name: Publish project
+        run: dotnet publish NoBorders.csproj --configuration Release --no-restore --output publish
+
       - name: Verify build output
         run: |
-          if (!(Test-Path "bin\Release\net10.0-windows\NoBorders.exe")) {
+          if (!(Test-Path "publish\NoBorders.exe")) {
             Write-Error "Build failed: NoBorders.exe not found"
+            Get-ChildItem -Recurse bin, publish -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
             exit 1
           }
-      
+
       - name: Create release package
         run: |
           mkdir release-package
-          copy "bin\Release\net10.0-windows\NoBorders.exe" "release-package\"
+          copy "publish\NoBorders.exe" "release-package\"
           copy "README.md" "release-package\"
           Compress-Archive -Path "release-package\*" -DestinationPath "NoBorders-${{ github.ref_name }}.zip"
       
