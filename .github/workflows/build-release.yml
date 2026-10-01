@@ -1,4 +1,4 @@
-name: Build Release
+name: Build and Create Release Asset
 
 on:
   push:
@@ -6,42 +6,42 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    # Only ever do real work on GitHub — this repo's source of truth is
-    # self-hosted Gitea, which push-mirrors here; if Gitea Actions is ever
-    # enabled and also picks up .github/workflows/, this guard keeps it a
-    # no-op there instead of building a release candidate on Gitea.
+  build-and-release:
     if: github.server_url == 'https://github.com'
     runs-on: windows-latest
-
+    
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-
-      - name: Restore
-        run: dotnet restore NoBorders.csproj
-
-      - name: Publish
-        run: dotnet publish NoBorders.csproj --configuration Release --no-restore
-
-      - name: Stage release contents
-        shell: pwsh
+      
+      - name: Restore dependencies
+        run: dotnet restore
+      
+      - name: Build project
+        run: dotnet build --configuration Release --no-restore
+      
+      - name: Verify build output
         run: |
-          New-Item -ItemType Directory -Force -Path release-stage | Out-Null
-          Copy-Item "bin/Release/net10.0-windows/win-x64/publish/NoBorders.exe" -Destination release-stage
-          Copy-Item "README.md" -Destination release-stage
-
-      - name: Zip release
-        shell: pwsh
-        run: Compress-Archive -Path "release-stage/*" -DestinationPath "NoBorders-${{ github.ref_name }}-win-x64.zip"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          if (!(Test-Path "bin\Release\net10.0-windows\NoBorders.exe")) {
+            Write-Error "Build failed: NoBorders.exe not found"
+            exit 1
+          }
+      
+      - name: Create release package
+        run: |
+          mkdir release-package
+          copy "bin\Release\net10.0-windows\NoBorders.exe" "release-package\"
+          copy "README.md" "release-package\"
+          Compress-Archive -Path "release-package\*" -DestinationPath "NoBorders-${{ github.ref_name }}.zip"
+      
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: NoBorders-${{ github.ref_name }}-win-x64
-          path: NoBorders-*.zip
+          files: NoBorders-${{ github.ref_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
