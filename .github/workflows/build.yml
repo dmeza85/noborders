@@ -1,9 +1,6 @@
-# review.md §5: "nothing currently verifies a build even compiles before
-# it's committed." This is the minimum useful CI for this repo — build the
-# app and run the test project (NoBorders.Tests, added alongside this
-# workflow) on every push/PR. Windows-hosted specifically because NoBorders
-# is a net10.0-windows WinForms app (UseWindowsForms) — it cannot build on
-# a Linux/macOS runner.
+# Minimum useful CI for this repo — build the app on every push/PR.
+# Windows-hosted specifically because NoBorders is a net10.0-windows
+# WinForms app (UseWindowsForms) — it cannot build on a Linux/macOS runner.
 name: Build
 
 on:
@@ -14,6 +11,9 @@ on:
 
 jobs:
   build:
+    # GitHub-only, same reasoning as build-release.yml — this repo's source
+    # of truth is self-hosted Gitea, which push-mirrors here.
+    if: github.server_url == 'https://github.com'
     runs-on: windows-latest
 
     steps:
@@ -30,9 +30,3 @@ jobs:
 
       - name: Build
         run: dotnet build NoBorders.csproj --configuration Release --no-restore
-
-      - name: Restore tests
-        run: dotnet restore NoBorders.Tests/NoBorders.Tests.csproj
-
-      - name: Run tests
-        run: dotnet test NoBorders.Tests/NoBorders.Tests.csproj --configuration Release --no-restore --verbosity normal

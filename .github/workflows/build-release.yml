@@ -1,0 +1,47 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    # Only ever do real work on GitHub — this repo's source of truth is
+    # self-hosted Gitea, which push-mirrors here; if Gitea Actions is ever
+    # enabled and also picks up .github/workflows/, this guard keeps it a
+    # no-op there instead of building a release candidate on Gitea.
+    if: github.server_url == 'https://github.com'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore NoBorders.csproj
+
+      - name: Publish
+        run: dotnet publish NoBorders.csproj --configuration Release --no-restore
+
+      - name: Stage release contents
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-stage | Out-Null
+          Copy-Item "bin/Release/net10.0-windows/win-x64/publish/NoBorders.exe" -Destination release-stage
+          Copy-Item "README.md" -Destination release-stage
+
+      - name: Zip release
+        shell: pwsh
+        run: Compress-Archive -Path "release-stage/*" -DestinationPath "NoBorders-${{ github.ref_name }}-win-x64.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoBorders-${{ github.ref_name }}-win-x64
+          path: NoBorders-*.zip

@@ -3,45 +3,6 @@
 @using NoBorders.Services
 @inject AppStateService State
 @inject ArtworkService Artwork
-@* Phase 8.3 (MIGRATION_PLAN.md) — no mock precedent (the design bundle
-   predates Phase 8), so this is styled off AddRunningAppModal.razor's own
-   established modal-row language rather than invented from scratch.
-
-   Searches SteamGridDB for Game.GameName on open. Auto-applies without
-   waiting for a manual pick, but only on the very first attempt (Game has
-   no HeroImagePath/IconImagePath yet) AND only when a candidate's name is
-   an exact match (ArtworkService.IsDirectMatch) — an ambiguous title like
-   "Portal" resolving to a dozen different real SteamGridDB entries still
-   requires a manual pick, same "don't fabricate a match" principle as the
-   Matching tab's real regex testing. Re-opening the picker for a game that
-   already has art (i.e. clicking "Fetch Artwork" a second time) always
-   shows the manual picker, even if the same direct match is found again —
-   a second attempt means the user wants to see/change the options, not
-   silently re-apply the same thing. "Use this game's own icon instead" is
-   always available regardless of search outcome — the fully offline
-   ExtractExeIcon fallback, for when there's no API key, no match, no
-   network, or the user just doesn't want to wait on a search. Downloading
-   is the one truly async step (a real network round-trip), so this is the
-   one modal in the app with a loading state. The auto-apply path
-   (OnInitializedAsync) and the manual one (ConfirmSelected) both go through
-   ArtworkService.TryAutoFetchAsync/DownloadAsync + AppStateService.
-   ApplyArtwork — same underlying write, just reached without a click when
-   there's an unambiguous match to act on.
-
-   Bugfix (user report, 2026-08-13): "Use this game's own icon instead"
-   looked completely dead for a game with no recorded ExePath (ExtractExeIcon
-   requires a real, existing .exe path — nothing to extract an icon FROM
-   otherwise). It wasn't actually dead: UseExeIconOnly did set _error and
-   call StateHasChanged() correctly, but that error used to render as the
-   LAST item inside .nb-art-picker__body — the scrollable
-   (max-height:360px, overflow-y:auto) candidate-rows container. A search
-   with enough candidates to fill that height (confirmed live, 6 results)
-   pushed the freshly-added error completely below the fold with no
-   scrollbar affordance drawing attention to it and no auto-scroll —
-   confirmed live: the message was there, just invisible, one scroll away.
-   Moved out of the scrollable body entirely, into its own always-visible
-   block between the body and footer, so it can never be scrolled out of
-   view again regardless of how many search results are showing. *@
 
 <ModalOverlay Width="480">
     <div class="nb-art-picker__header">
@@ -169,10 +130,6 @@
             return;
         }
 
-        // A candidate missing one of the two art types (e.g. a hero but no
-        // icon uploaded) shouldn't blank out whatever this game already had
-        // for the other slot — only overwrite the slot that actually got a
-        // new result.
         State.ApplyArtwork(result.HeroPath ?? Game.HeroImagePath, result.IconPath ?? Game.IconImagePath);
         await OnClose.InvokeAsync();
     }

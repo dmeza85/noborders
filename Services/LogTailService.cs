@@ -3,59 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
-using NoBorders; // LogLevel
+using NoBorders;
 
 namespace NoBorders.Services
 {
-    /// <summary>
-    /// A single Activity Log row (MIGRATION_PLAN.md Phase 6.4).
-    ///
-    /// Bugfix: ActivityLogWindow.razor's @foreach keys each LogRow on its
-    /// LogEntry — records use structural equality, so two genuinely
-    /// different entries whose Time (only second-precision — AppLogger's
-    /// "HH:mm:ss" format), Level, Source, and Message all happen to match
-    /// (e.g. the same warning logged twice inside one second, confirmed
-    /// live with a repeated "SetWindowLong failed for 'Dome Keeper'")
-    /// compare equal and collide as the same @key. Blazor's render-tree
-    /// diff builder throws on that ("more than one sibling ... has the
-    /// same key value"), and since that throw happens mid-render, it
-    /// leaves the whole screen's render tree corrupted — every button,
-    /// toggle, and filter in the log window stops responding afterward,
-    /// not because those handlers are broken but because rendering itself
-    /// already crashed once. Seq is assigned once per entry by
-    /// LogTailService and never duplicates, giving @key a real identity
-    /// independent of content.
-    /// </summary>
     public sealed record LogEntry(long Seq, DateTime Time, LogLevel Level, string Source, string Message);
 
-    /// <summary>
-    /// DI-registered singleton that tails <c>AppLogger.LogPath</c> (noborders.log)
-    /// for the Razor Activity Log view (screen 4a) — net-new functionality, since
-    /// the log file itself was the only pre-existing piece (Phase 6.4).
-    ///
-    /// Polls on a <see cref="System.Threading.Timer"/> (750ms) rather than
-    /// <see cref="FileSystemWatcher"/>: this app already leans on plain WinForms
-    /// timers everywhere (EnforceTimer, ClipTimer, etc.), and FileSystemWatcher is
-    /// known to drop/duplicate events under rapid appends and needs its own error-
-    /// recovery path if the watched handle becomes invalid — a poll that reads
-    /// only the bytes appended since the last read (tracked via <see cref="_lastLength"/>)
-    /// is simpler to reason about and just as responsive at this interval.
-    ///
-    /// Parsing is deliberately conservative about what it claims to know:
-    /// <see cref="AppLogger.Log"/> writes `[timestamp] [LEVEL] message`, where
-    /// `message` is otherwise free-form prose (~80 call sites across the app, most
-    /// never annotated beyond the default Info level — see AppLogger's doc
-    /// comment). "Source" has no real metadata behind it at all; it's recovered
-    /// with a best-effort heuristic — text before the first bare `": "` (e.g.
-    /// "HotkeyAdd: ..." → source "HotkeyAdd"), or the exception logger's own
-    /// "ERROR in {context}: ..." shape — falling back to "NoBorders" rather than
-    /// guessing. This is a display convenience, not authoritative data.
-    /// </summary>
     public sealed class LogTailService : IDisposable
     {
-        // Caps memory for a long-running background app — oldest entries drop
-        // first. Comfortably above what a "N lines" footer counter would ever
-        // need to show meaningfully in the UI.
         private const int MaxEntries = 5000;
 
         private static readonly Regex EntryHeader = new(
@@ -72,12 +27,8 @@ namespace NoBorders.Services
         private long _lastLength;
         private long _nextSeq;
         private readonly List<LogEntry> _entries = new();
-        private readonly List<LogEntry> _pending = new(); // buffered while Paused
+        private readonly List<LogEntry> _pending = new();
 
-        /// <summary>Raised on the timer thread whenever entries change (new lines
-        /// tailed in, paused batch flushed, or the log cleared) — subscribers
-        /// (Razor components) already know to marshal via InvokeAsync(StateHasChanged),
-        /// same convention as AppStateService.Changed.</summary>
         public event Action? Changed;
 
         public bool Paused { get; private set; }
@@ -109,13 +60,9 @@ namespace NoBorders.Services
             Changed?.Invoke();
         }
 
-        /// <summary>Truncates the real log file — the footer's "Clear Log" action.
-        /// AppLogger keeps appending to the same path afterward with no special
-        /// handling needed; the next poll sees length 0 &lt; _lastLength and
-        /// resets, same path as external truncation/rotation.</summary>
         public void ClearLog()
         {
-            try { File.WriteAllText(_path, string.Empty); } catch { /* best-effort, same as AppLogger.Log's own try/catch */ }
+            try { File.WriteAllText(_path, string.Empty); } catch { }
             lock (_lock)
             {
                 _entries.Clear();
@@ -134,7 +81,7 @@ namespace NoBorders.Services
                 _lastLength = new FileInfo(_path).Length;
                 ParseAndAppend(text, toPending: false);
             }
-            catch { /* first read is best-effort — Poll() will catch up once the file is readable */ }
+            catch { }
         }
 
         private void Poll()
@@ -152,9 +99,6 @@ namespace NoBorders.Services
 
                 if (currentLength < _lastLength)
                 {
-                    // File shrank — cleared or rotated externally. Re-read from
-                    // scratch rather than trying to reconcile a diff against
-                    // content that no longer exists.
                     lock (_lock) { _entries.Clear(); _pending.Clear(); _lastLength = 0; }
                 }
 
@@ -169,7 +113,7 @@ namespace NoBorders.Services
                 ParseAndAppend(newText, toPending: paused);
                 Changed?.Invoke();
             }
-            catch { /* transient I/O (e.g. mid-write) — next tick retries */ }
+            catch { }
         }
 
         private void ParseAndAppend(string text, bool toPending)
@@ -206,8 +150,6 @@ namespace NoBorders.Services
                 }
                 else if (curMessage != null)
                 {
-                    // Continuation line (e.g. an exception stack trace) — belongs
-                    // to the entry currently being built.
                     curMessage.Append('\n').Append(line);
                 }
             }

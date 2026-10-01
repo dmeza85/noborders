@@ -3,89 +3,6 @@
 @using System.Text.RegularExpressions
 @inject AppStateService State
 @implements IDisposable
-@* Screen 5a's right-pane content (Matching tab), design-handoff/README.md
-   §"5a — Main window, Matching tab".
-
-   Phase 4.1: subscribes to AppStateService.Changed directly, same reason
-   as DisplayDetailPane.razor — re-rendering only cascades reliably from
-   the component that owns the RightPane RenderFragment (MainWindowMatchingTab)
-   down through MainShell's own StateHasChanged, not automatically into
-   this component just because it happens to be nested inside that
-   fragment. See MainShell.razor for the same subscribe/unsubscribe shape.
-
-   Phase 3.4: live-test list, regex validity line, and mode chips are wired
-   to the real selected game's GameConfig.CompiledPattern and a real
-   enumeration of open windows (AppStateService.GetOpenWindows(), backed by
-   the same blocklist-respecting MainForm.GetOpenWindowEntries() that
-   BtnAddRunning_Click's dialog uses) — matching README's explicit
-   requirement: "the match test uses the same compiled regex path as
-   GameConfig.CompiledPattern... so the preview cannot disagree with
-   runtime behaviour." Display Name/Match Pattern/Executable are wired too,
-   since showing a live validity line for a *different*, still-hardcoded
-   pattern would be incoherent.
-
-   Mode chips: review.md §3 follow-up — GameConfig now has a real
-   MatchTarget field (ProcessName/WindowTitle, defaulting to ProcessName so
-   every pre-existing save is unaffected), and every IsMatch call site
-   across program.cs threads a live window title alongside the exe name.
-   Clicking a chip only writes the pending buffer (State.PendingMatchTarget,
-   same shape as PendingRegexPattern) — Save Changes still owns committing
-   it to GameConfig.MatchTarget, and Undo restores it.
-
-   User report (2026-09-01): clicking a chip only changed the chip's own
-   highlight — the live-test MATCH/NO list still evaluated against the
-   last-*saved* MatchTarget (DisplayedGame.IsMatch's default overload), so
-   a click looked like a no-op unless you'd already clicked Save Changes.
-   The list now previews the pending chip selection instead, via
-   GameConfig's new IsMatch(exe, title, targetOverride) overload passed
-   CurrentMatchTarget — RegexPattern itself still previews from the last
-   *saved* text (unchanged; that half of the original design still holds,
-   only MatchTarget needed to go live).
-
-   Phase 4.5: the ↺ fetch-name button calls AppStateService.FetchName, which
-   forwards to MainForm's real BtnFetchName_Click via PerformClick() — it
-   only fills the WinForms pending-edit buffer (_txtGameName.Text), not
-   GameConfig.GameName directly (that's Save Changes' job, Phase 4.6). So
-   once a game is really selected, DISPLAY NAME shows
-   AppStateService.PendingDisplayName (that buffer) instead of
-   DisplayedGame.GameName directly — otherwise a successful fetch would be
-   invisible until some later save/reload. Before any real selection,
-   still shows DisplayedGame?.GameName (the Phase 3.3 display-only
-   fallback), since the buffer hasn't been populated for anything yet.
-
-   Phase 4.6: Save Changes calls AppStateService.SaveGameChanges, shared with
-   DisplayDetailPane's own Save Changes button (both forward to MainForm's
-   single BtnSaveGame_Click, matching the README's "both tabs share Save
-   Changes / Undo"). Commits PendingDisplayName and the pending Match
-   Pattern text (still DisplayedGame.RegexPattern today — no editable regex
-   input exists yet, so there's nothing to diverge from) onto the game.
-
-   Phase 4.7: Remove Game calls AppStateService.RemoveSelectedGame, which
-   forwards to MainForm's real BtnDeleteGame_Click via PerformClick() — no
-   confirmation prompt, matching that the WinForms button never had one
-   either. Restores any enforced windows to bordered first, then deletes
-   and persists.
-
-   Phase 4.13: ↶ Undo calls AppStateService.Undo — net-new per the README,
-   shared with DisplayDetailPane's own Undo (both forward to MainForm's
-   single UndoLastSave, matching "both tabs share Save Changes / Undo").
-   Disabled (State.CanUndo false) until a Save Changes commit has happened
-   for the currently selected game this session.
-
-   Still static: "Use Title Of Selected" (a net-new write action, Phase 6).
-
-   Phase 8.4 bugfix: Rescan had no @onclick at all, so clicking it did
-   nothing — OpenWindows (below) already re-enumerates live on every call,
-   it just had no way to be told "do that again right now" outside of
-   whatever re-render State.Changed happened to trigger next. It now just
-   forces a re-render, which re-evaluates OpenWindows the same way any
-   other State.Changed-triggered render already does.
-
-   Click feedback: forcing a re-render has no visible result of its own
-   (OpenWindows' contents usually haven't changed between one click and the
-   next), so Rescan plays wwwroot/css/buttons.css's shared flash/highlight/
-   fade animation on every click as its own confirmation that it actually
-   did something — same treatment MainShell's Re-Apply button uses. *@
 
 <div class="nb-matching-pane">
     <div class="nb-matching-pane__left">
@@ -164,11 +81,6 @@
 </div>
 
 @code {
-    // Click-confirmation flash — see FlashFeedback.cs. Save Changes gained
-    // this alongside Rescan per user request ("any button that confirms or
-    // saves a setting"); Remove Game/Undo deliberately don't (destructive
-    // and reversal actions, not confirm/save — the removed row itself is
-    // already the confirmation for Remove Game).
     private readonly FlashFeedback _rescanFlash;
     private readonly FlashFeedback _saveFlash;
     public MatchingDetailPane()
@@ -183,27 +95,15 @@
 
     private GameConfig? DisplayedGame => State.SelectedGame ?? State.Games.FirstOrDefault();
 
-    // Prefer the live pending-edit buffer once a real selection exists, so a
-    // successful fetch shows up immediately (see the doc comment above).
     private string DisplayName =>
         State.SelectedGame != null ? State.PendingDisplayName : (DisplayedGame?.GameName ?? "");
 
-    // Same shape as DisplayName above, for State.PendingRegexPattern —
-    // shows a just-written "Use Title Of Selected" result immediately,
-    // before Save Changes commits it to DisplayedGame.RegexPattern.
     private string DisplayedPattern =>
         State.SelectedGame != null ? State.PendingRegexPattern : (DisplayedGame?.RegexPattern ?? "");
 
-    // Same shape as DisplayedPattern above, for State.PendingMatchTarget —
-    // which chip shows active reflects the pending (possibly just-clicked,
-    // not-yet-saved) selection, same as the pattern/name fields do.
     private MatchTargetMode CurrentMatchTarget =>
         State.SelectedGame != null ? State.PendingMatchTarget : (DisplayedGame?.MatchTarget ?? MatchTargetMode.ProcessName);
 
-    // Phase 8.3-era addition (review.md §3): which live-test row "Use Title
-    // Of Selected" acts on. Local-only UI state, same as _showArtworkModal
-    // below — nothing MainForm needs to know about until the link is
-    // actually clicked.
     private OpenWindowEntry? _selectedWindow;
 
     private Task OnRescan() => _rescanFlash.Trigger();
@@ -220,26 +120,16 @@
         State.FetchName();
     }
 
-    // review.md §3: "Use Title Of Selected" was previously static/dead, then
-    // wired to always write the exe name — matching was process/exe-name
-    // only at the time, so a title-based pattern would have silently never
-    // matched anything real. Now that Window Title mode is real, this
-    // writes whichever field the pending chip selection actually matches
-    // against, so the link stays functionally honest in both modes. Falls
-    // back to the first open window when nothing's been explicitly clicked
-    // yet, same "something honest to show" reasoning as DisplayedMonitorName
-    // elsewhere in this migration.
     private void OnUseSelectedWindow()
     {
         EnsureSelected();
         var w = _selectedWindow ?? OpenWindows.FirstOrDefault();
-        if (string.IsNullOrEmpty(w.Exe)) return; // default(OpenWindowEntry) — no open windows at all
+        if (string.IsNullOrEmpty(w.Exe)) return;
         string target = CurrentMatchTarget == MatchTargetMode.WindowTitle ? w.WindowTitle : w.Exe;
-        if (string.IsNullOrEmpty(target)) return; // Window Title mode but this window has no title
+        if (string.IsNullOrEmpty(target)) return;
         State.SetPendingRegexPattern(Regex.Escape(target));
     }
 
-    /// <summary>review.md §3: the Window Title/Process Name chips' click handler. EnsureSelected mirrors every other pending-edit action in this pane (OnFetchName, OnUseSelectedWindow) — nothing to select until a game is chosen.</summary>
     private void OnSetMatchTarget(MatchTargetMode mode)
     {
         EnsureSelected();
@@ -259,10 +149,6 @@
         State.RemoveSelectedGame();
     }
 
-    // Phase 8.3: local-only UI state, same shape as MainShell's _showAddModal
-    // (Phase 4.8) — which native affordance this replaces never existed
-    // before this migration, so opening/closing the picker is just this
-    // component's own state, not anything MainForm needs to know about.
     private bool _showArtworkModal;
 
     private void OnFetchArtwork()
@@ -271,16 +157,8 @@
         _showArtworkModal = true;
     }
 
-    // Re-enumerated on every render, same as MainShell's rail does implicitly
-    // via State.Games — the process list can change between renders and
-    // there's no live-update push in Phase 3 (that's Phase 4/6's job), so
-    // this is a point-in-time snapshot each time Blazor re-renders.
     private List<OpenWindowEntry> OpenWindows => State.GetOpenWindows();
 
-    // "Invalid" (red dot, red field border, per the mock) means a non-empty
-    // pattern that fails to compile — distinct from "nothing to validate yet"
-    // (no game, or a game with no pattern saved), which shouldn't render as an
-    // error just because it's empty.
     private bool HasPattern => !string.IsNullOrEmpty(DisplayedGame?.RegexPattern);
 
     private string? RegexErrorMessage

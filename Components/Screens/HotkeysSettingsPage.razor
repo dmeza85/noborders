@@ -2,39 +2,6 @@
 @using NoBorders.Services
 @inject AppStateService State
 @implements IDisposable
-@* Screen 1f — Settings: Hotkeys. Split out of the former combined
-   HotkeysBehaviourSettingsPage (which the mock showed as one page under
-   "Hotkeys", with "Behaviour" as a nav item with no distinct mock of its
-   own) into its own independent page/nav entry — see BehaviourSettingsPage
-   for the other half. Doc history below is carried over from that split.
-
-   Phase 3.5: both binding rows are wired to real data — the real
-   HotkeyConfig combo (AppSettings.HotkeyAddApp/HotkeyRefreshApp) and the
-   real registration status text as last set on MainForm's own status
-   labels by TryRegisterHotkey — a read of the global-hotkey system's
-   existing output, since that system itself is frozen (MIGRATION_PLAN.md)
-   and not touched by this page.
-
-   Phase 4.11: Rebind calls AppStateService.ToggleHotkeyAddCapture/
-   ToggleHotkeyRefreshCapture, which forward to MainForm's real toggle
-   logic (begins or cancels a capture session via the frozen
-   `_capturingHotkeyId` state machine — that machine's own decisions are
-   untouched, only its outcome is now also raised as AppStateService.Changed
-   so this page re-renders from it). While capturing, the row switches to
-   the mock's "capturing" visual, but — since the state machine tracks only
-   "am I capturing" and "what got captured", not "which modifiers are
-   currently physically held before the final key" — this doesn't attempt
-   the mock's live modifier-chip lighting (Ctrl/Shift lit progressively);
-   that data doesn't exist without changing the frozen capture logic, so a
-   single honest "Listening…" slot stands in for it rather than fabricating
-   chip state. The actual key combo is captured by MainForm's frozen
-   `CaptureHotkey` — a `KeyDown` handler on the real WinForms textbox.
-   `BeginHotkeyCapture`'s own `.Focus()` call needed a real fix to work from
-   here (see its doc comment in program.cs: a synchronous `Focus()` was
-   silently overridden by the WebView2 Chromium widget re-asserting its own
-   OS focus right after the click, confirmed live via `GetGUIThreadInfo`;
-   deferring it through `BeginInvoke` fixed it). Esc-to-cancel and
-   Backspace/Delete-to-clear both come free from that same handler. *@
 
 <div class="nb-hotkeys-page__title">Global hotkeys</div>
 <div class="nb-hotkeys-page__subline">Work while a game has focus. Click a binding, then press your combo.</div>
@@ -124,10 +91,9 @@
             yield return (parts[i], i == parts.Length - 1);
     }
 
-    // TryRegisterHotkey's status text always starts with "Active", "Disabled",
-    // or "Not active — ..." (see program.cs) — anything else (e.g. the label's
-    // pre-OnLoad placeholder "Not yet registered") is a startup transient, not
-    // a failure, so it's treated the same as "muted" rather than danger-red.
+    // Status text always starts with "Active" or "Not active — ..."; anything
+    // else (e.g. the startup placeholder "Not yet registered") is a startup
+    // transient, not a failure, so it's treated as "muted" rather than danger-red.
     private static string StatusClass(string statusText) =>
         statusText.StartsWith("Active", StringComparison.Ordinal) ? "success" :
         statusText.StartsWith("Not active", StringComparison.Ordinal) ? "danger" :

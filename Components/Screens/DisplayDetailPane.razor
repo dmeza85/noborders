@@ -2,91 +2,6 @@
 @using NoBorders.Services
 @inject AppStateService State
 @implements IDisposable
-@* Screen 2a's right-pane content (Display tab), design-handoff/README.md
-   §"2a — Main window, Display tab".
-
-   Phase 4.1: subscribes to AppStateService.Changed directly rather than
-   relying on MainShell's own re-render to cascade down through the
-   RightPane RenderFragment — that cascade turned out NOT to reliably
-   reach this component in practice (confirmed live: selecting a different
-   rail row updated MainShell's hero/rail but left this pane showing the
-   previously-selected game's profile). Every component that reads
-   AppStateService now subscribes for itself; see MainShell.razor for the
-   same pattern.
-
-   Phase 3.6: Width/Height/Offset X/Offset Y/Lock-cursor and the Result
-   Preview (screen 3a's component) are wired to the selected game's real
-   resolved profile, using the exact same fallback chain as
-   MainForm.GetEffectiveProfile()/BtnLoadDefaults_Click — the game's own
-   saved Profiles[monitor] if any, else that monitor's MonitorDefaults
-   entry, else GameDisplayProfile's own 1920×1080 schema default.
-
-   Phase 4.2: TARGET MONITOR is a real, functional dropdown (a native
-   <select>, restyled — the mock's exact custom popup list isn't
-   reproduced pixel-for-pixel, which is a real fidelity gap left for a
-   Phase 6 polish pass if wanted, same tradeoff class as Phase 6.2/6.4's
-   deferred items). Selecting an option calls
-   AppStateService.SelectMonitorScope, which forwards to MainForm's
-   SelectMonitorScope -> the real, unchanged CmbMonitor_SelectedIndexChanged.
-   TargetMonitorName now prefers the real AppStateService.ActiveMonitorScope
-   (MainForm's _activeScope) once it's been set by a selection — from either
-   UI — falling back to the same display-only pick as before (first saved
-   profile's monitor, else primary connected, else first known name) only
-   for the window before any selection has ever happened.
-
-   3a's coverage %/fits-on-screen summary line (`w*h / mw*mh`, per the
-   README's implementation note) didn't exist as static UI from Phase 2 —
-   this is the first place it's built, since the math has nothing real to
-   compute against until now. Coverage needs the monitor's actual physical
-   resolution, which — like the Settings > Monitors page's saved-
-   disconnected cards (Phase 3.5) — is only knowable while that monitor is
-   currently connected (AppStateService.Monitors); a saved profile for a
-   now-unplugged monitor honestly shows "monitor not connected" instead of
-   a fabricated percentage.
-
-   Phase 4.4: "Load Monitor Defaults" calls AppStateService.LoadMonitorDefaults,
-   which forwards to MainForm's real BtnLoadDefaults_Click via PerformClick() —
-   loads the active scope's saved MonitorDefaults entry onto the selected
-   game and immediately persists/enforces it, exactly as the WinForms button
-   always has.
-
-   Phase 4.6: Save Changes calls AppStateService.SaveGameChanges, shared with
-   MatchingDetailPane's own Save Changes button (README: "both tabs share
-   Save Changes / Undo") — commits the pending display name (see
-   MatchingDetailPane) and re-persists whatever profile is currently loaded
-   in the shadow NumericTextBox fields (SaveUIToProfile), a real, working
-   round-trip.
-
-   Phase 8.4: Width/Height/Offset X/Y are real, editable steppers — the
-   README's ±1/Shift±10/Ctrl±100 interaction, via SteppedNumberField's
-   OnStep and AppStateService.Width/Height/OffsetX/OffsetY (Adjust* mutates
-   the real shadow `_numWidth`/`_numHeight`/`_numOffsetX`/`_numOffsetY`
-   NumericTextBox fields SaveUIToProfile already reads). Lock-cursor got the
-   same treatment earlier (AppStateService.ConstrainMouse/ToggleConstrainMouse)
-   via a checkbox instead of a stepper — unlike the steppers, though, toggling
-   it now auto-saves immediately (MainForm.ChkConstrain_CheckedChanged, wired
-   directly to `_chkConstrain.CheckedChanged`) rather than staying pending
-   until Save Changes, per user request: a per-game setting people expect to
-   take effect the moment they click it, not require a separate commit step.
-
-   Phase 4.13: ↶ Undo calls AppStateService.Undo — net-new per the README
-   (no prior WinForms UI/handler existed for this). Disabled
-   (State.CanUndo false) until a Save Changes commit has happened for the
-   currently selected game this session; forwards to MainForm's
-   UndoLastSave, which restores the pre-Save GameName/RegexPattern/Profiles
-   snapshot MainForm captures right before BtnSaveGame_Click applies its
-   changes (single-level — one Undo consumes the snapshot).
-
-   Phase 8.5: Save Changes now also raises a real toast (ShowToast) in
-   addition to the pre-existing ShowStatus call — ShowStatus alone lands on
-   a legacy WinForms label permanently hidden behind the BlazorWebView since
-   the Phase 7.0 cutover, so it gave no visible confirmation at all.
-
-   Phase 8.6: the old single "Center On Monitor" text link is now four
-   MonitorAlignButton icon buttons (Left/Center/Bottom/Right) — each computes
-   Offset X/Y from the active scope's real connected resolution via
-   AppStateService.AlignOnMonitor(mode); no-ops with a status message if
-   that monitor isn't currently connected. *@
 
 <div class="nb-display-pane">
     <div class="nb-display-pane__left">
@@ -165,12 +80,6 @@
 </div>
 
 @code {
-    // Click-confirmation flash (user request: same effect as Rescan/Re-Apply
-    // on any button that confirms or saves a setting, not cancel/back) —
-    // both of these genuinely persist state (Save Changes commits the
-    // pending profile; Load Monitor Defaults "immediately persists/
-    // enforces it" per this file's own doc comment above), unlike Undo,
-    // which reverses a change rather than confirming one.
     private readonly FlashFeedback _saveFlash;
     private readonly FlashFeedback _loadDefaultsFlash;
     public DisplayDetailPane()
@@ -192,15 +101,6 @@
         ?? State.KnownMonitors.FirstOrDefault()
         ?? string.Empty;
 
-    // Phase 8.4 bugfix: was missing the EnsureSelected() every sibling write
-    // action below already has — confirmed live, on a fresh launch (before
-    // ever clicking a game row) State.SelectedGame is still null even though
-    // DisplayedGame is showing a fallback pick, so MainForm.
-    // CmbMonitor_SelectedIndexChanged's own `_selectedGame == null` guard
-    // silently no-op'd the whole monitor switch: the <select> itself still
-    // visually changed (plain browser DOM behavior), but _activeScope never
-    // moved, so nothing reading it — Width/Height/Offset, Result Preview,
-    // MainShell's hero meta line — ever followed.
     private void OnMonitorChanged(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
@@ -209,10 +109,9 @@
         State.SelectMonitorScope(value);
     }
 
-    // Write actions below all guard on MainForm's real _selectedGame, which
-    // can still be null while DisplayedGame is only showing the Phase 3.3
-    // display-only fallback. Same fix as MainShell's hero button (Phase 4.3):
-    // establish the real selection first so a click against what's visibly
+    // Write actions below all guard on the real selected game, which can
+    // still be null while DisplayedGame shows a display-only fallback.
+    // Establish the real selection first so a click against what's visibly
     // shown never silently no-ops.
     private void EnsureSelected()
     {
@@ -227,21 +126,11 @@
         await _loadDefaultsFlash.Trigger();
     }
 
-    // Phase 8.4: Width/Height/Offset X/Y are now real, editable steppers —
-    // same EnsureSelected()-first shape as every other write action here, so
-    // a stepper click against the Phase 3.3 display-only fallback (before
-    // any real selection exists) establishes the selection instead of
-    // silently no-oping.
     private void AdjustWidth(int delta) { EnsureSelected(); State.AdjustWidth(delta); }
     private void AdjustHeight(int delta) { EnsureSelected(); State.AdjustHeight(delta); }
     private void AdjustOffsetX(int delta) { EnsureSelected(); State.AdjustOffsetX(delta); }
     private void AdjustOffsetY(int delta) { EnsureSelected(); State.AdjustOffsetY(delta); }
 
-    // Toggling now auto-saves (MainForm.ChkConstrain_CheckedChanged), so this
-    // needs the same EnsureSelected()-first guard as every other write action
-    // above — without it, a click before any real selection exists would flip
-    // the checkbox visually but never persist, same class of bug Phase 8.4
-    // already fixed for the steppers.
     private void OnToggleConstrainMouse() { EnsureSelected(); State.ToggleConstrainMouse(); }
 
     private async Task OnSaveChanges()
@@ -261,13 +150,10 @@
     private MonitorItem? TargetMonitorConnected =>
         State.Monitors.FirstOrDefault(m => m.ID == TargetMonitorName);
 
-    // User request (2026-08-13): fall back to the last resolution
-    // RefreshMonitors ever recorded for this monitor ID (MainForm.Monitors.cs)
-    // when it isn't currently connected, so the preview/coverage math keeps
-    // working instead of going blank the moment a monitor is unplugged.
-    // Null only when this monitor has genuinely never been seen connected
-    // since the feature shipped — same "honestly unknown" case
-    // ResultPreview's own MonitorUnknown still handles for that case.
+    // Falls back to the last resolution ever recorded for this monitor ID
+    // when it isn't currently connected, so preview/coverage math keeps
+    // working instead of going blank the moment a monitor is unplugged. Null
+    // only when this monitor has never been seen connected at all.
     private (int Width, int Height)? KnownMonitorResolution
     {
         get
@@ -278,21 +164,13 @@
         }
     }
 
-    // Phase 8.4: live (State.Width/Height/OffsetX/OffsetY — the same shadow
-    // NumericTextBox fields the steppers now edit), not the persisted
-    // profile a DisplayedProfile-style lookup would read. Same reasoning as
-    // MainShell's hero meta line fix: reading the persisted value here meant
-    // the Result Preview/summary line never moved as you stepped the
-    // fields, only after Save Changes.
-    //
-    // Bugfix (user report, 2026-08-13): these used to fall back to
-    // State.Width/Height (the WINDOW's own size) when TargetMonitorConnected
-    // is null — but that makes MonitorWidth==WindowWidth by construction any
-    // time the target monitor isn't connected, which silently forces
-    // ResultPreview's box to always render at full size regardless of the
-    // profile's real offset (confirmed live: labels read "X 640 / Y 720"
-    // while the box filled the whole well, 0-offset). Routed through
-    // KnownMonitorResolution now instead of a raw 0/guess fallback.
+    // Reads the live shadow fields (State.Width/Height/OffsetX/OffsetY), not
+    // a persisted-profile lookup, so the preview/summary line moves as you
+    // step the fields rather than only after Save Changes. Routed through
+    // KnownMonitorResolution rather than falling back to the window's own
+    // size, which would make MonitorWidth==WindowWidth by construction and
+    // force the preview box to always render at full size when the target
+    // monitor isn't connected.
     private int PreviewMonitorWidth  => KnownMonitorResolution?.Width  ?? 0;
     private int PreviewMonitorHeight => KnownMonitorResolution?.Height ?? 0;
 
@@ -307,7 +185,6 @@
         }
     }
 
-    // README's implementation note: "percentage is area coverage (w*h / mw*mh)".
     private int? CoveragePercent
     {
         get
@@ -318,7 +195,6 @@
         }
     }
 
-    // README: "'fits on screen' flips to a warning when offset + size exceeds monitor bounds".
     private bool? FitsOnScreen
     {
         get
@@ -341,8 +217,6 @@
         string core = $"{State.Width}×{State.Height} @ {State.OffsetX},{State.OffsetY}";
         if (CoveragePercent is not int pct) return $"{core} — {TargetMonitorName} not connected, coverage unknown";
         string fit = FitsOnScreen == true ? "fits on screen" : "out of bounds";
-        // Distinguishes live vs cached data now that a disconnected monitor
-        // can still produce a real percentage (KnownMonitorResolution).
         string suffix = TargetMonitorConnected == null ? " (last known)" : "";
         return $"{core} — {pct}% of {TargetMonitorName}{suffix} · {fit}";
     }

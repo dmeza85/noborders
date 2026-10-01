@@ -2,20 +2,6 @@
 @using NoBorders.Services
 @inject AppStateService State
 @implements IDisposable
-@* Settings > Ignore List (Phase 8.4) — lists only the programs the user has
-   explicitly chosen to ignore, on top of NoBorders' own built-in system-
-   process filtering, which stays internal and is never shown or editable
-   here (MainForm's _systemProcessBlocklist — ~100 entries most users would
-   never touch, so surfacing them here would just be noise). Every process
-   listed here is hidden from the "Add Running App"/this page's own "Add
-   Program" picker and the Matching tab's live-test list — both ultimately
-   read AppStateService.GetOpenWindows(), which filters against the built-in
-   list AND this one together (see GetOpenWindowEntries in program.cs).
-   "Clear All" empties this list only, with a native confirmation first
-   since it's irreversible; the built-in filtering is unaffected either way.
-   No mock precedent (the design bundle predates this feature), so styled
-   off Diagnostics/Monitors' own already-established row/toolbar language
-   rather than invented from scratch. *@
 
 <div class="nb-ignore-page__title">Ignore List</div>
 <div class="nb-ignore-page__subline">Programs you add here never show up as candidates to add as a game, and are hidden from the Matching tab's live test. NoBorders already filters out common Windows system processes on its own — this list is only for anything extra you want hidden too.</div>
@@ -53,7 +39,5 @@ else
     public void Dispose() => State.Changed -= OnStateChanged;
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
-    // Local-only UI state, same shape as MainShell's _showAddModal — opening/
-    // closing the picker is just this component's own state.
     private bool _showAddModal;
 }

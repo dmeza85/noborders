@@ -1,38 +1,4 @@
 @namespace NoBorders.Components.Screens
-@* Phase 7.0 (MIGRATION_PLAN.md) — the permanent BlazorWebView's actual root
-   component, replacing the ad hoc `RootComponents.Add<SpecificScreen>("#app")`
-   every prior phase used for isolated testing (MainWindowDisplayTab/
-   MainWindowMatchingTab/SettingsView/ActivityLogWindow all still exist and
-   still work standalone for that — this doesn't replace them, it composes
-   them for the live app).
-
-   Owns "which screen/tab/section is showing" as plain local state — pure
-   Blazor-side UI presentation, no WinForms bridge needed (there is no real
-   WinForms equivalent of "which screen is showing" the way _selectedGame or
-   _activeScope have real MainForm fields behind them), same category as
-   MainShell's own _showAddModal (Phase 4.8). No wrapping element around the
-   @switch: MainShell/SettingsView/ActivityLogWindow's own root divs all rely
-   on `height:100%` resolving against #app's own `height:100%` (wwwroot/css/
-   type.css) — same direct-child relationship every single-screen root
-   component already had, so an extra wrapper here would break that chain
-   without adding anything.
-
-   Deliberately NOT a DI service: there's only ever one AppShell instance
-   (the whole app's root), so there's no cross-component sharing problem an
-   injectable service would solve — it would just be indirection with no
-   payoff, the same reasoning that's kept every other purely-local Phase 4/6/8
-   modal-open flag (_showAddModal, _showArtworkModal) as component state
-   instead of a service.
-
-   Phase 8.4 bugfix: now also subscribes to AppStateService.Changed purely to
-   notice when the *selected game* changes (by reference — editing the
-   current game's own fields, e.g. Save Changes, mutates the same GameConfig
-   object and correctly does NOT count) and reset _mainTab back to Display
-   when it does. Confirmed live: switching games while the Matching tab was
-   showing left the newly-selected game stuck on Matching too, since nothing
-   here previously reacted to selection changing at all — _mainTab was only
-   ever touched by the user's own tab clicks. *@
-
 @using NoBorders.Services
 @inject AppStateService State
 @implements IDisposable
@@ -79,12 +45,6 @@
 
     public void Dispose() => State.Changed -= OnStateChanged;
 
-    // Changed fires for lots of reasons that have nothing to do with which
-    // game is selected (e.g. Save Changes editing the current game's own
-    // fields) — reference equality against the last-seen SelectedGame is
-    // what isolates "the selection itself actually changed" from those,
-    // since switching selection always reassigns _selectedGame to a
-    // different GameConfig object, while editing one in place never does.
     private void OnStateChanged()
     {
         if (!ReferenceEquals(State.SelectedGame, _lastSelectedGame))
@@ -98,16 +58,8 @@
     private void OpenSettings() => _screen = Screen.Settings;
     private void OpenActivityLog() => _screen = Screen.ActivityLog;
 
-    // Back from Settings always returns to Main, remembering whichever main
-    // tab (Display/Matching) was last active — _mainTab is only ever changed
-    // by SetMainTab below, so it's untouched by the Settings/ActivityLog
-    // detour.
     private void BackToMain() => _screen = Screen.Main;
 
-    // Back from the Activity Log returns to Settings > Diagnostics
-    // specifically, matching where "Open Log" always opens it from
-    // (Adaptation Decision #2) rather than wherever Settings happened to be
-    // showing before.
     private void BackToSettings()
     {
         _settingsSection = SettingsShell.SettingsSection.Diagnostics;
