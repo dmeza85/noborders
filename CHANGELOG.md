@@ -3,6 +3,29 @@
 Versioning: `major.minor.patch`. Patch bumps are small fixes, minor bumps
 add functionality, major bumps are major releases.
 
+## v1.2.5 — 2026-10-01
+
+### Changed
+
+- **"Lock mouse cursor to window bounds" (Display tab) now saves instantly** —
+  toggling it persists and re-applies right away, matching the Active
+  toggle's behavior, instead of requiring a separate Save Changes click.
+  Also fixes the toggle silently doing nothing if clicked before a game had
+  ever been explicitly selected.
+
+## v1.2.4 — 2026-09-10
+
+### Fixed
+
+- Fixed an enforcement "thrash loop" that could wedge the GPU driver hard
+  enough to require a reboot. A game whose in-engine settings reset
+  (resolution, window mode, etc.) while its NoBorders profile stayed active
+  would fight the 1-second enforcement timer every tick — engine restores
+  its own style/size, NoBorders strips it right back, repeat indefinitely —
+  flickering the window and, on affected systems, crashing the display
+  driver. NoBorders now detects 4 consecutive contested ticks on the same
+  window and backs off for 15 seconds instead of continuing to escalate.
+
 ## v1.2.3 — 2026-09-09
 
 ### New
