@@ -14,6 +14,9 @@ on:
 
 jobs:
   build:
+    # GitHub-only, same reasoning as build-release.yml — this repo's source
+    # of truth is self-hosted Gitea, which push-mirrors here.
+    if: github.server_url == 'https://github.com'
     runs-on: windows-latest
 
     steps:
