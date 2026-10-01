@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     if: github.server_url == 'https://github.com'
@@ -41,7 +44,7 @@ jobs:
           Compress-Archive -Path "release-package\*" -DestinationPath "NoBorders-${{ github.ref_name }}.zip"
       
       - name: Upload to Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: NoBorders-${{ github.ref_name }}.zip
         env:
